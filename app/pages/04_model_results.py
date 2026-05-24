@@ -102,6 +102,22 @@ def render() -> None:
 
     st.title(":material/bar_chart: 回归结果")
 
+    # Gallery mode detection
+    if st.session_state.get("gallery_mode") and st.session_state.get("gallery_item_title"):
+        st.info(
+            f":material/science: **示例数据，仅供功能演示** — "
+            f"{st.session_state.gallery_item_title}"
+        )
+        from src.utils.gallery import get_gallery_item
+        gallery_item = get_gallery_item(st.session_state.get("gallery_item_id", ""))
+        if gallery_item and gallery_item.story:
+            with st.expander(":material/auto_stories: 分析场景说明", expanded=False):
+                st.markdown(gallery_item.story)
+        if gallery_item and gallery_item.key_features:
+            with st.expander(":material/info: 本场景特点", expanded=False):
+                for feat in gallery_item.key_features:
+                    st.markdown(f"- {feat}")
+
     # 检查模型结果是否存在
     model_result = st.session_state.get("model_result")
     if model_result is None and not st.session_state.get("model_results_list"):

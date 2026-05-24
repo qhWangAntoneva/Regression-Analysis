@@ -1,9 +1,9 @@
 # Regression Analysis — 交接文档
 
-> 生成日期: 2026-05-25
+> 最后更新: 2026-05-25
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 分支: master
-> 当前提交: 0bb037f
+> 当前提交: ebda810 (Phase 3.5 Sample Gallery)
 
 ---
 
@@ -14,7 +14,9 @@
 | Phase 1 (POC) | ✅ 完成 | 56 tests |
 | Phase 2 (MVP) | ✅ 全部完成 | 147 tests |
 | Phase 3 (Beta) | ✅ 全部完成 | 278 tests |
+| Phase 3.5 (Sample Gallery) | ✅ 完成 | +31 tests |
 | Phase 4 (v1.0) | ❌ 未开始 | — |
+| **合计** | — | **309 tests** |
 
 ## 项目结构
 
@@ -29,7 +31,8 @@ Regression Analysis/
 │   │   ├── model_control.py      # 模型控制面板 + 多模型对比控件
 │   │   ├── result_card.py        # 系数表/统计量/ANOVA/对比表/警示
 │   │   ├── export_dialog.py      # 导出选项面板
-│   │   └── onboarding.py         # 首次引导 + 中文错误提示
+│   │   ├── onboarding.py         # 首次引导 + 中文错误提示
+│   │   └── gallery_card.py       # Sample Gallery 卡片网格 + 加载逻辑
 │   └── pages/
 │       ├── 01_data_upload.py     # 文件上传 + 类型覆盖UI + 文件大小限制
 │       ├── 02_data_explore.py    # 描述性统计 + 相关矩阵 + 分布图
@@ -59,7 +62,10 @@ Regression Analysis/
 │   │   └── coefficient.py        # coefficient_plot (多模型), coefficient_plot_single (单模型)
 │   └── utils/
 │       ├── exceptions.py         # 5级异常层次
-│       └── logger.py             # loguru 配置
+│       ├── logger.py             # loguru 配置
+│       ├── persistence.py        # 会话持久化 + 崩溃恢复
+│       ├── sample_data.py        # 3 个示例数据集
+│       └── gallery.py            # Sample Gallery (5 场景 + 预计算结果 + JSON)
 └── tests/
     ├── conftest.py               # 6个fixture: sample_df, sample_csv_*, etc.
     └── unit/
@@ -69,7 +75,8 @@ Regression Analysis/
         ├── test_results_phase2.py       # to_summary_dict, anova, latex, compare, summary_generator
         ├── test_visualization_phase2.py # scale-location, Cook's, coefficient plots, dashboard
         ├── test_exporter.py             # CSV/Excel/chart/results package export
-        └── test_phase2_remaining.py     # 文件大小限制, 类型覆盖, 数据筛选
+        ├── test_phase2_remaining.py     # 文件大小限制, 类型覆盖, 数据筛选
+        └── test_gallery.py             # Sample Gallery (31 tests)
 ```
 
 ## 架构概览
@@ -159,10 +166,18 @@ Regression Analysis/
 | `model_config` | dict | 模型配置 (常数/CI/SE/缺失) |
 | `export_charts` | dict | {图表名: Figure} |
 
+**Sample Gallery keys** (Phase 3.5):
+
+| Key | 类型 | 用途 |
+|-----|------|------|
+| `gallery_mode` | bool | 是否处于示例数据模式 |
+| `gallery_item_id` | str | 当前加载的场景 ID |
+| `gallery_item_title` | str | 当前加载的场景标题 |
+
 ## 测试说明
 
 ```bash
-uv run python -m pytest tests/ -v              # 全部 278 tests
+uv run python -m pytest tests/ -v              # 全部 309 tests
 uv run python -m pytest tests/unit/test_XXX.py -v  # 单个文件
 ```
 
@@ -176,6 +191,8 @@ uv run python -m pytest tests/unit/test_XXX.py -v  # 单个文件
 4. **kaleido 依赖**: 图表 PNG 导出需要 `kaleido>=1.3.0`，已在 `pyproject.toml` 中添加
 5. **openpyxl**: Excel 导出需要，在依赖中
 6. **worktree 隔离注意事项**: 使用 Agent worktree 隔离时，必须让 agent 在最后一步 `git add -A && git commit && git push`，否则 worktree 清理后更改丢失。推荐直接修改 master 分支
+7. **Pyodide 适配**: Sample Gallery 预计算结果通过 `result_json` 字段序列化，未来 Web 端部署时无需加载 statsmodels OLS
+8. **编码问题**: Windows 中文终端打印含 Unicode 字符（如 R²）时可能报 GBK 编码错误，测试中避免在 print 语句中使用非 ASCII 字符
 
 ## Phase 3 (Beta) 已实现功能清单
 
@@ -215,6 +232,28 @@ uv run python -m pytest tests/unit/test_XXX.py -v  # 单个文件
 - [ ] 用户满意度 ≥ 4.0/5
 - [x] 测试覆盖率: 278 测试通过 (核心模块)
 
+## Phase 3.5 (Sample Gallery) 已实现功能
+
+用于 Phase 4 Beta 验证招募的 onboarding 材料，5 个基于 3 个用户画像的预计算回归分析场景。
+
+### 场景列表
+
+| ID | Persona | n | R² | 特征 |
+|----|---------|---|-----|------|
+| `survey_happiness` | 张薇（社科研究生） | 400 | 0.43 | 分类 education，income↔education 共线 |
+| `trust_experiment` | 张薇（社科研究生） | 200 | 0.19 | 小样本，party_member 显著 |
+| `ecommerce_sales` | 陈志远（市场研究员） | 500 | 0.93 | 高 R²，ad_spend↔promotion 相关 |
+| `customer_satisfaction` | 陈志远（市场研究员） | 350 | 0.77 | 2 个 4 水平分类变量 → 6 dummy |
+| `policy_effect` | 李明远（政策分析师） | 300 | 0.59 | 交互项 + HC1 稳健标准误 |
+
+### 技术特点
+
+- **Pyodide 适配**: ModelResult 预序列化为 JSON（`result_json` 字段），未来 Web 端无需加载 statsmodels
+- **JSON 往返**: `_model_result_to_json()` / `_json_to_model_result()` 无损转换
+- **数据上传页集成**: expander 中卡片网格，点击按钮 → 自动注入 session_state → 跳转结果页
+- **结果页/设定页**: 自动检测 gallery_mode，显示"示例数据"banner
+- **用户运行自己模型后**: 自动清除 gallery_mode
+
 ## 启动开发
 
 ```bash
@@ -250,4 +289,7 @@ uv run python -m pytest tests/ -v      # 运行测试
 | `export_dialog.py` | `render_export_options()`, `render_export_result()` |
 | `data_table.py` | `render_data_preview()`, `render_variable_info_table()`, `render_missing_value_summary()`, `render_outlier_detection_ui()` |
 | `onboarding.py` | `render_first_run_guide()`, `render_error_message()`, `render_help_tooltip()` |
+| `gallery_card.py` | `render_gallery_grid()`, `_load_gallery_item()` |
+| `gallery.py` | `GalleryItem`, `get_gallery_items()`, `get_gallery_index()`, `get_gallery_item()`, `_model_result_to_json()`, `_json_to_model_result()` |
+| `sample_data.py` | `get_sample_datasets()`, `load_sample_dataset()` |
 | `coefficient.py` | `coefficient_plot()`, `coefficient_plot_single()` |

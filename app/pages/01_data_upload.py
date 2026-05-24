@@ -89,9 +89,13 @@ def render() -> None:
 
         # 加载示例数据按钮
         st.divider()
-        if st.button(":material/dataset: 加载示例数据集", use_container_width=True):
+        if st.button(":material/dataset: 加载快速示例数据集", use_container_width=True):
             _load_sample_data()
             st.rerun()
+
+        # 示例数据分析场景库 (Sample Gallery)
+        from app.components.gallery_card import render_gallery_grid
+        render_gallery_grid()
 
     with col_right:
         if uploaded_file is not None:

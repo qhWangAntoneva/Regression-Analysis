@@ -174,6 +174,13 @@ def render() -> None:
 
     st.title(":material/tune: 模型设定")
 
+    # Gallery mode notice
+    if st.session_state.get("gallery_mode"):
+        st.info(
+            ":material/info: 当前使用示例数据。变量已自动填充（预计算模型的设定）。"
+            "您可以修改设定后重新运行回归，对比不同模型的结果。"
+        )
+
     # 检查数据是否存在
     if st.session_state.get("data") is None:
         st.warning("请先在「数据上传」页面上传数据集。")
@@ -351,6 +358,11 @@ def _run_regression(
             st.session_state.model_run_time = True
             st.session_state.model_config = model_config
 
+            # Clear gallery mode when user runs their own model
+            st.session_state.gallery_mode = False
+            st.session_state.gallery_item_id = None
+            st.session_state.gallery_item_title = None
+
             # Clear multi-model state
             st.session_state.model_results_list = [result]
 
@@ -417,6 +429,11 @@ def _run_all_models(
             st.session_state.model_results_list = results
             st.session_state.model_run_time = True
             st.session_state.model_config = model_config
+
+            # Clear gallery mode when user runs their own model
+            st.session_state.gallery_mode = False
+            st.session_state.gallery_item_id = None
+            st.session_state.gallery_item_title = None
 
             st.success(f"共运行 {len(results)} 个模型（1个主模型 + {len(results)-1}个对比模型）！")
             st.page_link(
