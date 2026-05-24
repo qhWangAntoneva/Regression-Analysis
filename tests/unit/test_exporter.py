@@ -358,6 +358,61 @@ class TestExportResultsPackage:
 # =========================================================================
 
 
+# =========================================================================
+# Test: export_reproducibility_package (Phase 3.2)
+# =========================================================================
+
+
+class TestExportReproducibilityPackage:
+    """测试分析复现包导出功能。"""
+
+    def test_export_reproducibility_package_basic(self, temp_dir: str) -> None:
+        """基本复现包导出应生成 ZIP 文件。"""
+        from src.results.table import CoefficientRow, ModelResult
+
+        data = pd.DataFrame({
+            "y": [3.5, 5.2, 7.1],
+            "x1": [1.0, 2.0, 3.0],
+        })
+
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(name="Intercept", coef=2.0, se=0.5, t_stat=4.0, pvalue=0.001, ci_lower=1.0, ci_upper=3.0),
+                CoefficientRow(name="x1", coef=0.5, se=0.1, t_stat=5.0, pvalue=0.0001, ci_lower=0.3, ci_upper=0.7),
+            ],
+            n_obs=3,
+            n_params=2,
+            df_resid=1,
+            r_squared=0.95,
+            dep_var="y",
+            specification="y ~ x1",
+        )
+
+        from dataclasses import dataclass
+
+        @dataclass
+        class FakeSpec:
+            dep_var: str = "y"
+            indep_vars: list = None
+            control_vars: list = None
+            has_intercept: bool = True
+
+        spec = FakeSpec(indep_vars=["x1"], control_vars=[])
+
+        zip_path = DataExporter.export_reproducibility_package(data, spec, result, temp_dir)
+        assert os.path.exists(zip_path)
+        assert zip_path.endswith(".zip")
+
+        import zipfile
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+            assert "data.csv" in names
+            assert "model_config.json" in names
+            assert "reproduce.py" in names
+            assert "results_summary.txt" in names
+
+
 class TestModelSummary:
     """测试模型摘要文本生成。"""
 

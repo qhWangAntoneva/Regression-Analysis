@@ -4,6 +4,7 @@
 
 提供数据导出、结果导出、图表导出和一键综合报告功能。
 使用 st.download_button 实现浏览器下载。
+新增: LaTeX 表格导出、HTML 报告导出、分析复现包导出。
 """
 
 from __future__ import annotations
@@ -37,6 +38,22 @@ try:
     PLOTLY_AVAILABLE = True
 except ImportError:
     go = None  # type: ignore[assignment]
+
+LATEX_AVAILABLE = False
+try:
+    from src.export.latex_renderer import LatexRenderer
+
+    LATEX_AVAILABLE = True
+except ImportError:
+    pass
+
+HTML_REPORT_AVAILABLE = False
+try:
+    from src.export.html_report import HtmlReportGenerator
+
+    HTML_REPORT_AVAILABLE = True
+except ImportError:
+    pass
 
 
 def render() -> None:
@@ -206,11 +223,177 @@ def render() -> None:
     st.divider()
 
     # =========================================================================
+    # LaTeX 表格导出（Phase 3.2）
+    # =========================================================================
+    st.subheader("LaTeX 表格导出")
+
+    if model_result is not None:
+        if LATEX_AVAILABLE:
+            latex_tab = st.tabs(["单个模型表格", "LaTeX 预览"])
+
+            with latex_tab[0]:
+                latex_single = LatexRenderer.render_single(
+                    model_result,
+                    title="回归结果",
+                    caption="回归分析结果表",
+                    label="regression",
+                )
+                st.download_button(
+                    label=":material/code: 下载 LaTeX (.tex)",
+                    data=latex_single.encode("utf-8"),
+                    file_name="regression_table.tex",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+
+                # 检查是否有多个模型结果
+                model_results_list = st.session_state.get("model_results_list", None)
+                if model_results_list and len(model_results_list) > 1:
+                    latex_compare = LatexRenderer.render_comparison(
+                        model_results_list,
+                        captions=["多模型对比"],
+                    )
+                    st.download_button(
+                        label=":material/compare_arrows: 下载对比表格 (.tex)",
+                        data=latex_compare.encode("utf-8"),
+                        file_name="model_comparison.tex",
+                        mime="text/plain",
+                        use_container_width=True,
+                    )
+
+            with latex_tab[1]:
+                st.code(latex_single, language="latex", line_numbers=True)
+        else:
+            st.info("LaTeX 导出需要 jinja2 库。")
+
+        st.success("LaTeX 表格已生成！")
+    else:
+        st.info("需要模型结果才能生成 LaTeX 表格。")
+
+    st.divider()
+
+    # =========================================================================
+    # HTML 报告导出（Phase 3.2）
+    # =========================================================================
+    st.subheader("HTML 报告导出")
+
+    if model_result is not None:
+        if HTML_REPORT_AVAILABLE:
+            if st.button(
+                ":material/language: 生成 HTML 报告",
+                type="primary",
+                use_container_width=True,
+            ):
+                # Collect data summary
+                data_summary = None
+                if df is not None:
+                    try:
+                        from src.results.statistics import descriptive_stats
+
+                        coef_names = _get_coefficient_variable_names(model_result)
+                        all_vars = _collect_all_variables(model_result, df)
+                        if all_vars:
+                            data_summary = descriptive_stats(df, all_vars)
+                    except Exception:
+                        pass
+
+                # Model spec text
+                model_spec_text = getattr(model_result, "specification", "")
+
+                # Charts
+                charts = st.session_state.get("export_charts", {})
+
+                html_content = HtmlReportGenerator.generate_full_report(
+                    data_summary=data_summary,
+                    model_result=model_result,
+                    charts_dict=charts,
+                    model_spec=model_spec_text,
+                )
+
+                st.download_button(
+                    label=":material/download: 下载 HTML 报告",
+                    data=html_content.encode("utf-8"),
+                    file_name="regression_report.html",
+                    mime="text/html",
+                    use_container_width=True,
+                )
+
+                st.success("HTML 报告已生成！")
+        else:
+            st.info("HTML 报告导出需要 jinja2 库。")
+    else:
+        st.info("需要模型结果才能生成 HTML 报告。")
+
+    st.divider()
+
+    # =========================================================================
+    # 分析复现包导出（Phase 3.2）
+    # =========================================================================
+    st.subheader("分析复现包导出")
+
+    if model_result is not None and df is not None:
+        if EXPORTER_AVAILABLE:
+            if st.button(
+                ":material/science: 生成分析复现包 (ZIP)",
+                type="primary",
+                use_container_width=True,
+            ):
+                # Build a model_spec-like object from session state
+                model_spec = st.session_state.get("model_spec", None)
+                if model_spec is None:
+                    # Fallback: construct a simple spec from model result
+                    from dataclasses import dataclass
+
+                    @dataclass
+                    class FallbackSpec:
+                        dep_var: str
+                        indep_vars: list
+                        control_vars: list
+                        has_intercept: bool
+
+                    dep_var = getattr(model_result, "dep_var", "")
+                    coef_names = _get_coefficient_variable_names(model_result)
+                    model_spec = FallbackSpec(
+                        dep_var=dep_var,
+                        indep_vars=coef_names,
+                        control_vars=[],
+                        has_intercept=True,
+                    )
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    try:
+                        zip_path = DataExporter.export_reproducibility_package(
+                            data=df,
+                            model_spec=model_spec,
+                            model_result=model_result,
+                            export_dir=tmpdir,
+                        )
+                        with open(zip_path, "rb") as f:
+                            zip_bytes = f.read()
+
+                        st.download_button(
+                            label=":material/download: 下载复现包 (ZIP)",
+                            data=zip_bytes,
+                            file_name="reproducibility_package.zip",
+                            mime="application/zip",
+                            use_container_width=True,
+                        )
+                        st.success("分析复现包已生成！")
+                    except Exception as e:
+                        st.error(f"复现包生成失败: {e}")
+        else:
+            st.info("分析复现包导出需要 DataExporter。")
+    else:
+        st.info("需要模型结果和数据才能生成分析复现包。")
+
+    st.divider()
+
+    # =========================================================================
     # 页脚
     # =========================================================================
     st.caption(
         "Regression Analysis Tool v0.2.0 | "
-        "导出支持: CSV, Excel, PNG, SVG | "
+        "导出支持: CSV, Excel, PNG, SVG, LaTeX, HTML, ZIP | "
         "数据不会被上传到任何服务器"
     )
 
@@ -457,6 +640,66 @@ def _export_all_results(
     )
 
     st.success("综合报告已生成！点击上方按钮下载 ZIP 包。")
+
+
+# ---------------------------------------------------------------------------
+# Phase 3.2 helpers
+# ---------------------------------------------------------------------------
+
+
+def _get_coefficient_variable_names(result: Any) -> list[str]:
+    """从模型结果提取系数变量名列表。"""
+    coefficients = getattr(result, "coefficients", None)
+    if not coefficients:
+        return []
+    names = []
+    for c in coefficients:
+        name = getattr(c, "name", "")
+        if name and name.lower() not in ("const", "intercept"):
+            names.append(name)
+    return names
+
+
+def _collect_all_variables(result: Any, df: Any) -> list[str]:
+    """收集模型中使用的所有变量（用于描述性统计）。"""
+    if df is None:
+        return []
+
+    dep_var = getattr(result, "dep_var", "")
+    spec = getattr(result, "specification", "")
+
+    # Try to get from model spec
+    model_spec = getattr(result, "model_spec", None)
+    if model_spec is not None:
+        all_vars = getattr(model_spec, "all_predictors", None)
+        if all_vars:
+            return [dep_var] + list(all_vars) if dep_var else list(all_vars)
+
+    # Fallback: extract from specification string
+    if spec and "~" in spec:
+        parts = spec.split("~")
+        rhs = parts[-1].strip() if len(parts) > 1 else ""
+        rhs_vars = [v.strip() for v in rhs.split("+") if v.strip()]
+        # Filter out patsy C() wrappers
+        clean_vars = []
+        for v in rhs_vars:
+            if v.startswith("C("):
+                inner = v[2:-1].strip()
+                clean_vars.append(inner)
+            else:
+                clean_vars.append(v)
+        result_vars = [dep_var] + clean_vars if dep_var else clean_vars
+        # Only include columns that actually exist in df
+        if df is not None:
+            result_vars = [v for v in result_vars if v in df.columns]
+        return result_vars
+
+    # Last resort: coefficient names
+    coef_names = _get_coefficient_variable_names(result)
+    result_vars = [dep_var] + coef_names if dep_var else coef_names
+    if df is not None:
+        result_vars = [v for v in result_vars if v in df.columns]
+    return result_vars
 
 
 # 页面入口

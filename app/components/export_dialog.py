@@ -3,6 +3,7 @@
 导出对话框组件
 
 提供导出选项面板和结果展示功能。
+包含新增的 LaTeX 表格、HTML 报告、分析复现包导出选项。
 """
 
 from __future__ import annotations
@@ -17,22 +18,28 @@ except ImportError:
     st = None  # type: ignore[assignment]
 
 
-def render_export_options(key_prefix: str = "export") -> dict[str, Any] | None:
+def render_export_options(
+    key_prefix: str = "export",
+    has_multiple_models: bool = False,
+) -> dict[str, Any] | None:
     """渲染导出选项面板。
 
     提供：
-    - 导出格式选择（CSV / Excel / 图表PNG / 全部打包）
+    - 导出格式选择（CSV / Excel / 图表PNG / 全部打包 / LaTeX / HTML / 复现包）
     - 导出路径设置
-    - 导出内容勾选（系数表 / 描述统计 / 诊断图 / 模型摘要文本）
+    - 导出内容勾选
+    - 新增：LaTeX 表格（单选/对比）、HTML 报告、分析复现包
     - 导出按钮
 
     Args:
         key_prefix: Streamlit 组件 key 前缀。
+        has_multiple_models: 是否有多模型结果（影响 LaTeX 对比选项）。
 
     Returns:
         点击"导出"按钮后返回选项字典，否则返回 None。
         字典包含: format, path, include_coefficients, include_stats,
-        include_charts, include_summary。
+        include_charts, include_summary, latex_mode, include_html_report,
+        include_reproducibility。
     """
     if st is None:
         return None
@@ -96,6 +103,37 @@ def render_export_options(key_prefix: str = "export") -> dict[str, Any] | None:
                 help="导出模型摘要文本",
             )
 
+        # ------------------------------------------------------------------
+        # Phase 3.2: New export options
+        # ------------------------------------------------------------------
+        st.markdown("**高级导出**")
+        adv_cols = st.columns(3)
+
+        with adv_cols[0]:
+            latex_mode = st.radio(
+                "LaTeX 表格",
+                options=["none", "single", "comparison"] if has_multiple_models else ["none", "single"],
+                format_func=_latex_format_func,
+                key=f"{key_prefix}_latex_mode",
+                help="导出回归结果为 LaTeX 表格",
+            )
+
+        with adv_cols[1]:
+            include_html_report = st.checkbox(
+                "HTML 报告",
+                value=False,
+                key=f"{key_prefix}_html",
+                help="生成自包含的 HTML 分析报告",
+            )
+
+        with adv_cols[2]:
+            include_reproducibility = st.checkbox(
+                "分析复现包",
+                value=False,
+                key=f"{key_prefix}_repro",
+                help="生成包含数据和脚本的分析复现包 (ZIP)",
+            )
+
         # 导出按钮
         clicked = st.button(
             ":material/download: 导出",
@@ -112,6 +150,9 @@ def render_export_options(key_prefix: str = "export") -> dict[str, Any] | None:
             "include_stats": include_stats,
             "include_charts": include_charts,
             "include_summary": include_summary,
+            "latex_mode": latex_mode,
+            "include_html_report": include_html_report,
+            "include_reproducibility": include_reproducibility,
         }
 
     return None
@@ -186,6 +227,16 @@ def _format_label(fmt: str) -> str:
         "all": "全部打包",
     }
     return labels.get(fmt, fmt)
+
+
+def _latex_format_func(mode: str) -> str:
+    """将 LaTeX 模式键转换为中文标签。"""
+    labels = {
+        "none": "不导出",
+        "single": "单个模型表格",
+        "comparison": "多模型对比表格",
+    }
+    return labels.get(mode, mode)
 
 
 def _format_file_size(size_bytes: int) -> str:
