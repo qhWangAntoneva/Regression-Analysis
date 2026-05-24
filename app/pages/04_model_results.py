@@ -421,17 +421,20 @@ def _render_dot_whisker_plot(result: Any) -> None:
     ci_uppers = [c.ci_upper for c in filtered]
     p_values = [c.pvalue for c in filtered]
 
-    # Color by significance
-    colors = []
+    # Color by significance — use color scheme from config for accessibility
+    from app.config import get_color_scheme
+
+    cs = get_color_scheme()
+    plot_colors = []
     for p in p_values:
         if p < 0.01:
-            colors.append("darkgreen")
+            plot_colors.append(cs["sig_high"])
         elif p < 0.05:
-            colors.append("green")
+            plot_colors.append(cs["sig_med"])
         elif p < 0.1:
-            colors.append("orange")
+            plot_colors.append(cs["sig_low"])
         else:
-            colors.append("gray")
+            plot_colors.append(cs["no_sig"])
 
     fig = go.Figure()
 
@@ -441,7 +444,7 @@ def _render_dot_whisker_plot(result: Any) -> None:
             x=coef_vals,
             y=var_names,
             mode="markers",
-            marker=dict(size=10, color=colors, line=dict(width=1, color="black")),
+            marker=dict(size=10, color=plot_colors, line=dict(width=1, color="black")),
             error_x=dict(
                 type="data",
                 symmetric=False,
@@ -474,7 +477,7 @@ def _render_dot_whisker_plot(result: Any) -> None:
         title="系数点图 (Dot-Whisker Plot)",
         xaxis_title="系数估计值",
         yaxis_title="变量",
-        template="plotly_white",
+        template=cs.get("plot_template", "plotly_white"),
         height=400,
         margin=dict(l=20, r=20, t=40, b=20),
     )

@@ -16,8 +16,17 @@
 | Phase 2 (MVP) | ✅ 全部完成 | 147 tests |
 | Phase 3 (Beta) | ✅ 全部完成 | 278 tests |
 | Phase 3.5 (Sample Gallery) | ✅ 完成 | +31 tests |
-| Phase 4 (v1.0) | ❌ 未开始 | — |
+| Phase 4 (v1.0) | 🔄 进行中 (4.2 完成) | — |
 | **合计** | — | **309 tests** |
+
+### Phase 4 进度
+
+| 子阶段 | 状态 | 说明 |
+|--------|------|------|
+| 4.1 最终打磨 | ❌ 未开始 | UI 审查、色盲友好、响应式布局、键盘导航 |
+| 4.2 文档 | ✅ 完成 | `docs/用户手册.md` (3案例), `docs/开发者指南.md`, `docs/已知问题.md` |
+| 4.3 发布准备 | ❌ 未开始 | 性能基准测试、依赖安全审计、打包 |
+| 4.4 发布后跟踪 | ❌ 未开始 | 用户反馈、问题追踪、v1.1 规划 |
 
 ## 项目结构
 
@@ -25,6 +34,11 @@
 Regression Analysis/
 ├── CLAUDE.md                       # Agent 协作规则 (master 工作流 + 安全红线)
 ├── HANDOVER.md                     # 项目交接文档
+├── TODO.md                         # 任务清单
+├── docs/
+│   ├── 用户手册.md                  # 用户手册 (3 个完整案例)
+│   ├── 开发者指南.md                # 架构概览 + 扩展指南
+│   └── 已知问题.md                  # 已知问题和限制
 ├── app/
 │   ├── app.py                    # Streamlit 主入口 (st.navigation)
 │   ├── config.py                 # Streamlit 页面配置

@@ -19,6 +19,11 @@ try:
 except ImportError:
     st = None  # type: ignore[assignment]
 
+try:
+    from app.config import get_color_scheme
+except ImportError:
+    get_color_scheme = None  # type: ignore[assignment]
+
 
 def render_coefficient_table(
     result: ModelResult,
@@ -55,15 +60,21 @@ def render_coefficient_table(
 
     display_df = pd.DataFrame(rows)
 
+    # Load color scheme for accessibility support
+    colors = get_color_scheme() if get_color_scheme else {
+        "sig_high_bg": "#c8e6c9",
+        "sig_med_bg": "#e8f5e9",
+    }
+
     # Apply conditional highlighting
-    def _highlight_rows(row_series: pd.Series) -> List[str]:
-        styles: List[str] = [""] * len(row_series)
+    def _highlight_rows(row_series: pd.Series) -> list[str]:
+        styles: list[str] = [""] * len(row_series)
         p_val = row_series.get("p值", 1.0)
         if isinstance(p_val, (int, float)):
             if p_val < 0.01:
-                styles = ["background-color: #c8e6c9"] * len(row_series)  # dark green
+                styles = [f"background-color: {colors['sig_high_bg']}"] * len(row_series)
             elif p_val < 0.05:
-                styles = ["background-color: #e8f5e9"] * len(row_series)  # light green
+                styles = [f"background-color: {colors['sig_med_bg']}"] * len(row_series)
         return styles
 
     styled = display_df.style.apply(_highlight_rows, axis=1)
@@ -84,7 +95,11 @@ def render_coefficient_table(
     )
 
     st.caption("* p<0.1, ** p<0.05, *** p<0.01")
-    st.caption("绿色背景行表示 p<0.05；深绿色背景行表示 p<0.01")
+    # Annotation uses correct color description based on active palette
+    if get_color_scheme and st.session_state.get("colorblind_mode", False):
+        st.caption("蓝色背景行表示 p<0.05；深蓝色背景行表示 p<0.01（色盲友好）")
+    else:
+        st.caption("绿色背景行表示 p<0.05；深绿色背景行表示 p<0.01")
 
     # SE type annotation
     se_type = getattr(result, "se_type", "nonrobust")

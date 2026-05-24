@@ -133,6 +133,38 @@ pg.run()
 # ---------------------------------------------------------------------------
 # Sidebar project info
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Accessibility settings
+# ---------------------------------------------------------------------------
+st.sidebar.markdown("---")
+with st.sidebar.expander(":material/accessibility: 辅助功能", expanded=False):
+    cb_mode = st.toggle(
+        "色盲友好模式",
+        value=st.session_state.get("colorblind_mode", False),
+        key="colorblind_mode",
+        help=(
+            "启用后使用蓝色/橙色配色替代默认的红/绿色。\n"
+            "适用于红绿色盲（deuteranopia/protanopia）用户。"
+        ),
+    )
+    st.caption(
+        ":material/palette: 启用后，显著性高亮色从绿色改为蓝色系，"
+        "相关系数热力图使用 Cividis 色阶。"
+    )
+
+    st.divider()
+    st.markdown("#### :material/keyboard: 键盘快捷方式")
+    st.caption(
+        "**Tab** — 在表单元素间移动焦点\n"
+        "**Enter/Space** — 激活按钮/复选框\n"
+        "**Ctrl+F** — 浏览器页面搜索\n"
+        "**上下箭头** — 滑动滑块和选择框\n"
+        "按 **Tab** 可顺序到达：因变量 → 自变量 → 高级选项 → 运行按钮"
+    )
+
+# ---------------------------------------------------------------------------
+# Sidebar project info
+# ---------------------------------------------------------------------------
 st.sidebar.markdown("---")
 st.sidebar.markdown(
     """
@@ -140,6 +172,39 @@ st.sidebar.markdown(
 
     **GitHub:** [qhWangAntoneva/Regression-Analysis](https://github.com/qhWangAntoneva/Regression-Analysis)
     """
+)
+
+# ---------------------------------------------------------------------------
+# Global CSS for responsive layout and visual consistency
+# ---------------------------------------------------------------------------
+st.markdown(
+    """
+    <style>
+    /* Ensure dataframes and tables scroll horizontally on narrow screens */
+    .stDataFrame > div[data-testid="stHorizontalBlock"] {
+        overflow-x: auto !important;
+    }
+    /* Smooth scrolling for all scrollable containers */
+    .stDataFrame {
+        scroll-behavior: smooth;
+    }
+    /* Consistent card spacing between result cards and gallery cards */
+    [data-testid="stExpander"] details {
+        border-radius: 8px;
+        border: 1px solid rgba(49, 51, 63, 0.2);
+    }
+    /* Ensure bordered containers have consistent padding */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        padding: 1rem !important;
+    }
+    /* Keyboard focus indicator for better accessibility */
+    *:focus-visible {
+        outline: 2px solid #1f77b4 !important;
+        outline-offset: 2px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 # ---------------------------------------------------------------------------

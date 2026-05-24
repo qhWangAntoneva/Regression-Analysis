@@ -390,11 +390,17 @@ def render() -> None:
     if len(numeric_cols) >= 2 and PLOTLY_AVAILABLE:
         corr_matrix = df[numeric_cols].corr()
 
+        # Use color scheme for accessibility-aware colorscale
+        from app.config import get_color_scheme
+        cs_corr = get_color_scheme()
+        corr_cs = cs_corr.get("corr_colorscale", "RdBu_r")
+        corr_template = cs_corr.get("plot_template", "plotly_white")
+
         fig = ff.create_annotated_heatmap(
             z=corr_matrix.values,
             x=list(corr_matrix.columns),
             y=list(corr_matrix.index),
-            colorscale="RdBu_r",
+            colorscale=corr_cs,
             zmin=-1,
             zmax=1,
             showscale=True,
@@ -403,7 +409,7 @@ def render() -> None:
 
         fig.update_layout(
             title={"text": "皮尔逊相关系数矩阵", "x": 0.5, "xanchor": "center"},
-            template="plotly_white",
+            template=corr_template,
             width=800,
             height=800,
         )
@@ -434,12 +440,14 @@ def render() -> None:
             )
 
             for col in selected_cols:
+                cb_dist = st.session_state.get("colorblind_mode", False)
                 fig = px.histogram(
                     df,
                     x=col,
                     marginal="box",
                     opacity=0.7,
                     labels={col: col},
+                    color_discrete_sequence=["#2c7bb6"] if cb_dist else None,
                 )
                 fig.update_layout(
                     template="plotly_white",
@@ -474,11 +482,16 @@ def render() -> None:
                     st.dataframe(freq, use_container_width=True)
                 with col2:
                     if PLOTLY_AVAILABLE:
+                        cb_pie = st.session_state.get("colorblind_mode", False)
                         fig = px.pie(
                             freq,
                             names=selected_cat,
                             values="频数",
                             title=f"{selected_cat} 分布",
+                            color_discrete_sequence=(
+                                ["#2c7bb6", "#fdae61", "#abd9e9", "#bababa", "#5e4fa2"]
+                                if cb_pie else None
+                            ),
                         )
                         fig.update_layout(template="plotly_white")
                         st.plotly_chart(fig, use_container_width=True)
