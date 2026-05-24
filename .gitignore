@@ -79,6 +79,9 @@ Thumbs.db
 Thumbs.db
 desktop.ini
 
+# Claude Code
+.claude/
+
 # pre-commit
 .pre-commit-config.yaml.bak
 __pycache__/
