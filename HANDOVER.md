@@ -3,7 +3,8 @@
 > 最后更新: 2026-05-25
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 分支: master
-> 当前提交: ebda810 (Phase 3.5 Sample Gallery)
+> 当前提交: (见 git log -1)
+> 上次交接: ebda810 → worktree 安全审计 + 工作流规范化
 
 ---
 
@@ -22,6 +23,8 @@
 
 ```
 Regression Analysis/
+├── CLAUDE.md                       # Agent 协作规则 (master 工作流 + 安全红线)
+├── HANDOVER.md                     # 项目交接文档
 ├── app/
 │   ├── app.py                    # Streamlit 主入口 (st.navigation)
 │   ├── config.py                 # Streamlit 页面配置
@@ -190,9 +193,49 @@ uv run python -m pytest tests/unit/test_XXX.py -v  # 单个文件
 3. **LF/CRLF 警告**: Windows 环境下 Git 会提示换行符转换，不影响功能
 4. **kaleido 依赖**: 图表 PNG 导出需要 `kaleido>=1.3.0`，已在 `pyproject.toml` 中添加
 5. **openpyxl**: Excel 导出需要，在依赖中
-6. **worktree 隔离注意事项**: 使用 Agent worktree 隔离时，必须让 agent 在最后一步 `git add -A && git commit && git push`，否则 worktree 清理后更改丢失。推荐直接修改 master 分支
+6. **编码问题**: Windows 中文终端打印含 Unicode 字符（如 R²）时可能报 GBK 编码错误，测试中避免在 print 语句中使用非 ASCII 字符
 7. **Pyodide 适配**: Sample Gallery 预计算结果通过 `result_json` 字段序列化，未来 Web 端部署时无需加载 statsmodels OLS
-8. **编码问题**: Windows 中文终端打印含 Unicode 字符（如 R²）时可能报 GBK 编码错误，测试中避免在 print 语句中使用非 ASCII 字符
+
+## Worktree 隔离安全审计 (2026-05-25)
+
+### 调查结论
+
+使用 3 个 subagent 对 worktree 隔离机制进行根因排查，覆盖源码级 `_cleanup_worktree()` 逻辑、全局/项目 hooks 配置、git reflog 和历史 commit 模式。
+
+**根因**：`_cleanup_worktree()` 的设计理念是 "agent work lives in commits, not in the working tree"。清理决策树：
+
+```
+git log --oneline HEAD --not --remotes
+  ├── 有未推送 commit → 保留 worktree
+  ├── 无未推送 commit → 删除 worktree + 分支
+  └── 检查出错    → 假设无 commit，删除
+```
+
+未提交的修改被视为临时文件，清理时直接丢弃。
+
+**致命发现**：过去 3 次 worktree session 中，agent 全部提交但**从未推送 worktree 分支**。工作流是"提交到 worktree → 合并到 master → 推送 master"。`_cleanup_worktree()` 检查的是 **worktree 分支**的推送状态而非 master，因此如果清理曾运行过，3 次 session **100% 会被清除**（即使代码已正确合并到 master）。
+
+**方案评估结果**：
+
+| 方案 | 结论 |
+|------|------|
+| A (PostToolUse hook 自动提交) | 每次会话 ~50s 纯开销（500+ 次 bash 进程启动），.claude/ 被 gitignore 不可共享 |
+| B (纪律依赖) | 历史数据显示 worktree 分支推送率 0%，不可靠 |
+| **C (直接 master)** | **已采纳** — 项目 61% 提交已用此模式，仅 1 次 fix commit |
+
+### 当前工作流
+
+**默认**：Agent 直接在 master 工作，不使用 worktree 隔离。
+
+**安全机制**（详见 CLAUDE.md）：
+- Agent 开始前 `git commit -am "checkpoint: pre-agent"` → 出问题 `git reset --hard HEAD~1`
+- **禁止 `git push --force`**（GitHub 免费版无分支保护）
+- 提交前运行 `uv run python -m pytest tests/ -v`
+- 并行 agent 场景使用手动 feature 分支
+
+### 清理记录
+
+已清理 3 个僵尸 worktree（unlock → force remove → branch -D），零数据丢失（所有提交已存在于 master）。
 
 ## Phase 3 (Beta) 已实现功能清单
 
