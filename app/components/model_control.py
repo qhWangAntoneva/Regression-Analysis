@@ -36,7 +36,7 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
         return {
             "add_constant": True,
             "ci_level": 0.95,
-            "se_type": "classic",
+            "se_type": "nonrobust",
             "missing_handling": "drop",
         }
 
@@ -60,11 +60,22 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
 
         se_type = st.radio(
             "标准误类型",
-            options=["经典标准误", "稳健标准误(HC1)"],
+            options=[
+                "普通标准误",
+                "HC0 (异方差稳健)",
+                "HC1 (默认)",
+                "HC2",
+                "HC3",
+            ],
             index=0,
             horizontal=True,
             key=f"{key_prefix}_se",
-            help="稳健标准误在异方差情况下提供更可靠的推断。",
+            help=(
+                "稳健标准误在异方差情况下提供更可靠的推断。\n"
+                "- HC0: 普通稳健标准误\n"
+                "- HC1: HC0 带小样本校正（Stata 默认）\n"
+                "- HC2/HC3: 更激进的校正"
+            ),
         )
 
         missing_handling = st.selectbox(
@@ -75,10 +86,17 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
             help="选择缺失值的处理方式。",
         )
 
+    _se_map = {
+        "普通标准误": "nonrobust",
+        "HC0 (异方差稳健)": "HC0",
+        "HC1 (默认)": "HC1",
+        "HC2": "HC2",
+        "HC3": "HC3",
+    }
     return {
         "add_constant": add_constant,
         "ci_level": ci_level,
-        "se_type": "classic" if se_type == "经典标准误" else "robust_hc1",
+        "se_type": _se_map.get(se_type, "nonrobust"),
         "missing_handling": "drop" if missing_handling == "删除整行" else ("mean" if missing_handling == "均值填充" else "none"),
     }
 

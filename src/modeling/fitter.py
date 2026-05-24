@@ -7,12 +7,13 @@ to the appropriate engine based on the model type.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
 from src.modeling.engines.statsmodels_engine import run_ols
 from src.modeling.specification import ModelSpec
+from src.modeling.transforms import VariableTransformer
 from src.results.table import ModelResult
 
 
@@ -38,23 +39,84 @@ class ModelFitter:
         spec: ModelSpec,
         data: pd.DataFrame,
         alpha: float = 0.05,
+        cov_type: str = "nonrobust",
         **kwargs: object,
     ) -> ModelResult:
         """Fit a single model specification to the data.
+
+        Applies any variable transforms and interaction terms specified
+        in the ``ModelSpec`` before fitting, then passes ``cov_type``
+        to the engine for robust standard error support.
 
         Args:
             spec: The model specification.
             data: The dataset.
             alpha: Significance level for confidence intervals (default 0.05).
+            cov_type: Standard error type (``'nonrobust'``, ``'HC0'``,
+                ``'HC1'``, ``'HC2'``, ``'HC3'``).  Default ``'nonrobust'``.
             **kwargs: Additional engine-specific keyword arguments.
 
         Returns:
-            A ModelResult containing the fitted model output.
+            A ModelResult containing the fitted model output, with
+            ``transforms_applied``, ``interaction_terms_applied``, and
+            ``se_type`` set appropriately.
 
         Raises:
             ValueError: If the model type is not supported.
         """
-        result = run_ols(data, spec, alpha=alpha)
+        # Build a copy of the spec with transformed column names substituted
+        # so that patsy can find the new columns in the working data.
+        transformer = VariableTransformer()
+        working_data = data.copy()
+        name_map: Dict[str, str] = {}  # original_name -> new_column_name
+
+        if spec.transforms:
+            working_data, meta = transformer.transform(
+                working_data, spec.transforms
+            )
+            for var, tinfo in meta.items():
+                ttype = spec.transforms[var]
+                new_name = tinfo.get(ttype, "")
+                if new_name:
+                    name_map[var] = new_name
+
+        # Build a new ModelSpec with the transformed column names
+        if name_map:
+            fit_indep = [
+                name_map.get(v, v) for v in spec.indep_vars
+            ]
+            fit_control = [
+                name_map.get(v, v) for v in spec.control_vars
+            ]
+            # Also update interaction terms to use transformed names
+            fit_interactions = [
+                (name_map.get(v1, v1), name_map.get(v2, v2))
+                for v1, v2 in spec.interaction_terms
+            ]
+        else:
+            fit_indep = list(spec.indep_vars)
+            fit_control = list(spec.control_vars)
+            fit_interactions = list(spec.interaction_terms)
+
+        fit_spec = ModelSpec(
+            dep_var=spec.dep_var,
+            indep_vars=fit_indep,
+            control_vars=fit_control,
+            has_intercept=spec.has_intercept,
+            transforms=dict(spec.transforms),
+            interaction_terms=fit_interactions,
+            missing_strategy=spec.missing_strategy,
+        )
+
+        result = run_ols(
+            working_data, fit_spec, alpha=alpha, cov_type=cov_type
+        )
+
+        # Copy metadata fields back from the fit_spec's result
+        result.transforms_applied = dict(spec.transforms)
+        result.interaction_terms_applied = list(spec.interaction_terms)
+        result.se_type = cov_type if cov_type else "nonrobust"
+
         self._results.append(result)
         return result
 
@@ -63,6 +125,7 @@ class ModelFitter:
         specs: List[ModelSpec],
         data: pd.DataFrame,
         alpha: float = 0.05,
+        cov_type: str = "nonrobust",
         **kwargs: object,
     ) -> List[ModelResult]:
         """Fit multiple model specifications to the same data.
@@ -74,6 +137,7 @@ class ModelFitter:
             specs: A list of model specifications.
             data: The dataset.
             alpha: Significance level for confidence intervals (default 0.05).
+            cov_type: Standard error type.
             **kwargs: Additional engine-specific keyword arguments.
 
         Returns:
@@ -81,7 +145,9 @@ class ModelFitter:
         """
         results: List[ModelResult] = []
         for spec in specs:
-            result = self.fit(spec, data, alpha=alpha, **kwargs)
+            result = self.fit(
+                spec, data, alpha=alpha, cov_type=cov_type, **kwargs
+            )
             results.append(result)
         return results
 

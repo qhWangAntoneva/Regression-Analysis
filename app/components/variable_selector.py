@@ -2,12 +2,14 @@
 """
 变量选择器 UI 组件
 
-提供因变量和自变量的选择界面。
+提供因变量和自变量的选择界面，以及：
+- 变量转换（log、标准化、中心化、平方）
+- 交互项创建
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.preprocessing.type_detector import VariableInfo
 
@@ -107,3 +109,146 @@ def render_variable_selector(
                 )
 
     return dep_var, indep_vars
+
+
+def render_transforms_ui(
+    indep_vars: list[str],
+    variables: list[VariableInfo],
+    key_prefix: str = "var",
+) -> dict[str, str]:
+    """变量转换 UI。
+
+    为每个选中的连续自变量提供转换复选框。
+
+    Args:
+        indep_vars: 已选中的自变量列表。
+        variables: VariableInfo 对象列表。
+        key_prefix: Streamlit 组件 key 前缀。
+
+    Returns:
+        转换映射字典：{变量名: 转换类型}。
+    """
+    if st is None or not indep_vars:
+        return {}
+
+    var_info_map = {v.name: v for v in variables}
+    transforms: dict[str, str] = {}
+
+    # 只对连续变量显示转换选项
+    continuous_selected = [
+        v for v in indep_vars
+        if v in var_info_map and var_info_map[v].inferred_type == "continuous"
+    ]
+
+    if not continuous_selected:
+        return {}
+
+    st.markdown("**变量转换**")
+    st.caption("对选中的连续变量应用转换，转换后的变量将自动加入模型。")
+
+    for var in continuous_selected:
+        cols = st.columns([1, 3])
+        with cols[0]:
+            apply = st.checkbox(
+                f"{var}",
+                key=f"{key_prefix}_transform_{var}_enable",
+                help=f"对 {var} 应用转换",
+            )
+        if apply:
+            with cols[1]:
+                ttype = st.selectbox(
+                    "转换类型",
+                    options=["log", "standardize", "center", "square"],
+                    index=0,
+                    key=f"{key_prefix}_transform_{var}_type",
+                    help=(
+                        "log: ln(x+1e-10), "
+                        "standardize: Z-score, "
+                        "center: 减去均值, "
+                        "square: 平方"
+                    ),
+                    label_visibility="collapsed",
+                )
+                transforms[var] = ttype
+
+    return transforms
+
+
+def render_interaction_ui(
+    indep_vars: list[str],
+    key_prefix: str = "var",
+) -> list[tuple[str, str]]:
+    """交互项创建 UI。
+
+    提供两个下拉框选择变量对，使用 patsy 的 ``:`` 语法创建交互项。
+    已创建的交互项显示在列表中，每个项可独立删除。
+
+    Args:
+        indep_vars: 已选中的自变量列表。
+        key_prefix: Streamlit 组件 key 前缀。
+
+    Returns:
+        当前所有交互项列表 ``[(var1, var2), ...]``。
+    """
+    if st is None or not indep_vars:
+        return []
+
+    key_inter = f"{key_prefix}_interaction_terms"
+    if key_inter not in st.session_state:
+        st.session_state[key_inter] = []
+
+    st.markdown("**交互项**")
+    st.caption("选择两个变量创建交互项（通过 patsy ``:`` 语法）。")
+
+    interaction_terms = st.session_state[key_inter]
+
+    if len(indep_vars) >= 2:
+        col_v1, col_v2, col_btn = st.columns([2, 2, 1])
+        with col_v1:
+            v1 = st.selectbox(
+                "变量 1",
+                options=indep_vars,
+                index=None,
+                placeholder="选择...",
+                key=f"{key_prefix}_inter_v1",
+                label_visibility="collapsed",
+            )
+        with col_v2:
+            v2 = st.selectbox(
+                "变量 2",
+                options=indep_vars,
+                index=None,
+                placeholder="选择...",
+                key=f"{key_prefix}_inter_v2",
+                label_visibility="collapsed",
+            )
+        with col_btn:
+            if st.button(
+                "添加",
+                key=f"{key_prefix}_inter_add",
+                use_container_width=True,
+            ):
+                if v1 and v2 and v1 != v2:
+                    pair = (v1, v2)
+                    if pair not in interaction_terms and (v2, v1) not in interaction_terms:
+                        interaction_terms.append(pair)
+                        st.rerun()
+                else:
+                    st.warning("请选择两个不同的变量。")
+
+    # 显示已创建的交互项
+    if interaction_terms:
+        for idx, (v1, v2) in enumerate(interaction_terms):
+            col_t, col_d = st.columns([5, 1])
+            with col_t:
+                st.text(f"  {v1}:{v2}")
+            with col_d:
+                if st.button(
+                    "删除",
+                    key=f"{key_prefix}_inter_del_{idx}",
+                    use_container_width=True,
+                ):
+                    interaction_terms.pop(idx)
+                    st.rerun()
+
+    return list(interaction_terms)

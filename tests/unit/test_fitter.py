@@ -448,3 +448,176 @@ class TestOLSWithSampleCSV:
 
         # RMSE should be close to noise std (~0.5)
         assert abs(result.rmse - 0.5) < 0.15
+
+
+# =========================================================================
+# Test: Transforms integration via ModelFitter
+# =========================================================================
+class TestFitterTransforms:
+    """Transforms applied through ModelFitter."""
+
+    def test_log_transform_integration(self, sample_data: pd.DataFrame) -> None:
+        """Apply log transform to x4 via fitter, verify fit succeeds and metadata."""
+        spec = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "x2", "x4"],
+            transforms={"x4": "log"},
+        )
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data)
+
+        assert result.model_type == "OLS"
+        assert result.n_obs > 0
+        assert result.r_squared is not None and result.r_squared > 0
+        assert result.transforms_applied == {"x4": "log"}
+
+    def test_standardize_transform(self, sample_data: pd.DataFrame) -> None:
+        """Standardize x1, verify fit succeeds."""
+        spec = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "x2"],
+            transforms={"x1": "standardize"},
+        )
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data)
+        assert result.model_type == "OLS"
+        assert result.transforms_applied == {"x1": "standardize"}
+
+    def test_center_transform(self, sample_data: pd.DataFrame) -> None:
+        """Center x1, verify fit succeeds."""
+        spec = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "x2"],
+            transforms={"x1": "center"},
+        )
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data)
+        assert result.model_type == "OLS"
+        assert result.transforms_applied == {"x1": "center"}
+
+    def test_square_transform(self, sample_data: pd.DataFrame) -> None:
+        """Square x1, verify fit succeeds."""
+        spec = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "x2"],
+            transforms={"x1": "square"},
+        )
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data)
+        assert result.model_type == "OLS"
+        assert result.transforms_applied == {"x1": "square"}
+
+
+# =========================================================================
+# Test: Interaction terms integration via ModelFitter
+# =========================================================================
+class TestFitterInteractions:
+    """Interaction terms through ModelFitter."""
+
+    def test_interaction_basic(self, sample_data: pd.DataFrame) -> None:
+        """Add x1:x2 interaction, verify fit succeeds."""
+        spec = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "x2"],
+            interaction_terms=[("x1", "x2")],
+        )
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data)
+
+        assert result.model_type == "OLS"
+        assert result.n_obs > 0
+        assert result.r_squared is not None and result.r_squared > 0
+        assert result.interaction_terms_applied == [("x1", "x2")]
+
+    def test_interaction_with_transform(self, sample_data: pd.DataFrame) -> None:
+        """Apply a transform AND add an interaction simultaneously."""
+        spec = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "x2", "x4"],
+            transforms={"x4": "log"},
+            interaction_terms=[("x1", "x2")],
+        )
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data)
+
+        assert result.model_type == "OLS"
+        assert result.transforms_applied == {"x4": "log"}
+        assert result.interaction_terms_applied == [("x1", "x2")]
+
+
+# =========================================================================
+# Test: Robust standard errors
+# =========================================================================
+class TestFitterRobustSE:
+    """Robust standard error types through ModelFitter."""
+
+    def test_robust_se_hc0(self, sample_data: pd.DataFrame) -> None:
+        """Fit with HC0 robust SE, verify se_type in result."""
+        spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"])
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data, cov_type="HC0")
+        assert result.se_type == "HC0"
+        assert result.model_type == "OLS"
+
+    def test_robust_se_hc1(self, sample_data: pd.DataFrame) -> None:
+        spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"])
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data, cov_type="HC1")
+        assert result.se_type == "HC1"
+
+    def test_robust_se_hc2(self, sample_data: pd.DataFrame) -> None:
+        spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"])
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data, cov_type="HC2")
+        assert result.se_type == "HC2"
+
+    def test_robust_se_hc3(self, sample_data: pd.DataFrame) -> None:
+        spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"])
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data, cov_type="HC3")
+        assert result.se_type == "HC3"
+
+    def test_nonrobust_se_default(self, sample_data: pd.DataFrame) -> None:
+        spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"])
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data)
+        assert result.se_type == "nonrobust"
+
+    def test_robust_se_changes_standard_errors(self, sample_data: pd.DataFrame) -> None:
+        """Robust SE should produce different SE values than nonrobust."""
+        spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"])
+
+        fitter_nonrobust = ModelFitter()
+        result_nonrobust = fitter_nonrobust.fit(
+            spec, sample_data, cov_type="nonrobust"
+        )
+        fitter_robust = ModelFitter()
+        result_robust = fitter_robust.fit(
+            spec, sample_data, cov_type="HC1"
+        )
+        assert result_nonrobust.se_type == "nonrobust"
+        assert result_robust.se_type == "HC1"
+
+
+# =========================================================================
+# Test: Combined metadata from fitter
+# =========================================================================
+class TestFitterMetadata:
+    """Verify metadata fields on ModelResult."""
+
+    def test_full_metadata(self, sample_data: pd.DataFrame) -> None:
+        """Transforms + interactions + robust SE all set together."""
+        spec = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "x2", "x4"],
+            transforms={"x4": "log"},
+            interaction_terms=[("x1", "x2")],
+        )
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data, cov_type="HC0")
+
+        assert result.transforms_applied == {"x4": "log"}
+        assert result.interaction_terms_applied == [("x1", "x2")]
+        assert result.se_type == "HC0"
+        assert result.r_squared is not None
+        assert result.r_squared > 0

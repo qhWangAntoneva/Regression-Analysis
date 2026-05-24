@@ -116,6 +116,7 @@ def run_ols(
     data: pd.DataFrame,
     spec: ModelSpec,
     alpha: float = 0.05,
+    cov_type: str = "nonrobust",
 ) -> ModelResult:
     """Run an OLS regression and return unified results.
 
@@ -129,6 +130,9 @@ def run_ols(
         data: The dataset as a pandas DataFrame.
         spec: The model specification.
         alpha: Significance level for confidence intervals (default 0.05).
+        cov_type: Standard error type.  Supported values:
+            ``'nonrobust'`` (default, classic SE),
+            ``'HC0'``, ``'HC1'``, ``'HC2'``, ``'HC3'`` (robust SE).
 
     Returns:
         A populated ``ModelResult``.
@@ -145,19 +149,37 @@ def run_ols(
 
     try:
         ols_model = OLS(y, X)
-        fitted: RegressionResultsWrapper = ols_model.fit()
+        if cov_type and cov_type != "nonrobust":
+            fitted: RegressionResultsWrapper = ols_model.fit(
+                cov_type=cov_type
+            )
+        else:
+            fitted = ols_model.fit()
     except Exception as exc:
         raise ValueError(f"OLS model failed to fit: {exc}") from exc
 
-    # Extract specification string for the result
-    spec_str = f"{spec.dep_var} ~ {' + '.join(spec.all_predictors)}"
+    # Build specification string
+    preds_str = " + ".join(spec.all_predictors)
+    if spec.transforms:
+        transform_parts = [f"{t}({v})" for v, t in spec.transforms.items()]
+        preds_str += "  [" + ", ".join(transform_parts) + "]"
+    if spec.interaction_terms:
+        inter_parts = [f"{v1}:{v2}" for v1, v2 in spec.interaction_terms]
+        preds_str += "  {" + ", ".join(inter_parts) + "}"
+    spec_str = f"{spec.dep_var} ~ {preds_str}"
     if not spec.has_intercept:
         spec_str += " - 1 (no intercept)"
+    if cov_type and cov_type != "nonrobust":
+        spec_str += f"  [SE: {cov_type}]"
 
-    return extract_statsmodels(
+    result = extract_statsmodels(
         model=fitted,
         model_type="OLS",
         alpha=alpha,
         dep_var=spec.dep_var,
         specification=spec_str,
     )
+    result.transforms_applied = dict(spec.transforms)
+    result.interaction_terms_applied = list(spec.interaction_terms)
+    result.se_type = cov_type if cov_type else "nonrobust"
+    return result

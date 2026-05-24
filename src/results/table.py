@@ -119,6 +119,14 @@ class ModelResult:
     specification: str = ""
     method: str = "OLS"
 
+    # Phase 3.1 — advanced modeling metadata
+    transforms_applied: Dict[str, str] = field(default_factory=dict)
+    """Mapping of ``{original_var: transform_type}`` for display."""
+    interaction_terms_applied: List[Tuple[str, str]] = field(default_factory=list)
+    """List of ``(var1, var2)`` pairs whose interaction was included."""
+    se_type: str = "nonrobust"
+    """Standard error type used (``'nonrobust'``, ``'HC0'``, etc.)."""
+
     # ------------------------------------------------------------------
     # Existing methods
     # ------------------------------------------------------------------

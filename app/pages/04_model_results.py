@@ -133,6 +133,26 @@ def render() -> None:
         return
 
     # ------------------------------------------------------------------
+    # Phase 3.1: 转换/交互项/SE 类型信息
+    # ------------------------------------------------------------------
+    transforms_applied = getattr(selected_result, "transforms_applied", {})
+    interaction_terms_applied = getattr(
+        selected_result, "interaction_terms_applied", []
+    )
+    se_type = getattr(selected_result, "se_type", "nonrobust")
+
+    if transforms_applied:
+        parts = [f"{t}({v})" for v, t in transforms_applied.items()]
+        st.info(f"已应用变量转换: {', '.join(parts)}")
+
+    if interaction_terms_applied:
+        parts = [f"{v1}:{v2}" for v1, v2 in interaction_terms_applied]
+        st.info(f"已添加交互项: {', '.join(parts)}")
+
+    se_label = "普通标准误" if se_type == "nonrobust" else f"{se_type} (异方差稳健)"
+    st.caption(f"标准误类型: {se_label}")
+
+    # ------------------------------------------------------------------
     # Phase 2: 模型摘要文本
     # ------------------------------------------------------------------
     if SUMMARY_GEN_AVAILABLE:

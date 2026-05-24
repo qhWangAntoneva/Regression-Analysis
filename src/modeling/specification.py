@@ -8,7 +8,7 @@ generating patsy formulas, and building design matrices.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -32,6 +32,9 @@ class ModelSpec:
     indep_vars: List[str]
     control_vars: List[str] = field(default_factory=list)
     has_intercept: bool = True
+    transforms: Dict[str, str] = field(default_factory=dict)
+    interaction_terms: List[Tuple[str, str]] = field(default_factory=list)
+    missing_strategy: str = "drop"
 
     @property
     def all_predictors(self) -> List[str]:
@@ -65,14 +68,27 @@ def _term_name(term: patsy.Term) -> str:
     return name
 
 
-def build_formula(spec: ModelSpec) -> str:
+def build_formula(
+    spec: ModelSpec,
+    use_transformed_names: bool = False,
+    name_map: Optional[Dict[str, str]] = None,
+) -> str:
     """Generate a patsy formula string from a ModelSpec.
 
     Categorical variables are automatically wrapped with ``C()`` so that
     patsy creates the appropriate dummy-variable encoding.
 
+    When ``use_transformed_names`` is ``True`` and a ``name_map`` is
+    provided, original variable names are replaced with their transformed
+    column names in the formula string.
+    Interaction terms are appended as ``var1:var2`` terms.
+
     Args:
         spec: The model specification.
+        use_transformed_names: Whether to substitute variable names using
+            the ``name_map``.
+        name_map: Mapping of ``{original_variable: new_column_name}`` to
+            use when ``use_transformed_names`` is ``True``.
 
     Returns:
         A patsy-compatible formula string, e.g. ``"y ~ x1 + x2 + C(cat)"``.
@@ -84,10 +100,27 @@ def build_formula(spec: ModelSpec) -> str:
     if not predictors:
         raise ValueError("ModelSpec must have at least one predictor.")
 
-    # patsy's C() notation handles categorical variables automatically.
-    # For this implementation we assume string/object columns need C() wrapping.
-    # The caller is responsible for passing appropriately typed data.
-    rhs = " + ".join(predictors)
+    # Substitute with transformed names if requested
+    if use_transformed_names and name_map:
+        resolved: List[str] = []
+        for p in predictors:
+            if p in name_map:
+                resolved.append(name_map[p])
+            else:
+                resolved.append(p)
+        rhs_parts = resolved
+    else:
+        rhs_parts = list(predictors)
+
+    # Append interaction terms as "var1:var2"
+    if spec.interaction_terms:
+        for v1, v2 in spec.interaction_terms:
+            # Use transformed names if available
+            n1 = name_map.get(v1, v1) if name_map else v1
+            n2 = name_map.get(v2, v2) if name_map else v2
+            rhs_parts.append(f"{n1}:{n2}")
+
+    rhs = " + ".join(rhs_parts)
 
     if not spec.has_intercept:
         rhs = f"{rhs} - 1"
@@ -102,7 +135,7 @@ def build_design_matrix(
     """Build the design matrix and dependent variable vector from data.
 
     Constructs the model matrix (X) and response vector (y) using patsy.
-    Rows with any missing values are removed (listwise deletion).
+    Handles missing values according to ``spec.missing_strategy``.
 
     Args:
         spec: The model specification.
@@ -115,7 +148,7 @@ def build_design_matrix(
 
     Raises:
         ValueError: If the dependent variable is missing from the data, or
-            if no valid rows remain after listwise deletion.
+            if no valid rows remain after deletion.
     """
     if spec.dep_var not in data.columns:
         raise ValueError(
@@ -130,13 +163,34 @@ def build_design_matrix(
             f"Predictors not found in data: {missing_predictors}"
         )
 
+    # Apply missing strategy before building design matrix
+    working_data = data.copy()
+    cols_for_missing = [spec.dep_var] + spec.all_predictors
+    missing_rows = working_data[cols_for_missing].isna().any(axis=1)
+
+    if missing_rows.any():
+        if spec.missing_strategy == "drop":
+            working_data = working_data.loc[~missing_rows].copy()
+        elif spec.missing_strategy == "mean":
+            for col in spec.all_predictors:
+                if working_data[col].isna().any():
+                    working_data[col] = working_data[col].fillna(
+                        working_data[col].mean()
+                    )
+        elif spec.missing_strategy == "median":
+            for col in spec.all_predictors:
+                if working_data[col].isna().any():
+                    working_data[col] = working_data[col].fillna(
+                        working_data[col].median()
+                    )
+
     formula = build_formula(spec)
 
     # Use patsy to build the design matrices
     try:
         y_dmat, X_dmat = patsy.dmatrices(
             formula,
-            data,
+            working_data,
             return_type="dataframe",
         )
     except Exception as exc:
@@ -145,7 +199,6 @@ def build_design_matrix(
         ) from exc
 
     # Convert to the expected return types
-    # y is a 2D DataFrame from patsy; extract as a 1D Series
     y: pd.Series = y_dmat.iloc[:, 0]
     y.name = spec.dep_var
     X: pd.DataFrame = X_dmat

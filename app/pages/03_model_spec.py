@@ -7,7 +7,7 @@ Streamlit 页面：变量选择、模型规格、运行回归，支持多模型�
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -20,7 +20,11 @@ except ImportError:
 # Lazy imports — avoid top-level crashes when modules not installed
 MODELING_AVAILABLE = False
 try:
-    from app.components.variable_selector import render_variable_selector
+    from app.components.variable_selector import (
+        render_interaction_ui,
+        render_transforms_ui,
+        render_variable_selector,
+    )
     from app.components.model_control import (
         render_model_comparison_controls,
         render_model_controls,
@@ -218,6 +222,21 @@ def render() -> None:
         st.session_state["selected_dep_var"] = dep_var
 
     # ------------------------------------------------------------------
+    # Phase 3.1: 变量转换 UI
+    # ------------------------------------------------------------------
+    transforms: Dict[str, str] = {}
+    interaction_terms: List[Tuple[str, str]] = []
+    if dep_var and indep_vars:
+        with st.expander("变量转换", expanded=False):
+            transforms = render_transforms_ui(
+                indep_vars, variables, key_prefix="var"
+            )
+            st.divider()
+            interaction_terms = render_interaction_ui(
+                indep_vars, key_prefix="var"
+            )
+
+    # ------------------------------------------------------------------
     # Phase 2: 高级选项 (model control panel)
     # ------------------------------------------------------------------
     st.divider()
@@ -225,21 +244,33 @@ def render() -> None:
 
     model_config = render_model_controls(key_prefix="model_main")
 
-    # 公式预览
+    # 公式预览（含转换和交互项）
     if dep_var and indep_vars:
         try:
             spec_preview = ModelSpec(
                 dep_var=dep_var,
                 indep_vars=indep_vars,
                 has_intercept=model_config["add_constant"],
+                transforms=transforms,
+                interaction_terms=interaction_terms,
             )
             formula_str = build_formula(spec_preview)
             st.code(f"模型公式: {formula_str}", language="text")
+            if transforms:
+                parts = [f"{t}({v})" for v, t in transforms.items()]
+                st.caption("变量转换: " + ", ".join(parts))
+            if interaction_terms:
+                parts = [f"{v1}:{v2}" for v1, v2 in interaction_terms]
+                st.caption("交互项: " + ", ".join(parts))
         except Exception:
             # Fallback manual formula display
             formula_str = f"{dep_var} ~ {' + '.join(indep_vars)}"
             if not model_config["add_constant"]:
                 formula_str += " - 1"
+            if transforms:
+                formula_str += "  [转换: " + ", ".join(f"{t}({v})" for v, t in transforms.items()) + "]"
+            if interaction_terms:
+                formula_str += "  [交互: " + ", ".join(f"{v1}:{v2}" for v1, v2 in interaction_terms) + "]"
             st.code(f"模型公式: {formula_str}", language="text")
 
     # ------------------------------------------------------------------
@@ -265,7 +296,10 @@ def render() -> None:
             use_container_width=True,
             disabled=run_disabled,
         ):
-            _run_regression(df, dep_var, indep_vars, model_config)
+            _run_regression(
+                df, dep_var, indep_vars, model_config,
+                transforms, interaction_terms,
+            )
 
     with col_compare:
         compare_disabled = run_disabled or not compare_mode
@@ -276,7 +310,8 @@ def render() -> None:
             disabled=compare_disabled,
         ):
             _run_all_models(
-                df, dep_var, indep_vars, model_config, comparison_specs
+                df, dep_var, indep_vars, model_config,
+                comparison_specs, transforms, interaction_terms,
             )
 
 
@@ -285,8 +320,13 @@ def _run_regression(
     dep_var: str,
     indep_vars: List[str],
     model_config: Dict[str, Any],
+    transforms: Dict[str, str],
+    interaction_terms: List[Tuple[str, str]],
 ) -> None:
-    """运行单个回归模型并保存结果到 session state。"""
+    """运行单个回归模型并保存结果到 session state。
+
+    支持变量转换、交互项和稳健标准误。
+    """
     if st is None:
         return
 
@@ -296,9 +336,13 @@ def _run_regression(
                 dep_var=dep_var,
                 indep_vars=indep_vars,
                 has_intercept=model_config["add_constant"],
+                transforms=transforms,
+                interaction_terms=interaction_terms,
+                missing_strategy=model_config.get("missing_handling", "drop"),
             )
 
-            result: ModelResult = run_ols(df, spec)
+            cov_type = model_config.get("se_type", "nonrobust")
+            result: ModelResult = run_ols(df, spec, cov_type=cov_type)
 
             # 保存到 session state
             st.session_state.model_result = result
@@ -329,13 +373,19 @@ def _run_all_models(
     indep_vars: List[str],
     model_config: Dict[str, Any],
     comparison_specs: List[ModelSpec],
+    transforms: Dict[str, str],
+    interaction_terms: List[Tuple[str, str]],
 ) -> None:
-    """运行主模型及所有对比模型，结果存入 session_state。"""
+    """运行主模型及所有对比模型，结果存入 session_state。
+
+    支持变量转换、交互项和稳健标准误。
+    """
     if st is None:
         return
 
     with st.spinner("正在运行所有模型..."):
         try:
+            cov_type = model_config.get("se_type", "nonrobust")
             fitter = ModelFitter()
             results: List[ModelResult] = []
 
@@ -344,13 +394,20 @@ def _run_all_models(
                 dep_var=dep_var,
                 indep_vars=indep_vars,
                 has_intercept=model_config["add_constant"],
+                transforms=transforms,
+                interaction_terms=interaction_terms,
+                missing_strategy=model_config.get("missing_handling", "drop"),
             )
-            main_result = fitter.fit(main_spec, df)
+            main_result = fitter.fit(
+                main_spec, df, cov_type=cov_type,
+            )
             results.append(main_result)
 
             # 对比模型
             for comp_spec in comparison_specs:
-                comp_result = fitter.fit(comp_spec, df)
+                comp_result = fitter.fit(
+                    comp_spec, df, cov_type=cov_type,
+                )
                 results.append(comp_result)
 
             # 保存到 session state

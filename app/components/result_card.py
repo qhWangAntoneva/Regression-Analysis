@@ -86,6 +86,25 @@ def render_coefficient_table(
     st.caption("* p<0.1, ** p<0.05, *** p<0.01")
     st.caption("绿色背景行表示 p<0.05；深绿色背景行表示 p<0.01")
 
+    # SE type annotation
+    se_type = getattr(result, "se_type", "nonrobust")
+    if se_type and se_type != "nonrobust":
+        st.caption(f"使用稳健标准误: {se_type}")
+    else:
+        st.caption("使用普通标准误")
+
+    # Transformed variable annotation
+    transforms = getattr(result, "transforms_applied", {})
+    if transforms:
+        parts = [f"{t}({v})" for v, t in transforms.items()]
+        st.caption("已转换变量: " + ", ".join(parts))
+
+    # Interaction term annotation
+    interactions = getattr(result, "interaction_terms_applied", [])
+    if interactions:
+        parts = [f"{v1}:{v2}" for v1, v2 in interactions]
+        st.caption("交互项: " + ", ".join(parts))
+
 
 def render_model_statistics(result: ModelResult) -> None:
     """Render model statistics as a grid of metric cards.
@@ -312,3 +331,10 @@ def render_statistical_alerts(
             ":material/check_circle: 未发现明显的统计假设违规。",
             icon=":material/check_circle:",
         )
+
+    # SE type info
+    se_type = getattr(result, "se_type", "nonrobust")
+    if se_type and se_type != "nonrobust":
+        st.caption(f"标准误类型: {se_type}（异方差稳健）")
+    else:
+        st.caption("标准误类型: 普通标准误（假设同方差）")
