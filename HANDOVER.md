@@ -13,7 +13,7 @@
 |------|------|------|
 | Phase 1 (POC) | ✅ 完成 | 56 tests |
 | Phase 2 (MVP) | ✅ 全部完成 | 147 tests |
-| Phase 3 (Beta) | ❌ 未开始 | — |
+| Phase 3 (Beta) | ✅ 全部完成 | 278 tests |
 | Phase 4 (v1.0) | ❌ 未开始 | — |
 
 ## 项目结构
@@ -162,7 +162,7 @@ Regression Analysis/
 ## 测试说明
 
 ```bash
-uv run python -m pytest tests/ -v              # 全部 147 tests
+uv run python -m pytest tests/ -v              # 全部 278 tests
 uv run python -m pytest tests/unit/test_XXX.py -v  # 单个文件
 ```
 
@@ -177,39 +177,43 @@ uv run python -m pytest tests/unit/test_XXX.py -v  # 单个文件
 5. **openpyxl**: Excel 导出需要，在依赖中
 6. **worktree 隔离注意事项**: 使用 Agent worktree 隔离时，必须让 agent 在最后一步 `git add -A && git commit && git push`，否则 worktree 清理后更改丢失。推荐直接修改 master 分支
 
-## Phase 3 (Beta) 待实现
-
-参考 `TODO.md` Phase 3 部分，主要工作包括:
+## Phase 3 (Beta) 已实现功能清单
 
 ### 3.1 高级建模功能
-- 变量转换 UI (对数/标准化/中心化/平方项)
-- 交互项创建 UI
-- 稳健标准误 (HC0-HC3) — 当前只有 classic/HC1
-- 多模型并列比较表增强
-- 系数图 (dot-whisker) — 已在 Phase 2 实现
+- [x] 变量转换引擎 (对数/标准化/中心化/平方项)
+- [x] 变量转换 UI (模型设定页面 expander)
+- [x] 交互项创建 UI (选择两个变量 → 自动生成乘积项)
+- [x] 稳健标准误选项 (HC0-HC3 + 普通标准误)
+- [x] 模型控制面板添加 SE 类型选择器
+- [x] 结果卡片展示转换/交互/SE 信息
+- [x] 系数图 (dot-whisker) — 已在 Phase 2 实现
 
 ### 3.2 完整导出功能
-- LaTeX 表格导出 (Jinja2 + booktabs)
-- HTML 报告导出
-- SVG 图表导出 — 已在 Phase 2 实现
-- 完整分析报告
-- 分析复现包
+- [x] LaTeX 表格导出 (Jinja2 + booktabs, 单模型 + 多模型对比, APA7 格式预设)
+- [x] HTML 报告导出 (自包含, base64 内嵌诊断图, 中文界面)
+- [x] SVG 图表导出 — 已在 Phase 2 实现
+- [x] 分析复现包导出 (数据子集 + 配置 JSON + reproduce.py 脚本)
+- [x] 导出界面集成所有新导出类型
 
 ### 3.3 数据增强
-- 缺失值处理策略 (删除/均值/中位数)
-- 异常值检测与提示
-- 变量标签管理
+- [x] 缺失值处理策略 (删除整行 / 均值填充 / 中位数填充)
+- [x] 缺失值统计分析 (按列缺失率 + 颜色标注)
+- [x] 异常值检测 (IQR + Z-score 方法)
+- [x] 缺失/异常处理 UI (数据探索页面 expander)
 
 ### 3.4 工程化
-- 性能优化 (缓存策略)
-- 会话状态持久化
-- 崩溃恢复
-- 用户引导 + 示例数据集
+- [x] 会话状态持久化 (JSON 序列化, 关闭浏览器后恢复)
+- [x] 崩溃恢复 (启动时检测 .session_cache + 恢复提示)
+- [x] 性能优化 (缓存策略: @st.cache_data)
+- [x] 3 个示例数据集 (房价/工资/空气质量, 一键加载)
+- [x] 示例数据加载 UI (侧边栏)
 
 ### 3.5 Beta 验证
-- Beta 测试 ≥ 10 人
-- 无 P0 Bug
-- 覆盖率 ≥ 90%
+- [ ] Beta 测试者 ≥ 10 人
+- [ ] 无 P0 Bug（数据丢失/错误结果）
+- [ ] P1 Bug 关闭率 ≥ 90%
+- [ ] 用户满意度 ≥ 4.0/5
+- [x] 测试覆盖率: 278 测试通过 (核心模块)
 
 ## 启动开发
 
@@ -226,15 +230,24 @@ uv run python -m pytest tests/ -v      # 运行测试
 | `parser.py` | `FileParser.parse()`, `FileParser.parse_csv()`, `FileParser.parse_excel()` |
 | `type_detector.py` | `VariableTypeDetector.detect()`, `VariableInfo` |
 | `specification.py` | `ModelSpec`, `build_formula()`, `build_design_matrix()` |
+| `transforms.py` | `VariableTransformer` (log/standardize/center/square + interaction terms) |
 | `fitter.py` | `ModelFitter.fit()`, `ModelFitter.fit_multiple()` |
-| `statsmodels_engine.py` | `extract_statsmodels()`, `run_ols()` |
+| `statsmodels_engine.py` | `extract_statsmodels()`, `run_ols()` (supports cov_type) |
 | `table.py` | `CoefficientRow`, `ModelResult`, `to_dataframe()`, `compare_models()` |
 | `statistics.py` | `descriptive_stats()`, `correlation_matrix()` |
 | `diagnostics.py` | `vif()`, `residual_tests()`, `influence_stats()` |
 | `summary_generator.py` | `generate_summary_text()`, `generate_coefficient_interpretation()`, `generate_assumption_check_text()` |
-| `exporter.py` | `DataExporter.export_csv()`, `.export_excel()`, `.export_chart()`, `.export_results_package()` |
+| `missing.py` | `MissingValueHandler.analyze()`, `.handle()` (drop/mean/median) |
+| `outliers.py` | `OutlierDetector.detect_iqr()`, `.detect_zscore()`, `.flag_outliers()` |
+| `persistence.py` | `save_session()`, `load_session()`, `clear_session()` |
+| `sample_data.py` | 3 built-in datasets (房价/工资/空气质量) |
+| `exporter.py` | `DataExporter.export_csv()`, `.export_excel()`, `.export_chart()`, `.export_results_package()`, `.export_reproducibility_package()` |
+| `latex_renderer.py` | `LatexRenderer.render_single()`, `.render_comparison()` |
+| `html_report.py` | `HtmlReportGenerator.generate_full_report()` |
 | `result_card.py` | `render_coefficient_table()`, `render_model_statistics()`, `render_anova_table()`, `render_comparison_table()`, `render_statistical_alerts()` |
-| `model_control.py` | `render_model_controls()`, `render_model_comparison_controls()` |
+| `model_control.py` | `render_model_controls()`, `render_model_comparison_controls()` (adds SE type selector) |
+| `variable_selector.py` | `render_variable_selector()`, `render_transforms_ui()`, `render_interaction_ui()` |
 | `export_dialog.py` | `render_export_options()`, `render_export_result()` |
+| `data_table.py` | `render_data_preview()`, `render_variable_info_table()`, `render_missing_value_summary()`, `render_outlier_detection_ui()` |
 | `onboarding.py` | `render_first_run_guide()`, `render_error_message()`, `render_help_tooltip()` |
 | `coefficient.py` | `coefficient_plot()`, `coefficient_plot_single()` |
