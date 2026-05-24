@@ -1,6 +1,8 @@
 # encoding: utf-8
 """Regression Analysis -- Streamlit main entry point."""
 
+from __future__ import annotations
+
 import streamlit as st
 
 from app.config import configure_page
@@ -9,6 +11,66 @@ from app.config import configure_page
 # Page config (must be first Streamlit command)
 # ---------------------------------------------------------------------------
 configure_page()
+
+# ---------------------------------------------------------------------------
+# Crash Recovery: check for unclosed session
+# ---------------------------------------------------------------------------
+from src.utils.persistence import load_session, session_cache_exists, clear_session
+
+
+def _check_crash_recovery() -> None:
+    """Check for previously saved session state and offer recovery.
+
+    Runs once per app startup.  If a .session_cache file exists,
+    shows a banner with "恢复" and "忽略" buttons.
+    """
+    if not session_cache_exists():
+        return
+
+    # Only prompt once per session
+    if st.session_state.get("_crash_recovery_handled"):
+        return
+
+    st.session_state._crash_recovery_handled = True
+
+    # Use a sidebar info box
+    with st.sidebar:
+        st.info(":material/report: 检测到上次未正常关闭的会话。")
+
+        col_rec, col_ign = st.columns(2)
+        with col_rec:
+            if st.button(":material/restore: 恢复", key="crash_restore", use_container_width=True):
+                saved = load_session()
+                if saved:
+                    for key, value in saved.items():
+                        if key != "_crash_recovery_handled":
+                            st.session_state[key] = value
+                    st.toast("会话已恢复！", icon="✅")
+                    clear_session()
+                else:
+                    st.warning("无可恢复的会话数据。")
+
+        with col_ign:
+            if st.button(":material/delete: 忽略", key="crash_ignore", use_container_width=True):
+                clear_session()
+                st.rerun()
+
+
+_check_crash_recovery()
+
+# ---------------------------------------------------------------------------
+# Auto-save session after model runs
+# ---------------------------------------------------------------------------
+if st.session_state.get("model_run_time"):
+    from src.utils.persistence import save_session
+
+    saveable = {
+        "data_summary": st.session_state.get("data_summary"),
+        "filename": st.session_state.get("filename"),
+        "encoding": st.session_state.get("encoding"),
+        "model_run_time": st.session_state.get("model_run_time"),
+    }
+    save_session(saveable)
 
 # ---------------------------------------------------------------------------
 # Sidebar navigation
@@ -28,17 +90,40 @@ st.sidebar.markdown(
 st.sidebar.markdown("---")
 
 # Define available pages using st.Page (Streamlit >=1.35)
-# In Phase 1 these are placeholders -- real pages will be added in later phases.
 pages = {
     "Data": [
-        st.Page("app/pages/data_upload.py", title="Upload & Preview", icon=":inbox_tray:", default=True),
+        st.Page(
+            "app/pages/01_data_upload.py",
+            title="Upload & Preview",
+            icon=":inbox_tray:",
+            default=True,
+        ),
+    ],
+    "Explore": [
+        st.Page(
+            "app/pages/02_data_explore.py",
+            title="Data Explore",
+            icon=":bar_chart:",
+        ),
     ],
     "Analysis": [
-        st.Page("app/pages/model_fitting.py", title="Model Fitting", icon=":gear:"),
-        st.Page("app/pages/diagnostics.py", title="Diagnostics", icon=":test_tube:"),
+        st.Page(
+            "app/pages/03_model_spec.py",
+            title="Model Specification",
+            icon=":gear:",
+        ),
+        st.Page(
+            "app/pages/04_model_results.py",
+            title="Results",
+            icon=":test_tube:",
+        ),
     ],
     "Results": [
-        st.Page("app/pages/export.py", title="Export Report", icon=":page_facing_up:"),
+        st.Page(
+            "app/pages/06_export.py",
+            title="Export Report",
+            icon=":page_facing_up:",
+        ),
     ],
 }
 
@@ -58,37 +143,26 @@ st.sidebar.markdown(
 )
 
 # ---------------------------------------------------------------------------
-# Placeholder pages for pages that don't exist yet
+# @st.cache_data decorator for expensive operations
 # ---------------------------------------------------------------------------
-# st.Page will 404 if the file doesn't exist.  We create placeholder modules
-# here so the app doesn't crash before those pages are implemented.
-import importlib
-import sys
-from pathlib import Path
+import hashlib
 
-_pages_dir = Path(__file__).parent / "pages"
-_page_modules = ["data_upload", "model_fitting", "diagnostics", "export"]
+from src.utils.persistence import clear_session, load_session, save_session, session_cache_exists
 
-for _mod in _page_modules:
-    _path = _pages_dir / f"{_mod}.py"
-    if not _path.exists():
-        # Create a minimal placeholder module
-        _code = (
-            f'# encoding: utf-8\n'
-            f'"""Placeholder: {_mod} -- not yet implemented."""\n\n'
-            f'import streamlit as st\n\n\n'
-            f'def run() -> None:\n'
-            f'    st.info(":construction: This page is not yet implemented. It will be built in a later phase.")\n'
-            f'    st.write(f"**Module:** `{_mod}.py`")\n\n\n'
-            f'if __name__ == "__page__":\n'
-            f'    run()\n'
-        )
-        _path.write_text(_code, encoding="utf-8")
-        # Force reimport
-        if _mod in sys.modules:
-            del sys.modules[_mod]
-        spec = importlib.util.spec_from_file_location(_mod, _path)
-        if spec and spec.loader:
-            _mod_obj = importlib.util.module_from_spec(spec)
-            sys.modules[_mod] = _mod_obj
-            spec.loader.exec_module(_mod_obj)
+
+@st.cache_data(ttl=3600, show_spinner="正在计算相关系数矩阵...")
+def cached_correlation_matrix(df_values: tuple, columns: tuple) -> tuple:
+    """缓存相关系数矩阵计算结果。
+
+    Args:
+        df_values: DataFrame 的 numpy 数组展平的元组（用于缓存键）。
+        columns: 列名元组。
+
+    Returns:
+        (列名列表, 相关系数矩阵嵌套列表) 的元组。
+    """
+    import numpy as np
+
+    arr = np.array(df_values)
+    corr = np.corrcoef(arr.T)
+    return (list(columns), corr.tolist())
