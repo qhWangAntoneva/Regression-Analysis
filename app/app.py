@@ -131,9 +131,6 @@ pg = st.navigation(pages)
 pg.run()
 
 # ---------------------------------------------------------------------------
-# Sidebar project info
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # Accessibility settings
 # ---------------------------------------------------------------------------
 st.sidebar.markdown("---")
@@ -168,7 +165,7 @@ with st.sidebar.expander(":material/accessibility: 辅助功能", expanded=False
 st.sidebar.markdown("---")
 st.sidebar.markdown(
     """
-    **Version:** 0.1.0 (POC)
+    **Version:** 1.0.0
 
     **GitHub:** [qhWangAntoneva/Regression-Analysis](https://github.com/qhWangAntoneva/Regression-Analysis)
     """
