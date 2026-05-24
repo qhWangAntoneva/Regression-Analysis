@@ -1,0 +1,83 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+.uv/
+
+# Testing / Coverage
+.pytest_cache/
+coverage/
+.coverage
+htmlcov/
+*.coverage
+*.cover
+.cache/
+
+# Ruff / Mypy
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Streamlit
+.streamlit/secrets.toml
+.streamlit/*.toml
+!/.streamlit/config.toml
+
+# Logs
+logs/
+*.log
+
+# Data files
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.dta
+*.sav
+*.sas7bdat
+*.db
+*.sqlite
+*.sqlite3
+
+# Output / Generated files
+output/
+exports/
+temp/
+tmp/
+*.html
+*.pdf
+*.docx
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# pre-commit
+.pre-commit-config.yaml.bak
