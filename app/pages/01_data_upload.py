@@ -11,6 +11,7 @@ import io
 import os
 import tempfile
 from pathlib import Path
+from typing import Tuple
 
 try:
     import streamlit as st
@@ -24,11 +25,21 @@ PARSER_AVAILABLE = False
 try:
     from src.data_io.parser import FileParser, get_data_summary, preview_dataframe
     from src.preprocessing.type_detector import VariableTypeDetector
-    from app.components.data_table import render_data_preview, render_variable_info
+    from app.components.data_table import (
+        render_data_preview,
+        render_type_override_ui,
+        render_variable_info,
+    )
 
     PARSER_AVAILABLE = True
 except ImportError:
     pass
+
+# ---------------------------------------------------------------------------
+# File size limits
+# ---------------------------------------------------------------------------
+WARN_FILE_SIZE_MB = 50
+BLOCK_FILE_SIZE_MB = 200
 
 
 def render() -> None:
@@ -91,6 +102,31 @@ def render() -> None:
             st.info("请上传一个 CSV 或 Excel 文件，或点击「加载示例数据集」开始探索。")
 
 
+def _check_file_size(file_size_bytes: int) -> Tuple[bool, str]:
+    """Check file size against warning/blocking thresholds.
+
+    Args:
+        file_size_bytes: File size in bytes.
+
+    Returns:
+        (is_ok, message) tuple. is_ok is True if processing should proceed.
+    """
+    size_mb = file_size_bytes / (1024 * 1024)
+
+    if size_mb > BLOCK_FILE_SIZE_MB:
+        return False, (
+            f"文件过大（{size_mb:.1f} MB）。"
+            f"当前限制为最大 {BLOCK_FILE_SIZE_MB} MB。"
+            "请减小数据量（如减少列数或行数）后重试。"
+        )
+    if size_mb > WARN_FILE_SIZE_MB:
+        return True, (
+            f"文件较大（{size_mb:.1f} MB），"
+            f"解析和处理可能需要较长时间。建议使用较小的数据集以获得更好的性能。"
+        )
+    return True, ""
+
+
 def _process_uploaded_file(uploaded_file, nrows: int) -> None:
     """处理上传的文件。"""
     if st is None:
@@ -103,6 +139,14 @@ def _process_uploaded_file(uploaded_file, nrows: int) -> None:
 
     with st.spinner("正在解析文件..."):
         try:
+            # 文件大小检查
+            is_ok, size_msg = _check_file_size(uploaded_file.size)
+            if not is_ok:
+                st.error(size_msg)
+                return
+            if size_msg:
+                st.warning(size_msg)
+
             # 保存到临时文件
             suffix = ext if ext else ".csv"
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -127,6 +171,7 @@ def _process_uploaded_file(uploaded_file, nrows: int) -> None:
                 st.session_state.data_summary = summary
                 st.session_state.encoding = encoding
                 st.session_state.filename = uploaded_file.name
+                st.session_state.uploaded_file_obj = uploaded_file
 
             finally:
                 # 清理临时文件
@@ -166,6 +211,13 @@ def _show_data_preview() -> None:
         with col4:
             enc = st.session_state.get("encoding", "N/A")
             st.metric("编码", enc)
+            uploaded_file = st.session_state.get("uploaded_file_obj")
+            if uploaded_file is not None:
+                size_mb = uploaded_file.size / (1024 * 1024)
+                size_str = f"{size_mb:.1f} MB" if size_mb >= 1 else f"{uploaded_file.size / 1024:.1f} KB"
+                st.metric("文件大小", size_str)
+            else:
+                st.metric("文件大小", "N/A（模拟数据）")
 
     # 缺失率概览
     if summary and any(v > 0 for v in summary.get("missing_rates", {}).values()):
@@ -189,6 +241,7 @@ def _show_data_preview() -> None:
     if variables:
         st.divider()
         render_variable_info(variables)
+        render_type_override_ui(variables)
 
     # 数据预览表格
     st.divider()
@@ -248,6 +301,7 @@ def _load_sample_data() -> None:
         }
         st.session_state.encoding = "N/A (模拟数据)"
         st.session_state.filename = "模拟数据集 (示例)"
+        st.session_state.uploaded_file_obj = None
 
         st.success("示例数据集已加载！")
 

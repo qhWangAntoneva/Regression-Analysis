@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+import numpy as np
+import pandas as pd
+
 try:
     import streamlit as st
 except ImportError:
@@ -29,6 +32,134 @@ try:
     MODELING_AVAILABLE = True
 except ImportError:
     pass
+
+
+def _render_data_filter(df: pd.DataFrame, variables: list) -> pd.DataFrame:
+    """渲染数据筛选（行过滤）界面并返回过滤后的数据。
+
+    数值列提供范围滑块，分类列提供多选，二值列提供值选择。
+    筛选结果存入 st.session_state.filtered_data。
+
+    Args:
+        df: 原始 DataFrame。
+        variables: VariableInfo 列表。
+
+    Returns:
+        过滤后的 DataFrame（若无筛选则返回原始 df）。
+    """
+    if st is None:
+        return df
+
+    # 检查是否已有筛选
+    filtered = st.session_state.get("filtered_data")
+    if filtered is not None:
+        current_df = filtered
+    else:
+        current_df = df
+
+    n_total = len(df)
+    n_current = len(current_df)
+
+    with st.expander(
+        f":material/filter_alt: 数据筛选"
+        f"（当前: {n_current}/{n_total} 行）",
+        expanded=filtered is not None,
+    ):
+        if variables is None:
+            st.info("数据不可用。")
+            return current_df
+
+        # 分离列类型
+        numeric_vars = [v for v in variables if v.inferred_type in ("continuous",)]
+        cat_vars = [v for v in variables if v.inferred_type in ("categorical", "binary", "ordinal")]
+
+        filters_applied = []
+        col_left, col_right = st.columns(2)
+
+        # 数值列滑块
+        with col_left:
+            st.markdown("**数值列范围**")
+            if not numeric_vars:
+                st.info("无连续数值列。")
+            else:
+                for v in numeric_vars[:8]:  # 最多显示 8 个滑块
+                    col_min = float(df[v.name].min())
+                    col_max = float(df[v.name].max())
+                    # 使用 session_state 记忆滑块值
+                    key_min = f"filter_min_{v.name}"
+                    key_max = f"filter_max_{v.name}"
+                    default_min = st.session_state.get(key_min, col_min)
+                    default_max = st.session_state.get(key_max, col_max)
+
+                    vals = st.slider(
+                        v.name,
+                        min_value=col_min,
+                        max_value=col_max,
+                        value=(default_min, default_max),
+                        key=f"filter_slider_{v.name}",
+                    )
+                    st.session_state[key_min] = vals[0]
+                    st.session_state[key_max] = vals[1]
+                    if vals[0] > col_min or vals[1] < col_max:
+                        filters_applied.append((v.name, vals))
+
+        # 分类列多选
+        with col_right:
+            st.markdown("**分类列筛选**")
+            if not cat_vars:
+                st.info("无分类变量。")
+            else:
+                for v in cat_vars[:6]:  # 最多显示 6 个
+                    unique_vals = sorted(df[v.name].dropna().unique().tolist())
+                    selected = st.multiselect(
+                        v.name,
+                        options=unique_vals,
+                        default=st.session_state.get(f"filter_cat_{v.name}", unique_vals),
+                        key=f"filter_cat_{v.name}",
+                    )
+                    st.session_state[f"filter_cat_{v.name}"] = selected
+                    if selected and set(selected) != set(unique_vals):
+                        filters_applied.append((v.name, selected))
+
+        # 筛选按钮
+        st.divider()
+        col_apply, col_clear, _ = st.columns([1, 1, 2])
+        with col_apply:
+            if st.button(
+                ":material/check: 应用筛选",
+                type="primary",
+                use_container_width=True,
+                key="apply_filters",
+            ):
+                filtered_df = df.copy()
+                # 应用数值列范围筛选
+                for name, vals in filters_applied:
+                    if isinstance(vals, tuple):
+                        filtered_df = filtered_df[
+                            (filtered_df[name] >= vals[0]) & (filtered_df[name] <= vals[1])
+                        ]
+                    elif isinstance(vals, list):
+                        filtered_df = filtered_df[filtered_df[name].isin(vals)]
+
+                st.session_state.filtered_data = filtered_df
+                st.success(f"筛选后: {len(filtered_df)}/{len(df)} 行")
+                st.rerun()
+
+        with col_clear:
+            if st.button(
+                ":material/clear: 清除筛选",
+                use_container_width=True,
+                key="clear_filters",
+            ):
+                # 清除所有筛选状态
+                if "filtered_data" in st.session_state:
+                    del st.session_state.filtered_data
+                for key in list(st.session_state.keys()):
+                    if key.startswith("filter_min_") or key.startswith("filter_max_") or key.startswith("filter_cat_"):
+                        del st.session_state[key]
+                st.rerun()
+
+    return current_df
 
 
 def render() -> None:
@@ -63,6 +194,9 @@ def render() -> None:
 
     df = st.session_state.data
     variables = st.session_state.variables
+
+    # 数据筛选
+    df = _render_data_filter(df, variables)
 
     # 确保 variables 存在
     if variables is None:
