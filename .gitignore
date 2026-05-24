@@ -81,3 +81,5 @@ desktop.ini
 
 # pre-commit
 .pre-commit-config.yaml.bak
+__pycache__/
+*.pyc
