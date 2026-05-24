@@ -3,8 +3,8 @@
 > 最后更新: 2026-05-25
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 分支: master
-> 当前提交: (见 git log -1)
-> 上次交接: ebda810 → worktree 安全审计 + 工作流规范化
+> 当前提交: 13d3d34 (worktree safety audit + CLAUDE.md)
+> 上次交接: ebda810 (Phase 3.5 Sample Gallery)
 
 ---
 
