@@ -16,7 +16,7 @@
 | Phase 2 (MVP) | ✅ 全部完成 | 147 tests |
 | Phase 3 (Beta) | ✅ 全部完成 | 278 tests |
 | Phase 3.5 (Sample Gallery) | ✅ 完成 | +31 tests |
-| Phase 4 (v1.0) | 🔄 进行中 (4.2 完成) | — |
+| Phase 4 (v1.0) | 🔄 进行中 (4.4 完成) | — |
 | **合计** | — | **309 tests** |
 
 ### Phase 4 进度
@@ -26,7 +26,7 @@
 | 4.1 最终打磨 | ❌ 未开始 | UI 审查、色盲友好、响应式布局、键盘导航 |
 | 4.2 文档 | ✅ 完成 | `docs/用户手册.md` (3案例), `docs/开发者指南.md`, `docs/已知问题.md` |
 | 4.3 发布准备 | ❌ 未开始 | 性能基准测试、依赖安全审计、打包 |
-| 4.4 发布后跟踪 | ❌ 未开始 | 用户反馈、问题追踪、v1.1 规划 |
+| 4.4 发布后跟踪 | ✅ 完成 | 反馈指南、Issue 模板、v1.1 规划 |
 
 ## 项目结构
 
@@ -310,6 +310,31 @@ git log --oneline HEAD --not --remotes
 - **数据上传页集成**: expander 中卡片网格，点击按钮 → 自动注入 session_state → 跳转结果页
 - **结果页/设定页**: 自动检测 gallery_mode，显示"示例数据"banner
 - **用户运行自己模型后**: 自动清除 gallery_mode
+
+## Phase 4.4 (Post-Release Tracking) 已完成
+
+### 反馈通道
+
+- **反馈指南**: `docs/反馈指南.md` — 包含 Bug 报告模板、功能建议模板、GitHub Issues 链接、响应时间预期、自查清单
+- **Issue 模板**:
+  - `.github/ISSUE_TEMPLATE/bug_report.md` — 中文 Bug 报告模板（YAML frontmatter + markdown）
+  - `.github/ISSUE_TEMPLATE/feature_request.md` — 中文功能建议模板（YAML frontmatter + markdown）
+- **GitHub Issues**: https://github.com/qhWangAntoneva/Regression-Analysis/issues
+
+### v1.1 规划
+
+- **规划文档**: `docs/v1.1_规划.md` — 按优先级组织的 12 项功能规划
+- **高优先级 (★★★)**: 逻辑回归/Probit、多层次模型(MixedLM)、分析快照 — 目标 v1.1 (8-10周)
+- **中优先级 (★★☆)**: 面板数据、贝叶斯回归、边际效应图、工具变量回归 — 目标 v1.2 (16-22周)
+- **低优先级 (★☆☆)**: Docker 部署、中介/调节效应、正则化、Bootstrap SE、用户历史 — 目标 v1.3 (24-34周)
+- 关键风险: `ModelResult` 泛型重构可能被低估，建议 v1.1 开工前独立完成
+
+### 当前 TODO.md 状态
+
+Phase 4.4 三项已全部标记 [x]：
+- [x] 用户反馈通道建立
+- [x] 问题追踪系统配置
+- [x] v1.1 功能规划
 
 ## 启动开发
 
