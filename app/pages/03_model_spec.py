@@ -31,6 +31,7 @@ try:
     )
     from src.modeling.fitter import ModelFitter
     from src.modeling.specification import ModelSpec, build_formula
+    from src.modeling.engines.statsmodels_engine import run_ols
     from src.results.table import ModelResult
 
     MODELING_AVAILABLE = True

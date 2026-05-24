@@ -285,7 +285,7 @@ def render() -> None:
     if model_spec:
         formula_str = (
             f"{model_spec.dep_var} ~ "
-            f"{' + '.join(model_spec.independent_vars)}"
+            f"{' + '.join(model_spec.indep_vars)}"
         )
         with st.expander("模型公式", expanded=False):
             st.code(formula_str, language="text")
@@ -583,7 +583,7 @@ def _render_scatter_plot(result: Any, df: Any, model_spec: Any) -> None:
         return
 
     dep_var = model_spec.dep_var
-    indep_vars = model_spec.independent_vars
+    indep_vars = model_spec.indep_vars
 
     if len(indep_vars) == 1:
         try:
