@@ -218,13 +218,12 @@ def build_variable_labels(
 ) -> Dict[str, str]:
     """Generate human-readable labels for design matrix columns.
 
-    Parses patsy-generated column names (e.g. ``C(education)[T.本科]``)
-    into user-friendly labels (e.g. ``education: 本科``).
-    Non-categorical columns keep their original name.
+    Parses patsy-generated column names (e.g. ``cat[T.b]``) into
+    user-friendly labels (e.g. ``cat: b``).  Interaction terms are
+    split on ``:``, decoded part-by-part, and rejoined with `` × ``.
 
     Args:
-        spec: The model specification (for reference, not directly used
-            by the parsing logic).
+        spec: The model specification (reserved for future use).
         X_columns: List of column names from the design matrix DataFrame.
 
     Returns:
@@ -232,19 +231,23 @@ def build_variable_labels(
     """
     import re
 
-    labels: Dict[str, str] = {}
-    cat_pattern = re.compile(r"^C\((.+?)\)\[T\.(.+?)\]$")
+    # Matches both main-effect categoricals (cat[T.level]) and
+    # interaction-only categoricals (cat[level], no "T." prefix).
+    _CAT_PART = re.compile(r"^(\w+)\[T?\.?([^\]]+)\]$")
 
+    labels: Dict[str, str] = {}
     for col in X_columns:
         if col == "Intercept":
             labels[col] = "Intercept"
             continue
-        m = cat_pattern.match(col)
-        if m:
-            var_name = m.group(1)
-            level = m.group(2)
-            labels[col] = f"{var_name}: {level}"
-        else:
-            labels[col] = col
+        parts = col.split(":")
+        decoded = []
+        for part in parts:
+            m = _CAT_PART.match(part)
+            if m:
+                decoded.append(f"{m.group(1)}: {m.group(2)}")
+            else:
+                decoded.append(part)
+        labels[col] = " × ".join(decoded) if len(decoded) > 1 else decoded[0]
 
     return labels
