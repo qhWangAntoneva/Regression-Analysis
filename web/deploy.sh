@@ -67,6 +67,8 @@ cp -r "$WEB_DIR"/* "$TARGET/" 2>/dev/null || true
 
 # The deploy.sh itself should not be deployed
 rm -f "$TARGET/deploy.sh"
+# Remove __pycache__ if present
+rm -rf "$TARGET/py/__pycache__"
 
 echo "  Files copied to $TARGET/"
 
@@ -95,5 +97,5 @@ rm -rf "$PAGES_DIR"
 echo ""
 echo "================================================"
 echo "  Deployment complete!"
-echo "  https://${PAGES_REPO%.*}.github.io/$TARGET_SUBDIR/"
+echo "  https://${PAGES_REPO#*/}/$TARGET_SUBDIR/"
 echo "================================================"
