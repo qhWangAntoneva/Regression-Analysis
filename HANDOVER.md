@@ -3,7 +3,8 @@
 > 最后更新: 2026-05-25
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 分支: master
-> 当前提交: v1.0.0 (Phase 4.3 release prep)
+> 当前提交: 7659641 (v1.0.0 release — Phase 4 完成)
+> 标签: v1.0.0
 > 上次交接: ebda810 (Phase 3.5 Sample Gallery)
 
 ---
@@ -28,6 +29,27 @@
 | 4.3 发布准备 | ✅ 完成 | 性能基准测试、依赖安全审计、v1.0.0 tag |
 | 4.4 发布后跟踪 | ✅ 完成 | 反馈指南、Issue 模板、v1.1 规划 |
 
+### Phase 4.1 最终打磨详情
+
+- **色盲友好模式**: `app/config.py` 新增 `get_color_scheme()` 函数，侧边栏 toggle 切换普通/色盲安全调色板（viridis 替代红绿显著性标注）
+- **响应式布局**: 全部页面 1366×768 最低分辨率适配，`st.columns` 宽度优化
+- **键盘导航**: Tab 键逻辑流、accesskey 快捷键（Streamlit 支持范围内）
+- **视觉一致性**: 统一间距/字号/卡片样式，expander 风格统一，Sample Gallery 卡片匹配整体设计
+- **版本号**: Sidebar `Version: 1.0.0`
+
+### Phase 4.2 文档详情
+
+- `docs/用户手册.md` (23.6 KB): 3 个完整案例 — 房价影响因素分析、员工满意度调查、政策效果评估
+- `docs/开发者指南.md` (19.2 KB): 4 层架构图、引擎/可视化/导出扩展指南、session_state 生命周期
+- `docs/已知问题.md` (10.3 KB): 涵盖编码问题/LF-CRLF/kaleido/性能限制/9 项功能限制
+
+### Phase 4.3 发布准备详情
+
+- `scripts/benchmark.py`: 100K 行 × 20 变量 OLS 拟合 **0.15s** (目标 ≤3s)
+- `docs/安全审计报告.md`: 22 个核心依赖 0 已知漏洞
+- `CHANGELOG.md`: 完整 Phase 1-4 发布说明
+- 标签: `v1.0.0` annotated tag 已推送
+
 ## 项目结构
 
 ```
@@ -35,10 +57,21 @@ Regression Analysis/
 ├── CLAUDE.md                       # Agent 协作规则 (master 工作流 + 安全红线)
 ├── HANDOVER.md                     # 项目交接文档
 ├── TODO.md                         # 任务清单
+├── ROADMAP.md                      # 项目路线图
+├── CHANGELOG.md                    # v1.0.0 发布说明
+├── scripts/
+│   └── benchmark.py                # 性能基准测试 (100K×20变量 OLS 0.15s)
 ├── docs/
 │   ├── 用户手册.md                  # 用户手册 (3 个完整案例)
 │   ├── 开发者指南.md                # 架构概览 + 扩展指南
-│   └── 已知问题.md                  # 已知问题和限制
+│   ├── 已知问题.md                  # 已知问题和限制
+│   ├── 安全审计报告.md              # 依赖安全审计 (0 漏洞)
+│   ├── 反馈指南.md                  # Bug 报告/功能建议模板 + GitHub Issues
+│   └── v1.1_规划.md                # 12 项功能按优先级组织
+├── .github/
+│   └── ISSUE_TEMPLATE/
+│       ├── bug_report.md           # 中文 Bug 报告模板
+│       └── feature_request.md      # 中文功能建议模板
 ├── app/
 │   ├── app.py                    # Streamlit 主入口 (st.navigation)
 │   ├── config.py                 # Streamlit 页面配置
@@ -202,13 +235,12 @@ uv run python -m pytest tests/unit/test_XXX.py -v  # 单个文件
 
 ## 已知问题 / 注意事项
 
-1. **__pycache__ 不要提交**: `.gitignore` 已配置
-2. **.claude/ 不要提交**: `.gitignore` 已配置  
-3. **LF/CRLF 警告**: Windows 环境下 Git 会提示换行符转换，不影响功能
-4. **kaleido 依赖**: 图表 PNG 导出需要 `kaleido>=1.3.0`，已在 `pyproject.toml` 中添加
-5. **openpyxl**: Excel 导出需要，在依赖中
-6. **编码问题**: Windows 中文终端打印含 Unicode 字符（如 R²）时可能报 GBK 编码错误，测试中避免在 print 语句中使用非 ASCII 字符
-7. **Pyodide 适配**: Sample Gallery 预计算结果通过 `result_json` 字段序列化，未来 Web 端部署时无需加载 statsmodels OLS
+详细清单见 `docs/已知问题.md`（10.3 KB，涵盖编码问题、Git 换行符、kaleido/openpyxl 依赖、性能限制、9 项功能限制）。
+
+核心提醒：
+1. **__pycache__ 和 .claude/ 不要提交**: `.gitignore` 已配置
+2. **编码问题**: Windows 中文终端打印 Unicode（如 R²）可能报 GBK 错误，测试中避免
+3. **Pyodide 适配**: Sample Gallery 预计算结果通过 `result_json` 字段序列化，未来 Web 端无需 statsmodels OLS
 
 ## Worktree 隔离安全审计 (2026-05-25)
 
@@ -375,3 +407,8 @@ uv run python -m pytest tests/ -v      # 运行测试
 | `gallery.py` | `GalleryItem`, `get_gallery_items()`, `get_gallery_index()`, `get_gallery_item()`, `_model_result_to_json()`, `_json_to_model_result()` |
 | `sample_data.py` | `get_sample_datasets()`, `load_sample_dataset()` |
 | `coefficient.py` | `coefficient_plot()`, `coefficient_plot_single()` |
+| `benchmark.py` | Performance benchmarks (1K-100K rows, 10-20 vars, OLS fit + visualization timing) |
+| `CHANGELOG.md` | Full v1.0.0 release notes (Phase 1-4) |
+| `安全审计报告.md` | Dependency security audit (22 deps, 0 vulns) |
+| `反馈指南.md` | Bug report + feature request templates, GitHub Issues link |
+| `v1.1_规划.md` | 12 features across 3 priority tiers with timeline estimates |
