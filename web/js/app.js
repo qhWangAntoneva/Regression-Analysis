@@ -447,7 +447,7 @@ async function runRegression() {
 
     try {
         const pyodide = STATE.pyodide;
-        const dataJson = JSON.stringify({ data: STATE.data });
+        const dataJson = JSON.stringify({ data: STATE.data, columns: STATE.columns });
         const specJson = JSON.stringify({
             dep_var: document.getElementById('dep-var-select').value,
             indep_vars: getSelectedIVs(),
@@ -602,8 +602,8 @@ function renderSummaryText(result) {
 
     text += `R-squared = ${result.r_squared != null ? result.r_squared.toFixed(4) : 'N/A'}`;
     if (result.adj_r_squared != null) text += `, Adj R-squared = ${result.adj_r_squared.toFixed(4)}`;
-    text += `.\nRMSE = ${result.rmse.toFixed(4)}.\n`;
-    text += `AIC = ${result.aic.toFixed(2)}, BIC = ${result.bic.toFixed(2)}.\n`;
+    text += `.\nRMSE = ${result.rmse != null ? result.rmse.toFixed(4) : 'N/A'}.\n`;
+    text += `AIC = ${result.aic != null ? result.aic.toFixed(2) : 'N/A'}, BIC = ${result.bic != null ? result.bic.toFixed(2) : 'N/A'}.\n`;
     text += `N = ${result.n_obs}.\n\n`;
 
     text += 'Coefficients:\n';

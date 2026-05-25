@@ -205,6 +205,11 @@ def run_regression(data_json: str, spec_json: str) -> str:
                 return json.dumps({"success": False, "error": "Data has no rows."})
             headers = rows[0]
             df = pd.DataFrame(rows[1:], columns=headers)
+            # Convert numeric columns back from object dtype (JSON round-trip)
+            if "columns" in data_dict:
+                for col_info in data_dict["columns"]:
+                    if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
+                        df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
         elif "columns" in data_dict and "rows" in data_dict:
             df = pd.DataFrame(data_dict["rows"], columns=data_dict["columns"])
         else:
@@ -247,6 +252,14 @@ def run_regression(data_json: str, spec_json: str) -> str:
                         df_clean[col] = df_clean[col].fillna(mode_val[0])
                     else:
                         df_clean = df_clean.dropna(subset=[col])
+
+            # Also handle dep_var missing values
+            if df_clean[dep_var].isna().any():
+                try:
+                    fill_val = df_clean[dep_var].mean() if missing_strategy == "mean" else df_clean[dep_var].median()
+                    df_clean[dep_var] = df_clean[dep_var].fillna(fill_val)
+                except Exception:
+                    df_clean = df_clean.dropna(subset=[dep_var])
 
     if len(df_clean) < 2:
         return json.dumps({"success": False, "error": "Not enough valid observations after handling missing values."})
@@ -477,6 +490,11 @@ def _compute_vif(data_json: str, result: dict) -> Optional[List[dict]]:
             if len(rows) < 2:
                 return None
             df = pd.DataFrame(rows[1:], columns=rows[0])
+            # Convert numeric columns back from object dtype (JSON round-trip)
+            if "columns" in data_dict:
+                for col_info in data_dict["columns"]:
+                    if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
+                        df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
         else:
             return None
     except Exception:
