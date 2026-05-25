@@ -246,19 +246,19 @@
 
 ### 5.3.1 Web 版功能补齐
 
-- [ ] Web 版 scatter chart 支持 Gallery 场景 (当前仅支持用户上传数据)
-- [ ] Web 版变量转换 UI 开放 (引擎已支持, UI 未开放: log/标准化/平方项)
-- [ ] Web 版交互项 UI 开放 (引擎已支持, UI 未开放)
-- [ ] Web 版多模型对比图集成 (当前仅单模型)
+- [x] Web 版 scatter chart 支持 Gallery 场景 (当前仅支持用户上传数据)
+- [x] Web 版变量转换 UI 开放 (引擎已支持, UI 未开放: log/标准化/平方项)
+- [x] Web 版交互项 UI 开放 (引擎已支持, UI 未开放)
+- [x] Web 版多模型对比图集成 (当前仅单模型)
 
 ### 5.3.2 Web 版导出完善
 
-- [ ] Gallery 模式下 CSV 降级导出添加提示 (Web 版依赖 Pyodide, Gallery 离线模式不可用)
-- [ ] Excel 导出健壮性: openpyxl 加载失败时友好降级
+- [x] Gallery 模式下 CSV 降级导出添加提示 (Web 版依赖 Pyodide, Gallery 离线模式不可用)
+- [x] Excel 导出健壮性: openpyxl 加载失败时友好降级
 
 ### 5.3.3 工程健壮性
 
-- [ ] `compare_models()` 中 coefficient 缺少 CI 时跳过 whisker (而非画在 0 处)
+- [x] `compare_models()` 中 coefficient 缺少 CI 时跳过 whisker (而非画在 0 处)
 - [ ] Web bridge `parse_file` 返回的 `columns` 元数据透传完整性检查
 - [ ] CI 缺失兜底: GitHub Actions pipeline 缺失时手动创建
 
