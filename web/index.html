@@ -114,6 +114,26 @@
                         </div>
                     </div>
 
+                    <!-- Interaction Terms -->
+                    <div class="form-row">
+                        <div class="form-group full-width">
+                            <label>Interaction Terms</label>
+                            <div class="interaction-controls">
+                                <div class="interaction-selects">
+                                    <select id="interaction-var1" class="form-select form-select-sm">
+                                        <option value="">-- Select --</option>
+                                    </select>
+                                    <span class="interaction-times">&times;</span>
+                                    <select id="interaction-var2" class="form-select form-select-sm">
+                                        <option value="">-- Select --</option>
+                                    </select>
+                                    <button id="btn-add-interaction" class="btn btn-sm btn-outline">Add Interaction</button>
+                                </div>
+                                <div id="interaction-list" class="interaction-list"></div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-row form-row-options">
                         <div class="form-group">
                             <label for="opt-intercept">Intercept</label>
@@ -156,6 +176,21 @@
                     <div id="regression-progress" class="upload-progress hidden">
                         <div class="spinner"></div>
                         <span>Fitting model...</span>
+                    </div>
+                </div>
+
+                <!-- Multi-Model Comparison Controls -->
+                <div id="model-compare-section" class="compare-section hidden">
+                    <h3>Model Comparison</h3>
+                    <p class="panel-desc">Run multiple regressions to compare coefficient estimates side-by-side.</p>
+                    <div class="compare-controls">
+                        <input type="text" id="model-compare-name" class="form-input" placeholder="Model label (optional)" style="max-width:300px">
+                        <button id="btn-save-model" class="btn btn-outline btn-sm">Save Current Model</button>
+                    </div>
+                    <div id="model-compare-list" class="compare-model-list"></div>
+                    <div class="compare-actions">
+                        <button id="btn-compare-models" class="btn btn-primary btn-sm" disabled>Compare Models</button>
+                        <button id="btn-clear-compare" class="btn btn-outline btn-sm">Clear All</button>
                     </div>
                 </div>
 
@@ -225,6 +260,20 @@
                     <!-- Coefficient Chart -->
                     <h3>Coefficient Plot</h3>
                     <div id="coef-chart" class="chart-container"></div>
+
+                    <!-- Multi-Model Comparison Chart -->
+                    <div id="compare-chart-section" class="hidden">
+                        <h3>Model Comparison Chart</h3>
+                        <p class="panel-desc">Side-by-side coefficient estimates with confidence intervals.</p>
+                        <div id="compare-chart" class="chart-container" style="min-height:400px"></div>
+                    </div>
+
+                    <!-- Visualizations (Scatter Plots) -->
+                    <div id="visualizations-section" class="hidden">
+                        <h3>Visualizations</h3>
+                        <p class="panel-desc">Scatter plots of independent variables vs dependent variable with regression lines and 95% CI bands.</p>
+                        <div id="visualizations-grid" class="viz-grid"></div>
+                    </div>
 
                     <!-- Model Summary Text -->
                     <h3>Model Summary</h3>

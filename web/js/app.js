@@ -33,6 +33,8 @@ const STATE = {
     coefChart: null,           // Coefficient chart JSON
     galleryLoaded: false,      // Whether a gallery scenario is active
     currentFile: null,         // {name, size} of uploaded file
+    modelHistory: [],          // [{name, spec, result}] for multi-model comparison
+    scatterCharts: {},         // {varName: chartSpec} cached scatter charts
 };
 
 // =========================================================================
@@ -291,6 +293,9 @@ function clearData() {
     STATE.coefChart = null;
     STATE.galleryLoaded = false;
     STATE.currentFile = null;
+    STATE.modelHistory = [];
+    STATE.scatterCharts = {};
+    STATE.compareChart = null;
 
     document.getElementById('file-info').classList.add('hidden');
     document.getElementById('upload-area').classList.remove('hidden');
@@ -300,6 +305,7 @@ function clearData() {
     document.getElementById('indep-var-list').innerHTML = '<p class="empty-hint">Upload data or load a gallery sample first.</p>';
     document.getElementById('dep-var-select').innerHTML = '<option value="">-- Select dependent variable --</option>';
     document.getElementById('btn-run-regression').disabled = true;
+    clearElement('interaction-list');
     disableTabs('model', 'results', 'diagnostics', 'export');
     clearResults();
 }
@@ -311,6 +317,10 @@ function clearResults() {
     document.getElementById('no-diag-message').classList.remove('hidden');
     document.getElementById('export-content').classList.add('hidden');
     document.getElementById('no-export-message').classList.remove('hidden');
+    document.getElementById('compare-chart-section').classList.add('hidden');
+    document.getElementById('visualizations-section').classList.add('hidden');
+    clearElement('visualizations-grid');
+    clearElement('model-compare-list');
 }
 
 // =========================================================================
@@ -382,7 +392,7 @@ function populateVariableSelectors() {
         }
     });
 
-    // Independent variable checkboxes
+    // Independent variable checkboxes (with transform controls for numeric vars)
     const ivList = document.getElementById('indep-var-list');
     ivList.innerHTML = '';
     columns.forEach(c => {
@@ -393,8 +403,24 @@ function populateVariableSelectors() {
                     <span class="var-id">${escapeHtml(c.name)}</span>
                     <span style="font-size:0.7rem;color:var(--color-text-muted)">(ID)</span>
                 </label>`;
+        } else if (c.col_type === 'numeric') {
+            const cssClass = 'var-numeric';
+            ivList.innerHTML += `
+                <div class="var-item">
+                    <label>
+                        <input type="checkbox" value="${escapeHtml(c.name)}">
+                        <span class="${cssClass}">${escapeHtml(c.name)}</span>
+                    </label>
+                    <select class="form-select form-select-sm var-transform" data-var="${escapeHtml(c.name)}">
+                        <option value="">--</option>
+                        <option value="log">Log</option>
+                        <option value="standardize">Z</option>
+                        <option value="center">Center</option>
+                        <option value="square">Sq</option>
+                    </select>
+                </div>`;
         } else {
-            const cssClass = c.col_type === 'numeric' ? 'var-numeric' : 'var-categorical';
+            const cssClass = 'var-categorical';
             ivList.innerHTML += `
                 <label>
                     <input type="checkbox" value="${escapeHtml(c.name)}">
@@ -406,6 +432,9 @@ function populateVariableSelectors() {
     if (columns.length === 0) {
         ivList.innerHTML = '<p class="empty-hint">No variables found in data.</p>';
     }
+
+    // Population interaction term dropdowns
+    populateInteractionDropdowns();
 }
 
 // =========================================================================
@@ -421,6 +450,14 @@ function initModelForm() {
     document.getElementById('indep-var-list').addEventListener('change', checkRunButton);
 
     runBtn.addEventListener('click', runRegression);
+
+    // Interaction term controls
+    initInteractions();
+
+    // Compare models button
+    document.getElementById('btn-save-model').addEventListener('click', saveModelForComparison);
+    document.getElementById('btn-compare-models').addEventListener('click', compareModels);
+    document.getElementById('btn-clear-compare').addEventListener('click', clearModelHistory);
 }
 
 function checkRunButton() {
@@ -432,6 +469,84 @@ function checkRunButton() {
 function getSelectedIVs() {
     const checked = document.querySelectorAll('#indep-var-list input[type="checkbox"]:checked');
     return Array.from(checked).map(cb => cb.value);
+}
+
+// =========================================================================
+// Interaction Terms UI
+// =========================================================================
+
+function initInteractions() {
+    document.getElementById('btn-add-interaction').addEventListener('click', addInteraction);
+}
+
+function populateInteractionDropdowns() {
+    const columns = STATE.columns || [];
+    const numericVars = columns.filter(c => c.col_type === 'numeric');
+    const options = numericVars.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+
+    const sel1 = document.getElementById('interaction-var1');
+    const sel2 = document.getElementById('interaction-var2');
+    if (sel1) sel1.innerHTML = '<option value="">-- Select --</option>' + options;
+    if (sel2) sel2.innerHTML = '<option value="">-- Select --</option>' + options;
+}
+
+function addInteraction() {
+    const sel1 = document.getElementById('interaction-var1');
+    const sel2 = document.getElementById('interaction-var2');
+    const v1 = sel1.value;
+    const v2 = sel2.value;
+
+    if (!v1 || !v2) {
+        showError('model-error', 'Select two variables for the interaction term.');
+        return;
+    }
+    if (v1 === v2) {
+        showError('model-error', 'Interaction requires two different variables.');
+        return;
+    }
+
+    const list = document.getElementById('interaction-list');
+    // Check for duplicates
+    const existing = list.querySelectorAll('.interaction-tag');
+    for (const tag of existing) {
+        if (tag.dataset.pair === `${v1},${v2}` || tag.dataset.pair === `${v2},${v1}`) {
+            showError('model-error', 'This interaction term already exists.');
+            return;
+        }
+    }
+
+    const tag = document.createElement('div');
+    tag.className = 'interaction-tag';
+    tag.dataset.pair = `${v1},${v2}`;
+    tag.innerHTML = `<span>${escapeHtml(v1)} &times; ${escapeHtml(v2)}</span>
+        <button class="btn-interaction-remove" onclick="this.parentElement.remove()">&times;</button>`;
+    list.appendChild(tag);
+
+    clearError('model-error');
+    // Reset dropdowns
+    sel1.value = '';
+    sel2.value = '';
+}
+
+function getTransforms() {
+    const selects = document.querySelectorAll('.var-transform');
+    const transforms = {};
+    selects.forEach(sel => {
+        if (sel.value) {
+            transforms[sel.dataset.var] = sel.value;
+        }
+    });
+    return Object.keys(transforms).length > 0 ? transforms : null;
+}
+
+function getInteractions() {
+    const tags = document.querySelectorAll('#interaction-list .interaction-tag');
+    const pairs = [];
+    tags.forEach(tag => {
+        const [v1, v2] = tag.dataset.pair.split(',');
+        pairs.push([v1, v2]);
+    });
+    return pairs.length > 0 ? pairs : null;
 }
 
 // =========================================================================
@@ -448,14 +563,23 @@ async function runRegression() {
     try {
         const pyodide = STATE.pyodide;
         const dataJson = JSON.stringify({ data: STATE.data, columns: STATE.columns });
-        const specJson = JSON.stringify({
+        const spec = {
             dep_var: document.getElementById('dep-var-select').value,
             indep_vars: getSelectedIVs(),
             has_intercept: document.getElementById('opt-intercept').value === 'true',
             alpha: parseFloat(document.getElementById('opt-alpha').value),
             cov_type: document.getElementById('opt-cov').value,
             missing_strategy: document.getElementById('opt-missing').value,
-        });
+        };
+
+        // Collect transforms and interactions from UI
+        const transforms = getTransforms();
+        const interactions = getInteractions();
+        if (transforms) spec.transforms = transforms;
+        if (interactions) spec.interactions = interactions;
+
+        // Serialize spec for model history and bridge
+        const specJson = JSON.stringify(spec);
 
         // Run regression
         const resultJson = pyodide.runPython(`
@@ -469,6 +593,7 @@ async function runRegression() {
         }
 
         STATE.result = result;
+
         console.log('[Regression] Success. R-squared:', result.r_squared, 'N:', result.n_obs);
 
         // Enable result tabs
@@ -485,6 +610,7 @@ async function runRegression() {
             computeAndRenderDiagnostics(dataJson, resultJson),
             generateAndRenderCharts(resultJson),
             generateCoefficientChart(resultJson),
+            generateAllScatterCharts(dataJson, result),
         ]);
 
     } catch (err) {
@@ -751,6 +877,182 @@ function renderCoefficientChart() {
     if (!STATE.coefChart) return;
     const config = { responsive: true, displayModeBar: true, displaylogo: false };
     Plotly.newPlot('coef-chart', STATE.coefChart.data, STATE.coefChart.layout, config);
+}
+
+// =========================================================================
+// Multi-Model Comparison
+// =========================================================================
+
+function saveModelForComparison() {
+    if (!STATE.result) {
+        showError('model-error', 'Run a regression first before saving for comparison.');
+        return;
+    }
+    const dv = document.getElementById('dep-var-select').value;
+    const iva = getSelectedIVs().join(', ');
+    const name = document.getElementById('model-compare-name').value.trim() ||
+                 `Model ${STATE.modelHistory.length + 1}: ${dv} ~ ${iva}`;
+
+    const existingNames = STATE.modelHistory.map(m => m.name);
+    let uniqueName = name;
+    let suffix = 1;
+    while (existingNames.includes(uniqueName)) {
+        suffix++;
+        uniqueName = `${name} (${suffix})`;
+    }
+
+    STATE.modelHistory.push({
+        name: uniqueName,
+        spec: null,  // spec not needed for comparison chart
+        result: STATE.result,
+    });
+    updateModelHistoryUI();
+    clearError('model-error');
+}
+
+function updateModelHistoryUI() {
+    const list = document.getElementById('model-compare-list');
+    if (!list) return;
+    const section = document.getElementById('model-compare-section');
+    if (section) section.classList.remove('hidden');
+    list.innerHTML = STATE.modelHistory.map((m, i) => `
+        <div class="compare-model-item">
+            <span>${escapeHtml(m.name)}</span>
+            <button class="btn btn-sm btn-outline" onclick="removeModelFromHistory(${i})">&times;</button>
+        </div>
+    `).join('');
+
+    // Enable/disable compare button
+    const btn = document.getElementById('btn-compare-models');
+    if (btn) btn.disabled = STATE.modelHistory.length < 2;
+}
+
+function removeModelFromHistory(index) {
+    STATE.modelHistory.splice(index, 1);
+    updateModelHistoryUI();
+    if (STATE.modelHistory.length < 2) {
+        const section = document.getElementById('compare-chart-section');
+        if (section) section.classList.add('hidden');
+    }
+}
+
+function clearModelHistory() {
+    STATE.modelHistory = [];
+    updateModelHistoryUI();
+    const section = document.getElementById('compare-chart-section');
+    if (section) section.classList.add('hidden');
+    const listSection = document.getElementById('model-compare-list');
+    if (listSection) listSection.innerHTML = '';
+}
+
+async function compareModels() {
+    if (STATE.modelHistory.length < 2) {
+        showError('model-error', 'Need at least 2 models to compare.');
+        return;
+    }
+    if (!STATE.pyodideReady || !STATE.pyodide) {
+        showError('model-error', 'Pyodide is not ready.');
+        return;
+    }
+
+    try {
+        const modelsJson = STATE.modelHistory.map(m => ({
+            name: m.name,
+            result: m.result,
+        }));
+
+        const pyodide = STATE.pyodide;
+        const chartJson = pyodide.runPython(`
+            compare_models(${JSON.stringify(JSON.stringify(modelsJson))})
+        `);
+        const chart = JSON.parse(chartJson);
+
+        if (chart.success && chart.chart) {
+            STATE.compareChart = chart.chart;
+            renderComparisonChart();
+        } else {
+            showError('model-error', chart.error || 'Comparison failed.');
+        }
+    } catch (err) {
+        console.error('[Compare] Error:', err);
+        showError('model-error', `Comparison error: ${err.message}`);
+    }
+}
+
+function renderComparisonChart() {
+    if (!STATE.compareChart) return;
+    const section = document.getElementById('compare-chart-section');
+    section.classList.remove('hidden');
+    const config = { responsive: true, displayModeBar: true, displaylogo: false };
+    Plotly.newPlot('compare-chart', STATE.compareChart.data, STATE.compareChart.layout, config);
+}
+
+// =========================================================================
+// Scatterplot Visualizations
+// =========================================================================
+
+async function generateAllScatterCharts(dataJson, result) {
+    if (!STATE.pyodideReady || !STATE.pyodide || !result) return;
+
+    const indepVars = result.indep_vars || [];
+    const depVar = result.dep_var;
+    // Only generate for the original independent variables (skip interaction terms)
+    const origVars = indepVars.filter(v => !v.includes('_x_'));
+    if (origVars.length === 0) return;
+
+    STATE.scatterCharts = {};
+    const vizSection = document.getElementById('visualizations-section');
+    const vizGrid = document.getElementById('visualizations-grid');
+
+    // Show loading state
+    if (vizGrid) vizGrid.innerHTML = '<div class="empty-hint" style="grid-column:1/-1">Generating scatter plots...</div>';
+
+    const pyodide = STATE.pyodide;
+    for (const xVar of origVars) {
+        try {
+            const chartJson = pyodide.runPython(`
+                generate_scatter_chart(${JSON.stringify(dataJson)}, ${JSON.stringify(xVar)}, ${JSON.stringify(depVar)})
+            `);
+            const chart = JSON.parse(chartJson);
+            if (chart.success && chart.chart) {
+                STATE.scatterCharts[xVar] = chart.chart;
+            }
+        } catch (err) {
+            console.error(`[Scatter] Error for ${xVar}:`, err);
+        }
+    }
+
+    renderScatterCharts();
+}
+
+function renderScatterCharts() {
+    const vizSection = document.getElementById('visualizations-section');
+    const vizGrid = document.getElementById('visualizations-grid');
+    if (!vizSection || !vizGrid) return;
+
+    const chartKeys = Object.keys(STATE.scatterCharts);
+    if (chartKeys.length === 0) {
+        vizSection.classList.add('hidden');
+        return;
+    }
+
+    vizSection.classList.remove('hidden');
+    vizGrid.innerHTML = '';
+
+    const config = { responsive: true, displayModeBar: true, displaylogo: false };
+
+    chartKeys.forEach(xVar => {
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'viz-card';
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-container';
+        chartDiv.style.minHeight = '300px';
+        cardDiv.appendChild(chartDiv);
+        vizGrid.appendChild(cardDiv);
+
+        const chart = STATE.scatterCharts[xVar];
+        Plotly.newPlot(chartDiv, chart.data, chart.layout, config);
+    });
 }
 
 // =========================================================================

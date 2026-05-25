@@ -110,7 +110,17 @@ def parse_file(filename: str, content_b64: str) -> str:
                     continue
             else:
                 return json.dumps({"success": False, "error": "Cannot decode file encoding."})
-        elif name_lower.endswith((".xls", ".xlsx")):
+        elif name_lower.endswith(".xls") and not name_lower.endswith(".xlsx"):
+            # Old .xls format: try xlrd first, then fallback to openpyxl
+            try:
+                import xlrd  # noqa: F811
+                df = pd.read_excel(io.BytesIO(content_bytes), engine="xlrd")
+            except (ImportError, Exception):
+                try:
+                    df = pd.read_excel(io.BytesIO(content_bytes), engine="openpyxl")
+                except Exception as e2:
+                    return json.dumps({"success": False, "error": f"Excel parse error: {e2}"})
+        elif name_lower.endswith(".xlsx"):
             df = pd.read_excel(io.BytesIO(content_bytes), engine="openpyxl")
         else:
             return json.dumps({
@@ -263,6 +273,56 @@ def run_regression(data_json: str, spec_json: str) -> str:
 
     if len(df_clean) < 2:
         return json.dumps({"success": False, "error": "Not enough valid observations after handling missing values."})
+
+    # --- Apply variable transformations ---
+    transforms = spec_dict.get("transforms", {})
+    var_name_map: Dict[str, str] = {}  # original -> transformed column name
+    if transforms:
+        for var, ttype in transforms.items():
+            if var not in df_clean.columns:
+                return json.dumps({"success": False, "error": f"Transform variable '{var}' not in data."})
+            serie = pd.to_numeric(df_clean[var], errors="coerce")
+            if ttype == "log":
+                new_col = f"{var}_log"
+                df_clean[new_col] = np.log(serie.clip(lower=1e-10))
+            elif ttype == "standardize":
+                new_col = f"{var}_z"
+                sd = float(serie.std())
+                if sd == 0:
+                    df_clean[new_col] = 0.0
+                else:
+                    df_clean[new_col] = (serie - float(serie.mean())) / sd
+            elif ttype == "center":
+                new_col = f"{var}_c"
+                df_clean[new_col] = serie - float(serie.mean())
+            elif ttype == "square":
+                new_col = f"{var}_sq"
+                df_clean[new_col] = serie ** 2
+            else:
+                return json.dumps({"success": False, "error": f"Unsupported transform type: {ttype}"})
+            var_name_map[var] = new_col
+            # Replace var with transformed column in indep_vars list
+            try:
+                idx = indep_vars.index(var)
+                indep_vars[idx] = new_col
+            except ValueError:
+                pass
+
+    # --- Add interaction terms ---
+    interactions_list = spec_dict.get("interactions", [])
+    if interactions_list:
+        for pair in interactions_list:
+            v1, v2 = pair[0], pair[1]
+            # Resolve to actual column names (may have been transformed)
+            actual_v1 = var_name_map.get(v1, v1)
+            actual_v2 = var_name_map.get(v2, v2)
+            if actual_v1 not in df_clean.columns:
+                return json.dumps({"success": False, "error": f"Interaction variable '{v1}' not in data after transforms."})
+            if actual_v2 not in df_clean.columns:
+                return json.dumps({"success": False, "error": f"Interaction variable '{v2}' not in data after transforms."})
+            int_col = f"{v1}_x_{v2}"
+            df_clean[int_col] = df_clean[actual_v1].astype(float) * df_clean[actual_v2].astype(float)
+            indep_vars.append(int_col)
 
     # Build design matrix
     try:
@@ -924,7 +984,280 @@ def _make_cooks_chart(residuals: np.ndarray, fitted: np.ndarray,
 
 
 # ===========================================================================
-# 5. Export
+# 5. Multi-model comparison chart
+# ===========================================================================
+
+
+def compare_models(model_results_json: str) -> str:
+    """Generate a coefficient comparison Plotly chart from multiple model results.
+
+    Args:
+        model_results_json: JSON string with a list of {name, result} objects,
+                            where each 'result' is a regression result dict.
+
+    Returns:
+        JSON with success and chart (plotly spec).
+    """
+    try:
+        models = json.loads(model_results_json)
+    except json.JSONDecodeError as e:
+        return json.dumps({"success": False, "error": f"JSON parse error: {e}"})
+
+    if not models or len(models) < 2:
+        return json.dumps({"success": False, "error": "Need at least 2 models to compare."})
+
+    # Collect all unique coefficient names (excluding Intercept) across models
+    all_coefs: List[str] = []
+    for m in models:
+        coefs = m.get("result", {}).get("coefficients", [])
+        for c in coefs:
+            name = c.get("name", "")
+            if name and name != "Intercept" and name not in all_coefs:
+                all_coefs.append(name)
+
+    if not all_coefs:
+        return json.dumps({"success": False, "error": "No non-intercept coefficients to compare."})
+
+    # Sort by the absolute average coefficient value across models
+    # Reversed so largest absolute coef appears at top of plot
+    avg_abs = {}
+    for name in all_coefs:
+        vals = []
+        for m in models:
+            coefs = m.get("result", {}).get("coefficients", [])
+            for c in coefs:
+                if c.get("name") == name:
+                    vals.append(abs(c.get("coef", 0)))
+                    break
+        avg_abs[name] = sum(vals) / len(vals) if vals else 0
+    all_coefs.sort(key=lambda x: avg_abs.get(x, 0), reverse=True)
+
+    n_coefs = len(all_coefs)
+    n_models = len(models)
+
+    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+              "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"]
+
+    traces = []
+    for mi, model_entry in enumerate(models):
+        model_name = model_entry.get("name", f"Model {mi + 1}")
+        color = colors[mi % len(colors)]
+        coef_dict = {}
+        for c in model_entry.get("result", {}).get("coefficients", []):
+            coef_dict[c.get("name", "")] = c
+
+        y_positions = []
+        estimates = []
+        ci_lows = []
+        ci_highs = []
+        text_labels = []
+
+        for ci, name in enumerate(all_coefs):
+            c = coef_dict.get(name)
+            if c:
+                y_pos = n_coefs - 1 - ci + (mi - (n_models - 1) / 2) * 0.3
+                y_positions.append(y_pos)
+                estimates.append(c.get("coef", 0))
+                ci_lows.append(c.get("ci_lower", 0))
+                ci_highs.append(c.get("ci_upper", 0))
+        if not estimates:
+            continue
+
+        # CI whiskers
+        for i in range(len(estimates)):
+            traces.append({
+                "type": "scatter",
+                "x": [ci_lows[i], ci_highs[i]],
+                "y": [y_positions[i], y_positions[i]],
+                "mode": "lines",
+                "line": {"color": color, "width": 2},
+                "showlegend": False,
+                "hoverinfo": "none",
+            })
+
+        # Dot markers
+        traces.append({
+            "type": "scatter",
+            "x": estimates,
+            "y": y_positions,
+            "mode": "markers",
+            "marker": {"color": color, "size": 10, "symbol": "circle"},
+            "name": model_name,
+            "showlegend": True,
+            "hovertemplate": "%{x:.4f}<extra>" + model_name + "</extra>",
+        })
+
+    # Y-axis tick labels: coefficient names (one per row)
+    tick_vals = list(range(n_coefs))
+    tick_texts = list(reversed(all_coefs))
+
+    layout = {
+        "title": {"text": "Model Comparison: Coefficient Estimates", "x": 0.5},
+        "xaxis": {"title": "Coefficient Estimate", "zeroline": True, "zerolinecolor": "gray", "zerolinewidth": 1},
+        "yaxis": {
+            "tickvals": tick_vals,
+            "ticktext": tick_texts,
+            "title": "",
+        },
+        "template": "plotly_white",
+        "height": max(300, n_coefs * 45 + 60),
+        "legend": {"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
+    }
+
+    chart_spec = {"data": traces, "layout": layout}
+    return json.dumps({"success": True, "chart": chart_spec})
+
+
+# ===========================================================================
+# 6. Scatter chart with regression line
+# ===========================================================================
+
+
+def generate_scatter_chart(data_json: str, x_var: str, y_var: str) -> str:
+    """Generate a scatter plot with fitted regression line and 95% CI band.
+
+    Args:
+        data_json: JSON string with 'data' (list of lists) and 'columns' metadata.
+        x_var: Name of the X-axis variable (independent variable).
+        y_var: Name of the Y-axis variable (dependent variable).
+
+    Returns:
+        JSON with success and chart (plotly spec).
+    """
+    try:
+        data_dict = json.loads(data_json)
+    except json.JSONDecodeError as e:
+        return json.dumps({"success": False, "error": f"JSON parse error: {e}"})
+
+    # Reconstruct DataFrame
+    try:
+        if "data" in data_dict and isinstance(data_dict["data"], list):
+            rows = data_dict["data"]
+            if len(rows) < 2:
+                return json.dumps({"success": False, "error": "Data has no rows."})
+            headers = rows[0]
+            df = pd.DataFrame(rows[1:], columns=headers)
+            if "columns" in data_dict:
+                for col_info in data_dict["columns"]:
+                    if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
+                        df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
+        else:
+            return json.dumps({"success": False, "error": "Invalid data format."})
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"DataFrame construction error: {e}"})
+
+    if x_var not in df.columns or y_var not in df.columns:
+        return json.dumps({"success": False, "error": f"Variable not found in data."})
+
+    # Drop rows with missing values in relevant columns
+    df_scatter = df[[x_var, y_var]].dropna()
+    if len(df_scatter) < 3:
+        return json.dumps({"success": False, "error": "Not enough valid data points (<3)."})
+
+    x = pd.to_numeric(df_scatter[x_var], errors="coerce").values
+    y = pd.to_numeric(df_scatter[y_var], errors="coerce").values
+    n = len(x)
+
+    # OLS fit for slope/intercept
+    x_mean = float(np.mean(x))
+    y_mean = float(np.mean(y))
+    numerator = float(np.sum((x - x_mean) * (y - y_mean)))
+    denominator = float(np.sum((x - x_mean) ** 2))
+    if denominator == 0:
+        return json.dumps({"success": False, "error": "X variable has zero variance."})
+
+    beta = numerator / denominator
+    alpha = y_mean - beta * x_mean
+
+    # Predicted values and residuals
+    y_pred = alpha + beta * x
+    residuals = y - y_pred
+    mse = float(np.sum(residuals ** 2)) / (n - 2) if n > 2 else 0.0
+
+    # Sort for smooth line
+    sort_idx = np.argsort(x)
+    x_sorted = x[sort_idx]
+    y_pred_sorted = y_pred[sort_idx]
+
+    # 95% CI band: se_pred = sqrt(MSE * (1/n + (x_i - x_mean)^2 / SXX))
+    SXX = float(np.sum((x - x_mean) ** 2))
+    if SXX > 0 and mse > 0:
+        try:
+            from scipy import stats as scipy_stats
+            t_crit = float(scipy_stats.t.ppf(0.975, df=n - 2))
+        except (ImportError, Exception):
+            # Fallback: use normal approximation (z = 1.96)
+            t_crit = 1.96
+        se_pred_line = np.sqrt(mse * (1.0 / n + (x_sorted - x_mean) ** 2 / SXX))
+        ci_low = y_pred_sorted - t_crit * se_pred_line
+        ci_high = y_pred_sorted + t_crit * se_pred_line
+    else:
+        ci_low = y_pred_sorted
+        ci_high = y_pred_sorted
+
+    traces = [
+        # Scatter points
+        {
+            "type": "scatter",
+            "x": x.tolist(),
+            "y": y.tolist(),
+            "mode": "markers",
+            "marker": {"color": "steelblue", "size": 7, "opacity": 0.5},
+            "name": "Observations",
+            "showlegend": True,
+            "hovertemplate": f"{x_var}: %{{x:.4f}}<br>{y_var}: %{{y:.4f}}<extra></extra>",
+        },
+        # Regression line
+        {
+            "type": "scatter",
+            "x": x_sorted.tolist(),
+            "y": y_pred_sorted.tolist(),
+            "mode": "lines",
+            "line": {"color": "red", "width": 2},
+            "name": f"y = {alpha:.4f} + {beta:.4f}*x",
+            "showlegend": True,
+            "hovertemplate": "%{y:.4f}<extra></extra>",
+        },
+        # 95% CI band (upper bound)
+        {
+            "type": "scatter",
+            "x": x_sorted.tolist(),
+            "y": ci_high.tolist(),
+            "mode": "lines",
+            "line": {"color": "gray", "width": 0, "dash": "dash"},
+            "name": "95% CI upper",
+            "showlegend": False,
+            "hoverinfo": "skip",
+        },
+        # 95% CI band (lower bound with fill)
+        {
+            "type": "scatter",
+            "x": x_sorted.tolist(),
+            "y": ci_low.tolist(),
+            "mode": "lines",
+            "line": {"color": "gray", "width": 0},
+            "fill": "tonexty",
+            "fillcolor": "rgba(128, 128, 128, 0.2)",
+            "name": "95% CI",
+            "showlegend": True,
+            "hoverinfo": "skip",
+        },
+    ]
+
+    layout = {
+        "title": {"text": f"{y_var} vs {x_var}", "x": 0.5},
+        "xaxis": {"title": x_var},
+        "yaxis": {"title": y_var},
+        "template": "plotly_white",
+        "height": 400,
+    }
+
+    chart_spec = {"data": traces, "layout": layout}
+    return json.dumps({"success": True, "chart": chart_spec})
+
+
+# ===========================================================================
+# 7. Export
 # ===========================================================================
 
 
@@ -1052,7 +1385,7 @@ def export_excel(result_json: str) -> str:
 
 
 # ===========================================================================
-# 6. Gallery data access (pre-computed results as JSON)
+# 8. Gallery data access (pre-computed results as JSON)
 # ===========================================================================
 
 
