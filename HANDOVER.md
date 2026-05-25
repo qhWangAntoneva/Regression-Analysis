@@ -3,8 +3,8 @@
 > 最后更新: 2026-05-25
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 分支: master
-> 当前提交: 1fcaccf (feat: web features — transforms, interactions, comparison, scatter, .xls)
-> 上次交接: ac80cdd (Phase 4.5 完成)
+> 当前提交: aae954d (feat: logit regression web app — Phase 5.1 完成)
+> 上次交接: 1fcaccf (Phase 5.0 Web 功能补齐完成)
 > 部署: https://qhwangantoneva.github.io/regression-analysis/
 
 ---
@@ -18,9 +18,10 @@
 | Phase 3 (Beta) | 完成 | 278 tests |
 | Phase 3.5 (Sample Gallery) | 完成 | +31 tests |
 | Phase 4 (v1.0) | 完成 | — |
-| **Phase 4.5 (Web + 测试补充 + Bug修复)** | **完成** | **397 tests** |
+| **Phase 4.5 (Web + 测试补充 + Bug修复)** | **完成** | **549 tests** |
 | **Phase 5.0 (Web 功能补齐 + 覆盖率 + _norm_ppf)** | **完成** | **471 tests** |
-| **合计** | — | **471 tests** |
+| **Phase 5.1 (Logit 回归 — 需求 4 补全)** | **完成** | **549 tests** |
+| **合计** | — | **549 tests** |
 
 ### Phase 4.5 进度 (2026-05-25 本 session)
 
@@ -40,6 +41,30 @@
 | _norm_ppf 修复 | 完成 | A&S 26.2.23 尾概率映射 + 符号处理 + 6 tests |
 | Code Review | 完成 | 6 findings (已修复 4: pd.to_numeric 防御, dead code, 重复 history) |
 | 部署 | 完成 | GitHub Pages 已更新 |
+
+### Phase 5.1 进度 (2026-05-25 本 session) — Logit 回归
+
+> **里程碑**: 8 项需求全部满足。之前仅有的合规缺口 (Req 4: 至少两种回归模型) 已补全。
+
+| 子阶段 | 状态 | 说明 |
+|--------|------|------|
+| 四方评审 (Tech Advisor / Client / Feature Analyst / Judge) | 完成 | 一致确认: 7/8 完全满足, 仅 logit 缺失; TODO 重写 |
+| Batch 1: 后端引擎 | 完成 | `statsmodels_logit_engine.py` (144 行) + ModelResult OLS/logit 重构 + Fitter 调度 + 41 tests |
+| Batch 2: UI + 图表 + 导出 | 完成 | Streamlit 模型选择器 + ROC 曲线/OR 森林图 + LaTeX/HTML/CSV 适配 + 37 tests |
+| Batch 3: Web bridge | 完成 | web 版 logit 集成: 模型选择/结果渲染/ROC+OR 图/导出 |
+| Code Review (3 轮) | 完成 | Batch 1: 3 minor + 1 test gap; Batch 2: 1 bug 已修复 (重复 LR 统计量); Batch 3: 3 minor notes |
+| 部署 | 完成 | **549 tests pass**, GitHub Pages 已更新 |
+| TODO 更新 | 完成 | Phase 5.1-5.4 + v1.2+ 优先级排序 |
+
+**已修复的 Review Bug**: Batch 2 发现 `result_card.py` 中 logit Row 3 重复显示 LR χ²/p 值 → 改为显示样本量 N。
+
+**已知 Minor Issues (非阻塞)**:
+1. `statsmodels_logit_engine.py` — `n_params` 无条件 +1 (无截距 logit 极少见)
+2. `run_logit()` — `alpha` 参数声明但未使用
+3. `mle_retvals` 收敛检查默认 True（statsmodels ≥0.14 始终填充）
+4. `bridge.py` — model_type 大小写不一致 ("OLS" vs "logit")
+5. `bridge.py` — `generate_or_chart` 注释说"Skip intercept"但实际包含
+6. Web ROC 计算 O(N×thresholds) — 大数据集可能卡顿
 
 ---
 
@@ -218,7 +243,7 @@ Gallery cards (instant)    -/-   (gallery_data.js 预计算 JSON, 无需 Pyodide
 ## 测试说明
 
 ```bash
-uv run python -m pytest tests/ -v              # 全部 397 tests
+uv run python -m pytest tests/ -v              # 全部 549 tests
 uv run python -m pytest tests/unit/test_XXX.py -v  # 单个文件
 ```
 
@@ -285,30 +310,27 @@ bash web/deploy.sh                      # 部署 Web 版到 GitHub Pages
 
 ---
 
-## Code Review 已修复 Bug (本 session)
+## Phase 5.1 Code Review 修复 (2026-05-25)
 
 | # | 严重度 | 问题 | 修复 |
 |---|--------|------|------|
-| 1 | CRITICAL | JSON 往返后所有连续变量变 object → 全部被 one-hot 编码 | bridge.py 用 columns 元数据还原 numeric dtype |
-| 2 | HIGH | mean/median 缺失策略不处理 dep_var NaN | bridge.py 增加 dep_var 填充逻辑 |
-| 3 | HIGH | `rmse/aic/bic.toFixed()` 无 null 守卫 | app.js 加 null guards |
-| 4 | MEDIUM | VIF 静默返回 None (同 Finding 1 根因) | bridge.py `_compute_vif` 还原 dtype |
-| 5 | MEDIUM | `showError('export-error')` 目标 DOM 不存在 | index.html 添加 `#export-error` 元素 |
+| 1 | HIGH | result_card.py logit Row 3 重复显示 LR χ²/p 值 | 改为显示样本量 N |
 
-### 修复合入提交
+### Phase 5.1 修复合入提交
 
 ```
-fdc7640 fix: critical dtype loss bug and 4 other regressions in web bridge
-e8a707d fix: deploy.sh URL + __pycache__
-81d1b12 fix: bridge.py np.asarray() for statsmodels 0.14.6
+aae954d feat(logit): add logit regression to web app (Phase 5.1 Batch 3)
+b5a22f3 feat(logit): add UI selector, charts, and export templates (Phase 5.1 Batch 2)
+8f3007f feat(logit): add logit regression backend (Phase 5.1 Batch 1)
+64d9101 docs: rewrite TODO with 3-analyst review — logit regression is top priority
 ```
 
 ---
 
-## 下个 Session 建议
+## 下个 Session 建议 (按 TODO.md Phase 5.2+ 排序)
 
-1. **Web 版深度打磨**: Gallery 模式下载 CSV 降级提示、scatter chart 支持 Gallery 场景、交互项名称的 `_x_` 启发式改为显式跟踪
-2. **CI 缺失兜底**: compare_models 中 coefficient 缺少 CI 时跳过 whisker（而非画在 0 处）
-3. **Stata/SPSS 导入**: 支持 .dta/.sav 格式上传
-4. **Docker 部署**: 容器化 Streamlit 版本
-5. **v1.1 规划功能**: 逻辑回归、多层次模型、面板数据 (详见 TODO.md)
+1. **Phase 5.2 — UX 改进**: Pyodide 加载进度指示器、分类变量名人性化 (C(T)→"教育水平: 本科")、Streamlit-Web 功能对照表
+2. **Phase 5.3 — Web-Streamlit 对齐**: Gallery 模式 CSV 降级提示、CI 缺失兜底、交互项 `_x_` 显式跟踪
+3. **Phase 5.4 — v1.1 发布**: Logit 端到端测试、R glm() 基准对比、用户手册更新
+4. **v1.2+ — 扩展模型生态**: Probit、多层次模型、面板数据、Poisson、贝叶斯、Lasso (详见 TODO.md)
+5. **已知 Minor Issues 修复**: 6 个非阻塞问题 (见 Phase 5.1 进度表)
