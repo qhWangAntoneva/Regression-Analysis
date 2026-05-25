@@ -62,7 +62,7 @@ class TestLogitBasic:
         """Logit should fit without error and return results."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted, dep_var="y")
 
         assert result.model_type == "logit"
