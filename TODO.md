@@ -259,8 +259,8 @@
 ### 5.3.3 工程健壮性
 
 - [x] `compare_models()` 中 coefficient 缺少 CI 时跳过 whisker (而非画在 0 处)
-- [ ] Web bridge `parse_file` 返回的 `columns` 元数据透传完整性检查
-- [ ] CI 缺失兜底: GitHub Actions pipeline 缺失时手动创建
+- [x] Web bridge `parse_file` 返回的 `columns` 元数据透传完整性检查
+- [x] CI 缺失兜底: GitHub Actions pipeline 缺失时手动创建
 
 ---
 
