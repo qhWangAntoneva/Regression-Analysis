@@ -1,10 +1,10 @@
 # Regression Analysis — 交接文档
 
-> 最后更新: 2026-05-25 (Session 1)
+> 最后更新: 2026-05-26 (Session 2)
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 分支: master
-> 当前提交: 4a17a18 (fix: build_variable_labels regex matches actual patsy output — no C() prefix, handle interactions)
-> 上次交接: aae954d (Phase 5.1 Logit 回归完成)
+> 当前提交: 0934bf5 (Phase 5.4: v1.1.0 发布)
+> 上次交接: 4a17a18 (Phase 5.2 UX 改进完成)
 > 部署: https://qhwangantoneva.github.io/regression-analysis/
 
 ---
@@ -22,7 +22,9 @@
 | Phase 5.0 (Web 功能补齐 + 覆盖率 + _norm_ppf) | 完成 | 471 tests |
 | Phase 5.1 (Logit 回归 — 需求 4 补全) | 完成 | 549 tests |
 | **Phase 5.2 (UX 改进)** | **完成** | **560 tests** |
-| **合计** | — | **560 tests** |
+| **Phase 5.3 (Web-Streamlit 对齐)** | **完成** | **560 tests** |
+| **Phase 5.4 (v1.1 发布)** | **完成** | **599 tests** |
+| **合计** | — | **599 tests** |
 
 ### Phase 5.2 进度 (2026-05-25 本 session)
 
@@ -235,10 +237,11 @@ Phase 5.2 主体提交 (通过 merge 入 master):
 
 ---
 
-## 下个 Session 建议 (按 TODO.md Phase 5.3+ 排序)
+## 下个 Session 建议 (v1.2+)
 
-1. **Phase 5.3 — Web-Streamlit 功能对齐**: Gallery 模式 CSV 降级提示、CI 缺失兜底、交互项 `_x_` 显式跟踪
-2. **Phase 5.4 — v1.1 发布**: Logit 端到端测试、R glm() 基准对比、用户手册更新
-3. **v1.2+ — 扩展模型生态**: Probit、多层次模型、面板数据、Poisson、贝叶斯、Lasso (详见 TODO.md)
-4. **TODO.md 同步更新**: Phase 5.1 和 5.2 的 checkbox 需要更新为完成状态
-5. **Web bridge categorical 交互**: `_build_variable_labels_for_web()` 路径需要处理 categorical 变量参与交互的情况（当前只支持 numeric×numeric）
+1. **Probit 回归**: logit 引擎就绪后，仅需新增 GLM family=binomial(probit) 包装
+2. **多层次模型**: 混合效应模型 (MixedLM / lme4-backend)
+3. **面板数据固定/随机效应** (linearmodels)
+4. **Poisson / NegativeBinomial 回归** (计数因变量)
+5. **Web bridge categorical 交互**: `_build_variable_labels_for_web()` 路径需要处理 categorical 变量参与交互的情况
+6. **项目架构现代化**: 考虑 Docker 部署 + 自动化 CI/CD

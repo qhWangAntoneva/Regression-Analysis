@@ -266,12 +266,12 @@
 
 ## Phase 5.4: v1.1 发布
 
-- [ ] 整合测试: Logit 端到端测试 (Streamlit + Web)
-- [ ] 回归基准: 5 个经典数据集的 logit 结果与 R `glm()` 对比
-- [ ] 用户手册更新: 添加 Logit 回归章节 (含 OR 解读 + ROC 解读)
-- [ ] 更新 `CHANGELOG.md` (v1.1.0 发布说明)
-- [ ] 更新 `docs/已知问题.md`
-- [ ] v1.1 版本标记与发布
+- [x] 整合测试: Logit 端到端测试 (Streamlit + Web) — `tests/integration/test_logit_e2e.py` (39 tests)
+- [x] 回归基准: 5 个经典数据集的 logit 结果与 Python 多引擎交叉验证 (Logit vs GLM vs sklearn, 5/5 通过)
+- [x] 用户手册更新: 添加 Logit 回归章节 (含 OR 解读 + ROC 解读)
+- [x] 更新 `CHANGELOG.md` (v1.1.0 发布说明)
+- [x] 更新 `docs/已知问题.md`
+- [x] v1.1 版本标记与发布
 
 ---
 
