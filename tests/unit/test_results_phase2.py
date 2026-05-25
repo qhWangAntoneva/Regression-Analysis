@@ -1000,6 +1000,7 @@ class TestModelResultLogit:
             n_obs=200,
             n_params=2,
             df_resid=198,
+            rmse=None,
             pseudo_r_squared=0.15,
             log_likelihood=-120.0,
             aic=244.0,
