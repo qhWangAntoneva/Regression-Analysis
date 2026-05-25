@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regression Analysis — Web</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- Plotly.js for chart rendering -->
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <!-- Pyodide -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.27.5/full/pyodide.js"></script>
+</head>
+<body>
+    <!-- ================================================================ -->
+    <!-- Header -->
+    <!-- ================================================================ -->
+    <header class="app-header">
+        <div class="header-left">
+            <h1 class="app-title">Regression Analysis</h1>
+            <span class="app-version">Web v1.0</span>
+        </div>
+        <div class="header-right">
+            <span id="pyodide-status" class="status-badge loading">Pyodide: Loading...</span>
+            <a href="https://github.com/qhWangAntoneva/Regression-Analysis" target="_blank" class="github-link" title="View on GitHub">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+            </a>
+        </div>
+    </header>
+
+    <!-- ================================================================ -->
+    <!-- Main Layout: Tabs + Content -->
+    <!-- ================================================================ -->
+    <div class="app-container">
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="data" id="tab-btn-data">1. Data</button>
+            <button class="tab-btn" data-tab="model" id="tab-btn-model">2. Model</button>
+            <button class="tab-btn" data-tab="results" id="tab-btn-results" disabled>3. Results</button>
+            <button class="tab-btn" data-tab="diagnostics" id="tab-btn-diagnostics" disabled>4. Diagnostics</button>
+            <button class="tab-btn" data-tab="export" id="tab-btn-export" disabled>5. Export</button>
+        </nav>
+
+        <!-- ============================================================ -->
+        <!-- Tab Content: Data -->
+        <!-- ============================================================ -->
+        <section class="tab-content active" id="tab-data">
+            <div class="tab-panel">
+                <h2>Upload Data File</h2>
+                <p class="panel-desc">Upload a CSV (.csv, .tsv) or Excel (.xlsx, .xls) file, or explore the sample gallery below.</p>
+
+                <div class="upload-area" id="upload-area">
+                    <div class="upload-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <p class="upload-text">Drag &amp; drop your file here, or <span class="upload-link">click to browse</span></p>
+                    <p class="upload-hint">Supports: .csv, .tsv, .xlsx, .xls (max ~50MB recommended)</p>
+                    <input type="file" id="file-input" accept=".csv,.tsv,.txt,.xls,.xlsx" hidden>
+                </div>
+
+                <div id="upload-progress" class="upload-progress hidden">
+                    <div class="spinner"></div>
+                    <span>Parsing file...</span>
+                </div>
+
+                <div id="file-info" class="file-info hidden">
+                    <span id="file-name"></span>
+                    <span id="file-size"></span>
+                    <button id="btn-remove-file" class="btn btn-sm btn-outline">Remove</button>
+                </div>
+
+                <div id="data-error" class="error-box hidden"></div>
+
+                <!-- Data Preview -->
+                <div id="data-preview-container" class="hidden">
+                    <h3>Data Preview</h3>
+                    <div class="data-table-wrapper" id="data-table-wrapper">
+                        <table id="data-table" class="data-table"></table>
+                    </div>
+
+                    <h3>Variable Information</h3>
+                    <div class="data-table-wrapper" id="varinfo-table-wrapper">
+                        <table id="varinfo-table" class="data-table"></table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Tab Content: Model -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tab-model">
+            <div class="tab-panel">
+                <h2>Model Specification</h2>
+                <p class="panel-desc">Select dependent and independent variables, then choose model options.</p>
+
+                <div id="model-error" class="error-box hidden"></div>
+
+                <div class="model-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dep-var-select">Dependent Variable (Y)</label>
+                            <select id="dep-var-select" class="form-select">
+                                <option value="">-- Select dependent variable --</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group full-width">
+                            <label>Independent Variables (X)</label>
+                            <div id="indep-var-list" class="checkbox-list">
+                                <p class="empty-hint">Upload data or load a gallery sample first.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row form-row-options">
+                        <div class="form-group">
+                            <label for="opt-intercept">Intercept</label>
+                            <select id="opt-intercept" class="form-select form-select-sm">
+                                <option value="true">Include (Yes)</option>
+                                <option value="false">Exclude (No)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="opt-alpha">Confidence Level</label>
+                            <select id="opt-alpha" class="form-select form-select-sm">
+                                <option value="0.05">95%</option>
+                                <option value="0.01">99%</option>
+                                <option value="0.10">90%</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="opt-cov">Std. Error Type</label>
+                            <select id="opt-cov" class="form-select form-select-sm">
+                                <option value="nonrobust">Classic (non-robust)</option>
+                                <option value="HC0">HC0 (robust)</option>
+                                <option value="HC1">HC1 (robust)</option>
+                                <option value="HC2">HC2 (robust)</option>
+                                <option value="HC3">HC3 (robust)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="opt-missing">Missing Values</label>
+                            <select id="opt-missing" class="form-select form-select-sm">
+                                <option value="drop">Drop rows</option>
+                                <option value="mean">Fill with mean</option>
+                                <option value="median">Fill with median</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button id="btn-run-regression" class="btn btn-primary btn-lg" disabled>
+                        Run Regression
+                    </button>
+                    <div id="regression-progress" class="upload-progress hidden">
+                        <div class="spinner"></div>
+                        <span>Fitting model...</span>
+                    </div>
+                </div>
+
+                <hr class="section-divider">
+
+                <h2>Sample Gallery</h2>
+                <p class="panel-desc">Explore 5 pre-computed regression scenarios. No Pyodide needed — results load instantly.</p>
+                <div id="gallery-grid" class="gallery-grid"></div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Tab Content: Results -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tab-results">
+            <div class="tab-panel">
+                <h2>Regression Results</h2>
+                <p class="panel-desc" id="result-spec-display"></p>
+
+                <div id="no-results-message" class="empty-state">
+                    <p>No results yet. Run a regression on the <strong>Model</strong> tab first.</p>
+                </div>
+
+                <div id="results-content" class="hidden">
+                    <!-- Model Statistics Grid -->
+                    <h3>Model Statistics</h3>
+                    <div id="model-stats-grid" class="stats-grid"></div>
+
+                    <!-- Coefficient Table -->
+                    <h3>Coefficient Table</h3>
+                    <div class="data-table-wrapper">
+                        <table id="coef-table" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Variable</th>
+                                    <th>Coefficient</th>
+                                    <th>Std. Error</th>
+                                    <th>t-value</th>
+                                    <th>p-value</th>
+                                    <th>95% CI Low</th>
+                                    <th>95% CI High</th>
+                                    <th>Sig.</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+
+                    <!-- ANOVA Table -->
+                    <h3>ANOVA Table</h3>
+                    <div class="data-table-wrapper">
+                        <table id="anova-table" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Source</th>
+                                    <th>SS</th>
+                                    <th>df</th>
+                                    <th>MS</th>
+                                    <th>F</th>
+                                    <th>p-value</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Coefficient Chart -->
+                    <h3>Coefficient Plot</h3>
+                    <div id="coef-chart" class="chart-container"></div>
+
+                    <!-- Model Summary Text -->
+                    <h3>Model Summary</h3>
+                    <div id="summary-text" class="summary-text"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Tab Content: Diagnostics -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tab-diagnostics">
+            <div class="tab-panel">
+                <h2>Diagnostic Charts</h2>
+                <p class="panel-desc">Residual diagnostics to assess model assumptions.</p>
+
+                <div id="no-diag-message" class="empty-state">
+                    <p>No diagnostics yet. Run a regression on the <strong>Model</strong> tab first.</p>
+                </div>
+
+                <div id="diag-content" class="hidden">
+                    <div class="diag-grid">
+                        <div class="diag-card">
+                            <h4>Residuals vs Fitted</h4>
+                            <div id="chart-residual-fitted" class="chart-container"></div>
+                        </div>
+                        <div class="diag-card">
+                            <h4>Normal Q-Q Plot</h4>
+                            <div id="chart-qq" class="chart-container"></div>
+                        </div>
+                        <div class="diag-card">
+                            <h4>Scale-Location</h4>
+                            <div id="chart-scale-location" class="chart-container"></div>
+                        </div>
+                        <div class="diag-card">
+                            <h4>Cook's Distance</h4>
+                            <div id="chart-cooks" class="chart-container"></div>
+                        </div>
+                    </div>
+
+                    <h3>Residual Diagnostics</h3>
+                    <div class="data-table-wrapper">
+                        <table id="resid-diag-table" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Test</th>
+                                    <th>Statistic</th>
+                                    <th>p-value</th>
+                                    <th>Result</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+
+                    <!-- VIF Table -->
+                    <h3>Variance Inflation Factor (VIF)</h3>
+                    <div class="data-table-wrapper">
+                        <table id="vif-table" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Variable</th>
+                                    <th>VIF</th>
+                                    <th>Diagnosis</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Tab Content: Export -->
+        <!-- ============================================================ -->
+        <section class="tab-content" id="tab-export">
+            <div class="tab-panel">
+                <h2>Export Results</h2>
+                <p class="panel-desc">Download regression results in various formats.</p>
+
+                <div id="no-export-message" class="empty-state">
+                    <p>No results to export yet. Run a regression on the <strong>Model</strong> tab first.</p>
+                </div>
+
+                <div id="export-content" class="hidden">
+                    <div class="export-options">
+                        <div class="export-card" id="export-csv-card">
+                            <h4>CSV Format</h4>
+                            <p>Download coefficient table as CSV. Compatible with Excel, R, Python.</p>
+                            <button id="btn-export-csv" class="btn btn-primary">Download CSV</button>
+                        </div>
+                        <div class="export-card" id="export-excel-card">
+                            <h4>Excel Format</h4>
+                            <p>Download results as formatted Excel (.xlsx) workbook.</p>
+                            <button id="btn-export-excel" class="btn btn-primary">Download Excel</button>
+                        </div>
+                        <div class="export-card" id="export-text-card">
+                            <h4>Text Summary</h4>
+                            <p>Download a plain-text summary of model results.</p>
+                            <button id="btn-export-text" class="btn btn-primary">Download Text</button>
+                        </div>
+                        <div class="export-card" id="export-chart-card">
+                            <h4>Charts (PNG)</h4>
+                            <p>Download diagnostic charts as PNG images (via Plotly snapshot).</p>
+                            <button id="btn-export-charts" class="btn btn-primary">Download Charts</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ================================================================ -->
+    <!-- Footer -->
+    <!-- ================================================================ -->
+    <footer class="app-footer">
+        <p>Regression Analysis Web v1.0 | Powered by <a href="https://pyodide.org" target="_blank">Pyodide</a> + <a href="https://www.statsmodels.org" target="_blank">statsmodels</a> | <a href="https://github.com/qhWangAntoneva/Regression-Analysis" target="_blank">GitHub</a></p>
+    </footer>
+
+    <!-- ================================================================ -->
+    <!-- Scripts -->
+    <!-- ================================================================ -->
+    <!-- Pre-computed gallery data (no Pyodide needed) -->
+    <script src="js/gallery_data.js"></script>
+    <!-- Application logic -->
+    <script src="js/app.js"></script>
+</body>
+</html>

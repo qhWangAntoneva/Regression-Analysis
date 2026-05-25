@@ -1,0 +1,1089 @@
+# -*- coding: utf-8 -*-
+"""Pyodide bridge module for Regression Analysis web app.
+
+This module runs inside the Pyodide (WebAssembly) Python runtime.
+It receives data and commands from JavaScript, and returns
+JSON-serializable results.
+
+Architecture:
+    JS (HTML UI) -> pyodide.globals -> bridge functions -> JSON response
+
+Packages required via pyodide.loadPackage:
+    numpy, pandas, statsmodels, scipy, plotly, openpyxl
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import warnings
+from typing import Any, Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
+warnings.filterwarnings("ignore")
+
+
+# ===========================================================================
+# Utility: categorical detection
+# ===========================================================================
+
+
+def _detect_categorical_columns(df: pd.DataFrame) -> Dict[str, str]:
+    """Classify each column as 'numeric', 'categorical', or 'id'."""
+    types: Dict[str, str] = {}
+    nrows = len(df)
+
+    for col in df.columns:
+        series = df[col]
+        n_unique = series.nunique()
+
+        # ID columns (unique values == nrows)
+        col_lower = str(col).lower()
+        id_patterns = ("id", "code", "num", "no.", "number", "序号", "编号", "代码")
+        is_id_name = any(col_lower.startswith(p) or col_lower.endswith(p) for p in id_patterns)
+
+        if is_id_name and n_unique == nrows and nrows > 0:
+            types[str(col)] = "id"
+            continue
+
+        if pd.api.types.is_numeric_dtype(series):
+            types[str(col)] = "numeric"
+        elif pd.api.types.is_bool_dtype(series):
+            types[str(col)] = "categorical"
+        elif pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+            # Try numeric conversion
+            try:
+                pd.to_numeric(series.dropna())
+                types[str(col)] = "numeric"
+            except (ValueError, TypeError):
+                if n_unique / max(nrows, 1) > 0.9:
+                    types[str(col)] = "id"
+                else:
+                    types[str(col)] = "categorical"
+        else:
+            types[str(col)] = "categorical"
+
+    return types
+
+
+# ===========================================================================
+# 1. File parsing
+# ===========================================================================
+
+
+def parse_file(filename: str, content_b64: str) -> str:
+    """Parse an uploaded CSV or Excel file and return column info + data.
+
+    Args:
+        filename: Original filename (used to detect format).
+        content_b64: Base64-encoded file bytes.
+
+    Returns:
+        JSON string with keys:
+            - success: bool
+            - columns: list of {name, dtype, col_type, n_unique, n_missing, missing_rate}
+            - data: list of lists (first row = headers)
+            - n_rows, n_cols: int
+            - error: str (if success=False)
+    """
+    import base64
+
+    try:
+        content_bytes = base64.b64decode(content_b64)
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"Base64 decode failed: {e}"})
+
+    name_lower = filename.lower()
+
+    try:
+        if name_lower.endswith(".csv") or name_lower.endswith(".tsv") or name_lower.endswith(".txt"):
+            # Detect encoding and separator
+            sep = "\t" if name_lower.endswith(".tsv") else ","
+            # Try UTF-8 first, then GBK
+            for enc in ["utf-8", "gbk", "latin-1"]:
+                try:
+                    df = pd.read_csv(io.BytesIO(content_bytes), sep=sep, encoding=enc)
+                    break
+                except (UnicodeDecodeError, UnicodeError):
+                    continue
+            else:
+                return json.dumps({"success": False, "error": "Cannot decode file encoding."})
+        elif name_lower.endswith((".xls", ".xlsx")):
+            df = pd.read_excel(io.BytesIO(content_bytes), engine="openpyxl")
+        else:
+            return json.dumps({
+                "success": False,
+                "error": f"Unsupported format: {filename}. Use .csv, .tsv, .xls, or .xlsx.",
+            })
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"Parse error: {e}"})
+
+    if df.empty:
+        return json.dumps({"success": False, "error": "File is empty or has no data rows."})
+
+    n_rows, n_cols = df.shape
+
+    # Build column info
+    col_types = _detect_categorical_columns(df)
+    columns_info = []
+    for col in df.columns:
+        series = df[col]
+        n_missing = int(series.isna().sum())
+        columns_info.append({
+            "name": str(col),
+            "dtype": str(series.dtype),
+            "col_type": col_types.get(str(col), "categorical"),
+            "n_unique": int(series.nunique()),
+            "n_missing": n_missing,
+            "missing_rate": round(n_missing / max(n_rows, 1), 4),
+        })
+
+    # Data as list of lists (header row first)
+    data_list = [list(df.columns)]
+    for _, row in df.iterrows():
+        data_list.append([_safe_value(v) for v in row])
+
+    return json.dumps({
+        "success": True,
+        "columns": columns_info,
+        "data": data_list,
+        "n_rows": n_rows,
+        "n_cols": n_cols,
+    })
+
+
+def _safe_value(v: Any) -> Any:
+    """Convert numpy/pandas types to JSON-safe Python types."""
+    if pd.isna(v):
+        return None
+    if isinstance(v, (np.integer,)):
+        return int(v)
+    if isinstance(v, (np.floating,)):
+        return float(v)
+    if isinstance(v, (np.bool_,)):
+        return bool(v)
+    if isinstance(v, np.ndarray):
+        return v.tolist()
+    return v
+
+
+# ===========================================================================
+# 2. Regression engine
+# ===========================================================================
+
+
+def run_regression(data_json: str, spec_json: str) -> str:
+    """Run an OLS regression.
+
+    Args:
+        data_json: JSON string with 'data' (list of lists) or 'columns'+'rows'.
+        spec_json: JSON string with:
+            - dep_var: str
+            - indep_vars: list of str
+            - has_intercept: bool (default true)
+            - alpha: float (default 0.05)
+            - cov_type: str (default 'nonrobust')
+            - missing_strategy: str (default 'drop')
+
+    Returns:
+        JSON string with ModelResult, or error.
+    """
+    try:
+        data_dict = json.loads(data_json)
+        spec_dict = json.loads(spec_json)
+    except json.JSONDecodeError as e:
+        return json.dumps({"success": False, "error": f"JSON parse error: {e}"})
+
+    # Reconstruct DataFrame
+    try:
+        if "data" in data_dict and isinstance(data_dict["data"], list):
+            # Format: {data: [[header...], [row1...], ...]}
+            rows = data_dict["data"]
+            if len(rows) < 2:
+                return json.dumps({"success": False, "error": "Data has no rows."})
+            headers = rows[0]
+            df = pd.DataFrame(rows[1:], columns=headers)
+        elif "columns" in data_dict and "rows" in data_dict:
+            df = pd.DataFrame(data_dict["rows"], columns=data_dict["columns"])
+        else:
+            return json.dumps({"success": False, "error": "Invalid data format."})
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"DataFrame construction error: {e}"})
+
+    dep_var = spec_dict.get("dep_var", "")
+    indep_vars = spec_dict.get("indep_vars", [])
+    has_intercept = spec_dict.get("has_intercept", True)
+    alpha = spec_dict.get("alpha", 0.05)
+    cov_type = spec_dict.get("cov_type", "nonrobust")
+    missing_strategy = spec_dict.get("missing_strategy", "drop")
+
+    if not dep_var or not indep_vars:
+        return json.dumps({"success": False, "error": "Must specify dep_var and indep_vars."})
+
+    if dep_var not in df.columns:
+        return json.dumps({"success": False, "error": f"dep_var '{dep_var}' not in data."})
+    for v in indep_vars:
+        if v not in df.columns:
+            return json.dumps({"success": False, "error": f"Variable '{v}' not in data."})
+
+    # Drop rows with missing values in relevant columns
+    cols_used = [dep_var] + indep_vars
+    df_clean = df[cols_used].copy()
+
+    if missing_strategy == "drop":
+        df_clean = df_clean.dropna()
+    elif missing_strategy in ("mean", "median"):
+        for col in indep_vars:
+            if df_clean[col].isna().any():
+                try:
+                    fill_val = df_clean[col].mean() if missing_strategy == "mean" else df_clean[col].median()
+                    df_clean[col] = df_clean[col].fillna(fill_val)
+                except Exception:
+                    # Non-numeric column: fall back to mode
+                    mode_val = df_clean[col].mode()
+                    if len(mode_val) > 0:
+                        df_clean[col] = df_clean[col].fillna(mode_val[0])
+                    else:
+                        df_clean = df_clean.dropna(subset=[col])
+
+    if len(df_clean) < 2:
+        return json.dumps({"success": False, "error": "Not enough valid observations after handling missing values."})
+
+    # Build design matrix
+    try:
+        X, y, coef_names, transform_map = _build_design_matrix(
+            df_clean, dep_var, indep_vars, has_intercept
+        )
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"Design matrix error: {e}"})
+
+    # Fit OLS
+    try:
+        import statsmodels.api as sm
+        ols_model = sm.OLS(y, X)
+        if cov_type and cov_type != "nonrobust":
+            fitted = ols_model.fit(cov_type=cov_type)
+        else:
+            fitted = ols_model.fit()
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"OLS fit error: {e}"})
+
+    # Extract results
+    return _extract_model_result(fitted, df_clean, dep_var, indep_vars,
+                                 coef_names, has_intercept, alpha, cov_type,
+                                 transform_map)
+
+
+def _build_design_matrix(
+    df: pd.DataFrame,
+    dep_var: str,
+    indep_vars: List[str],
+    has_intercept: bool,
+) -> Tuple[np.ndarray, np.ndarray, List[str], Dict[str, List[str]]]:
+    """Build design matrix X and response vector y.
+
+    Handles categorical variables by creating dummy variables.
+    Returns (X, y, coef_names, transform_map).
+    """
+    y = df[dep_var].astype(float).values
+
+    parts = []
+    coef_names = []
+    transform_map: Dict[str, List[str]] = {}
+
+    for var in indep_vars:
+        series = df[var]
+        if pd.api.types.is_numeric_dtype(series):
+            vals = series.astype(float).values.reshape(-1, 1)
+            parts.append(vals)
+            coef_names.append(var)
+            transform_map[var] = [var]
+        else:
+            # Categorical: one-hot encode, drop first to avoid dummy trap
+            dummies = pd.get_dummies(series, prefix=var, drop_first=True, dtype=float)
+            parts.append(dummies.values)
+            dummy_names = list(dummies.columns)
+            coef_names.extend(dummy_names)
+            transform_map[var] = dummy_names
+
+    if has_intercept:
+        intercept_col = np.ones((len(y), 1))
+        parts.insert(0, intercept_col)
+        coef_names.insert(0, "Intercept")
+
+    if not parts:
+        raise ValueError("No predictor variables to build design matrix.")
+
+    X = np.column_stack(parts)
+    return X, y, coef_names, transform_map
+
+
+def _extract_model_result(
+    fitted,
+    df: pd.DataFrame,
+    dep_var: str,
+    indep_vars: List[str],
+    coef_names: List[str],
+    has_intercept: bool,
+    alpha: float,
+    cov_type: str,
+    transform_map: Dict[str, List[str]],
+) -> str:
+    """Extract ModelResult from fitted statsmodels OLS and return JSON."""
+    params = fitted.params
+    bse = fitted.bse
+    tvalues = fitted.tvalues
+    pvalues = fitted.pvalues
+    conf_int = fitted.conf_int(alpha=alpha)
+
+    coefficients = []
+    for i, name in enumerate(coef_names):
+        coefficients.append({
+            "name": name,
+            "coef": float(params.iloc[i]) if not np.isnan(params.iloc[i]) else 0.0,
+            "se": float(bse.iloc[i]) if not np.isnan(bse.iloc[i]) else 0.0,
+            "t_stat": float(tvalues.iloc[i]) if not np.isnan(tvalues.iloc[i]) else 0.0,
+            "pvalue": float(pvalues.iloc[i]) if not np.isnan(pvalues.iloc[i]) else 1.0,
+            "ci_lower": float(conf_int.iloc[i, 0]) if not np.isnan(conf_int.iloc[i, 0]) else 0.0,
+            "ci_upper": float(conf_int.iloc[i, 1]) if not np.isnan(conf_int.iloc[i, 1]) else 0.0,
+            "significance": _significance_stars(float(pvalues.iloc[i])),
+        })
+
+    n_obs = int(fitted.nobs)
+    n_params = int(fitted.df_model) + (1 if has_intercept else 0)
+    df_resid = int(fitted.df_resid)
+    r_squared = float(fitted.rsquared) if hasattr(fitted, "rsquared") else None
+    adj_r_squared = float(fitted.rsquared_adj) if hasattr(fitted, "rsquared_adj") else None
+
+    f_stat = None
+    if hasattr(fitted, "fvalue") and hasattr(fitted, "f_pvalue"):
+        fv = float(fitted.fvalue)
+        fp = float(fitted.f_pvalue)
+        if not (np.isnan(fv) or np.isnan(fp)):
+            f_stat = [fv, fp]
+
+    log_likelihood = float(fitted.llf) if hasattr(fitted, "llf") and fitted.llf is not None else None
+    aic = float(fitted.aic) if hasattr(fitted, "aic") else 0.0
+    bic = float(fitted.bic) if hasattr(fitted, "bic") else 0.0
+    ssr = float(fitted.ssr)
+    rmse = float(np.sqrt(ssr / df_resid)) if df_resid > 0 else 0.0
+
+    # Save residuals and fitted values for diagnostics
+    residuals = fitted.resid.tolist() if hasattr(fitted, "resid") else []
+    fitted_values = fitted.fittedvalues.tolist() if hasattr(fitted, "fittedvalues") else []
+
+    # Model spec string
+    preds_str = " + ".join(indep_vars)
+    spec_str = f"{dep_var} ~ {preds_str}"
+    if not has_intercept:
+        spec_str += " - 1"
+    if cov_type and cov_type != "nonrobust":
+        spec_str += f" [SE: {cov_type}]"
+
+    result = {
+        "success": True,
+        "model_type": "OLS",
+        "coefficients": coefficients,
+        "n_obs": n_obs,
+        "n_params": n_params,
+        "df_resid": df_resid,
+        "r_squared": r_squared,
+        "adj_r_squared": adj_r_squared,
+        "f_statistic": f_stat,
+        "log_likelihood": log_likelihood,
+        "aic": aic,
+        "bic": bic,
+        "rmse": rmse,
+        "dep_var": dep_var,
+        "specification": spec_str,
+        "method": "OLS",
+        "se_type": cov_type if cov_type else "nonrobust",
+        "residuals": residuals,
+        "fitted_values": fitted_values,
+        "indep_vars": indep_vars,
+    }
+
+    return json.dumps(result)
+
+
+def _significance_stars(pvalue: float) -> str:
+    if pvalue < 0.01:
+        return "***"
+    if pvalue < 0.05:
+        return "**"
+    if pvalue < 0.1:
+        return "*"
+    return ""
+
+
+# ===========================================================================
+# 3. Diagnostics
+# ===========================================================================
+
+
+def compute_diagnostics(data_json: str, result_json: str) -> str:
+    """Compute diagnostic statistics from model results.
+
+    Args:
+        data_json: JSON data (same format as run_regression).
+        result_json: JSON result from run_regression.
+
+    Returns:
+        JSON with VIF, residual tests, ANOVA table.
+    """
+    try:
+        result = json.loads(result_json)
+    except json.JSONDecodeError:
+        return json.dumps({"success": False, "error": "Invalid result JSON."})
+
+    residuals = np.array(result.get("residuals", []))
+    n_obs = result.get("n_obs", 0)
+    n_params = result.get("n_params", 0)
+    r_squared = result.get("r_squared")
+    rmse = result.get("rmse", 0.0)
+
+    # --- VIF ---
+    vif_df = _compute_vif(data_json, result)
+
+    # --- Residual tests ---
+    residual_diag = _compute_residual_tests(residuals)
+
+    # --- ANOVA ---
+    anova = _compute_anova(rmse, r_squared, n_obs, n_params, result)
+
+    return json.dumps({
+        "success": True,
+        "vif": vif_df,
+        "residual_tests": residual_diag,
+        "anova": anova,
+    })
+
+
+def _compute_vif(data_json: str, result: dict) -> Optional[List[dict]]:
+    """Compute VIF for predictor variables."""
+    try:
+        from statsmodels.stats.outliers_influence import variance_inflation_factor
+        from statsmodels.tools.tools import add_constant
+    except ImportError:
+        return None
+
+    try:
+        data_dict = json.loads(data_json) if isinstance(data_json, str) else data_json
+        if "data" in data_dict:
+            rows = data_dict["data"]
+            if len(rows) < 2:
+                return None
+            df = pd.DataFrame(rows[1:], columns=rows[0])
+        else:
+            return None
+    except Exception:
+        return None
+
+    indep_vars = result.get("indep_vars", [])
+    numeric_vars = []
+    for v in indep_vars:
+        if v in df.columns and pd.api.types.is_numeric_dtype(df[v]):
+            numeric_vars.append(v)
+
+    if len(numeric_vars) < 2:
+        return None
+
+    try:
+        X = df[numeric_vars].dropna().astype(float)
+        X_c = add_constant(X)
+
+        vif_rows = []
+        for i in range(X_c.shape[1]):
+            col_name = str(X_c.columns[i])
+            vif_val = float(variance_inflation_factor(X_c.values, i))
+            if np.isnan(vif_val) or np.isinf(vif_val):
+                continue
+            diagnosis = "High" if vif_val > 10 else "Moderate" if vif_val > 5 else "Low"
+            vif_rows.append({
+                "variable": col_name,
+                "vif": round(vif_val, 4),
+                "diagnosis": diagnosis,
+            })
+        return vif_rows
+    except Exception:
+        return None
+
+
+def _compute_residual_tests(residuals: np.ndarray) -> dict:
+    """Run Shapiro-Wilk and Durbin-Watson tests."""
+    result = {}
+
+    # Shapiro-Wilk
+    if len(residuals) >= 3:
+        try:
+            from scipy import stats
+            shapiro_stat, shapiro_p = stats.shapiro(residuals)
+            result["shapiro_stat"] = round(float(shapiro_stat), 6)
+            result["shapiro_pvalue"] = float(shapiro_p)
+            result["shapiro_normal"] = "Yes" if shapiro_p > 0.05 else "No"
+        except Exception:
+            result["shapiro_normal"] = "Error"
+    else:
+        result["shapiro_normal"] = "Insufficient data"
+
+    # Durbin-Watson
+    if len(residuals) >= 2:
+        try:
+            diff_sum = np.sum(np.diff(residuals) ** 2)
+            total_sum = np.sum(residuals ** 2)
+            if total_sum > 0:
+                dw = float(diff_sum / total_sum)
+                result["dw_stat"] = round(dw, 4)
+                if dw < 1.0:
+                    result["dw_autocorrelation"] = "Positive (strong)"
+                elif dw > 3.0:
+                    result["dw_autocorrelation"] = "Negative (strong)"
+                elif dw < 1.5:
+                    result["dw_autocorrelation"] = "Positive (mild)"
+                elif dw > 2.5:
+                    result["dw_autocorrelation"] = "Negative (mild)"
+                else:
+                    result["dw_autocorrelation"] = "None"
+            else:
+                result["dw_autocorrelation"] = "N/A (zero variance)"
+        except Exception:
+            result["dw_autocorrelation"] = "Error"
+    else:
+        result["dw_autocorrelation"] = "Insufficient data"
+
+    return result
+
+
+def _compute_anova(rmse: float, r_squared: Optional[float],
+                   n_obs: int, n_params: int, result: dict) -> dict:
+    """Compute ANOVA table from model results."""
+    df_resid = result.get("df_resid", max(n_obs - n_params, 1))
+    ss_resid = rmse ** 2 * df_resid
+
+    df_explained = n_params - 1 if n_params > 1 else 0
+    df_total = n_obs - 1
+
+    if r_squared is not None and r_squared < 1.0 and r_squared >= 0:
+        ss_total = ss_resid / (1.0 - r_squared)
+    elif r_squared is not None and r_squared >= 1.0:
+        ss_total = ss_resid
+    else:
+        ss_total = ss_resid
+
+    ss_explained = ss_total - ss_resid
+
+    ms_explained = ss_explained / df_explained if df_explained > 0 else float("nan")
+    ms_resid = ss_resid / df_resid if df_resid > 0 else float("nan")
+
+    f_val = float("nan")
+    f_p = float("nan")
+    if ms_resid > 0 and ms_explained > 0:
+        f_val = ms_explained / ms_resid
+        try:
+            from scipy import stats
+            f_p = float(stats.f.sf(f_val, df_explained, df_resid))
+        except Exception:
+            pass
+
+    f_stat = result.get("f_statistic")
+    if f_stat and len(f_stat) == 2:
+        f_val = f_stat[0]
+        f_p = f_stat[1]
+
+    return {
+        "explained": {
+            "source": "Regression",
+            "SS": round(ss_explained, 6),
+            "df": df_explained,
+            "MS": round(ms_explained, 6) if not np.isnan(ms_explained) else None,
+            "F": round(f_val, 6) if not np.isnan(f_val) else None,
+            "p_value": round(f_p, 6) if not np.isnan(f_p) else None,
+        },
+        "residual": {
+            "source": "Residual",
+            "SS": round(ss_resid, 6),
+            "df": df_resid,
+            "MS": round(ms_resid, 6) if not np.isnan(ms_resid) else None,
+        },
+        "total": {
+            "source": "Total",
+            "SS": round(ss_total, 6),
+            "df": df_total,
+        },
+    }
+
+
+# ===========================================================================
+# 4. Charts (plotly JSON)
+# ===========================================================================
+
+
+def generate_diagnostic_charts(result_json: str) -> str:
+    """Generate diagnostic chart data from model results.
+
+    Returns plotly-compatible JSON for:
+        - residual_fitted
+        - qq_plot
+        - scale_location
+        - cooks_distance
+    """
+    try:
+        result = json.loads(result_json)
+    except json.JSONDecodeError:
+        return json.dumps({"success": False, "error": "Invalid JSON."})
+
+    residuals = np.array(result.get("residuals", []))
+    fitted_values = np.array(result.get("fitted_values", []))
+    n_obs = result.get("n_obs", 0)
+    n_params = result.get("n_params", 0)
+
+    charts = {}
+
+    if len(residuals) >= 2 and len(fitted_values) >= 2:
+        charts["residual_fitted"] = _make_residual_fitted_chart(residuals, fitted_values)
+    else:
+        charts["residual_fitted"] = None
+
+    if len(residuals) >= 4:
+        charts["qq"] = _make_qq_chart(residuals)
+    else:
+        charts["qq"] = None
+
+    if len(residuals) >= 5:
+        charts["scale_location"] = _make_scale_location_chart(residuals, fitted_values)
+    else:
+        charts["scale_location"] = None
+
+    if len(residuals) >= 3:
+        charts["cooks_distance"] = _make_cooks_chart(residuals, fitted_values, n_params)
+    else:
+        charts["cooks_distance"] = None
+
+    return json.dumps({"success": True, "charts": charts})
+
+
+def generate_coefficient_chart(result_json: str) -> str:
+    """Generate a coefficient dot-whisker chart as plotly JSON."""
+    try:
+        result = json.loads(result_json)
+    except json.JSONDecodeError:
+        return json.dumps({"success": False, "error": "Invalid JSON."})
+
+    coefficients = result.get("coefficients", [])
+    if not coefficients:
+        return json.dumps({"success": False, "error": "No coefficients."})
+
+    # Separate intercept and sort others by absolute value
+    intercept = None
+    others = []
+    for c in coefficients:
+        if c["name"] == "Intercept":
+            intercept = c
+        else:
+            others.append(c)
+    others.sort(key=lambda x: abs(x.get("coef", 0)), reverse=True)
+
+    sorted_coefs = []
+    if intercept:
+        sorted_coefs.append(intercept)
+    sorted_coefs.extend(others)
+
+    n = len(sorted_coefs)
+    names = [c["name"] for c in sorted_coefs]
+    estimates = [c["coef"] for c in sorted_coefs]
+    ci_lows = [c["ci_lower"] for c in sorted_coefs]
+    ci_highs = [c["ci_upper"] for c in sorted_coefs]
+
+    # Build plotly figure spec
+    traces = []
+    for i in range(n):
+        traces.append({
+            "type": "scatter",
+            "x": [ci_lows[i], ci_highs[i]],
+            "y": [n - 1 - i, n - 1 - i],
+            "mode": "lines",
+            "line": {"color": "#1f77b4", "width": 2},
+            "showlegend": False,
+            "hoverinfo": "none",
+        })
+
+    traces.append({
+        "type": "scatter",
+        "x": estimates,
+        "y": list(range(n - 1, -1, -1)),
+        "mode": "markers+text",
+        "marker": {"color": "#1f77b4", "size": 10, "symbol": "circle"},
+        "text": [_significance_stars(c.get("pvalue", 1.0)) for c in sorted_coefs],
+        "textposition": "middle right",
+        "textfont": {"size": 12, "color": "red"},
+        "name": "Coefficient",
+        "showlegend": False,
+        "hovertemplate": "%{text}<br>Coeff: %{x:.4f}<extra></extra>",
+        "customdata": names,
+    })
+
+    layout = {
+        "title": {"text": "Coefficient Estimates (Dot-Whisker)", "x": 0.5},
+        "xaxis": {"title": "Coefficient Estimate", "zeroline": True, "zerolinecolor": "gray", "zerolinewidth": 1},
+        "yaxis": {
+            "tickvals": list(range(n)),
+            "ticktext": list(reversed(names)),
+            "title": "",
+        },
+        "template": "plotly_white",
+        "height": max(300, n * 40),
+        "annotations": [
+            {
+                "xref": "paper", "yref": "paper",
+                "x": 1, "y": -0.08,
+                "text": "*** p<0.01, ** p<0.05, * p<0.1",
+                "showarrow": False,
+                "font": {"size": 10, "color": "gray"},
+                "xanchor": "right",
+            }
+        ],
+    }
+
+    chart_spec = {"data": traces, "layout": layout}
+    return json.dumps({"success": True, "chart": chart_spec})
+
+
+def _make_residual_fitted_chart(residuals: np.ndarray, fitted: np.ndarray) -> dict:
+    traces = [
+        {
+            "type": "scatter",
+            "x": fitted.tolist(),
+            "y": residuals.tolist(),
+            "mode": "markers",
+            "marker": {"color": "steelblue", "size": 6, "opacity": 0.6},
+            "name": "Residuals",
+            "showlegend": False,
+            "hovertemplate": "Fitted: %{x:.4f}<br>Residual: %{y:.4f}<extra></extra>",
+        },
+        {
+            "type": "scatter",
+            "x": [float(fitted.min()), float(fitted.max())],
+            "y": [0, 0],
+            "mode": "lines",
+            "line": {"color": "red", "width": 1.5, "dash": "dash"},
+            "name": "y=0",
+            "showlegend": False,
+            "hoverinfo": "none",
+        },
+    ]
+    layout = {
+        "title": {"text": "Residuals vs Fitted", "x": 0.5},
+        "xaxis": {"title": "Fitted Values"},
+        "yaxis": {"title": "Residuals"},
+        "template": "plotly_white",
+    }
+    return {"data": traces, "layout": layout}
+
+
+def _make_qq_chart(residuals: np.ndarray) -> dict:
+    n = len(residuals)
+    theoretical = np.sort(_norm_ppf(np.arange(1, n + 1) / (n + 1)))
+    sample = np.sort(residuals)
+
+    min_val = float(min(theoretical.min(), sample.min()))
+    max_val = float(max(theoretical.max(), sample.max()))
+
+    traces = [
+        {
+            "type": "scatter",
+            "x": theoretical.tolist(),
+            "y": sample.tolist(),
+            "mode": "markers",
+            "marker": {"color": "steelblue", "size": 6, "opacity": 0.6},
+            "name": "Sample Quantiles",
+            "showlegend": False,
+            "hovertemplate": "Theoretical: %{x:.4f}<br>Sample: %{y:.4f}<extra></extra>",
+        },
+        {
+            "type": "scatter",
+            "x": [min_val, max_val],
+            "y": [min_val, max_val],
+            "mode": "lines",
+            "line": {"color": "red", "width": 1.5, "dash": "dash"},
+            "name": "Normal",
+            "showlegend": False,
+            "hoverinfo": "none",
+        },
+    ]
+    layout = {
+        "title": {"text": "Normal Q-Q Plot", "x": 0.5},
+        "xaxis": {"title": "Theoretical Quantiles"},
+        "yaxis": {"title": "Sample Quantiles"},
+        "template": "plotly_white",
+    }
+    return {"data": traces, "layout": layout}
+
+
+def _norm_ppf(q: np.ndarray) -> np.ndarray:
+    """Normal distribution PPF approximation."""
+    try:
+        from scipy.stats import norm
+        return norm.ppf(q)
+    except ImportError:
+        pass
+    p = np.clip(np.asarray(q, dtype=float), 1e-15, 1 - 1e-15)
+    t = np.sqrt(-2 * np.log(1 - p))
+    c0, c1, c2 = 2.515517, 0.802853, 0.010328
+    d1, d2, d3 = 1.432788, 0.189269, 0.001308
+    return t - (c0 + c1 * t + c2 * t**2) / (1 + d1 * t + d2 * t**2 + d3 * t**3)
+
+
+def _make_scale_location_chart(residuals: np.ndarray, fitted: np.ndarray) -> dict:
+    std_resid = residuals / np.std(residuals, ddof=1)
+    sqrt_abs = np.sqrt(np.abs(std_resid))
+
+    traces = [
+        {
+            "type": "scatter",
+            "x": fitted.tolist(),
+            "y": sqrt_abs.tolist(),
+            "mode": "markers",
+            "marker": {"color": "steelblue", "size": 6, "opacity": 0.6},
+            "name": "std residual",
+            "showlegend": False,
+            "hovertemplate": "Fitted: %{x:.4f}<br>sqrt(|std res|): %{y:.4f}<extra></extra>",
+        },
+    ]
+    layout = {
+        "title": {"text": "Scale-Location Plot", "x": 0.5},
+        "xaxis": {"title": "Fitted Values"},
+        "yaxis": {"title": "sqrt(|Standardized Residuals|)"},
+        "template": "plotly_white",
+    }
+    return {"data": traces, "layout": layout}
+
+
+def _make_cooks_chart(residuals: np.ndarray, fitted: np.ndarray,
+                      n_params: int) -> dict:
+    n = len(residuals)
+    p = max(n_params, 1)
+    mse = np.var(residuals, ddof=p)
+    if mse <= 0:
+        cooks_d = np.zeros(n)
+    else:
+        cooks_d = (residuals ** 2) / (p * mse) * (1.0 / n)
+    threshold = 4.0 / n
+
+    obs_idx = list(range(1, n + 1))
+    colors = ["red" if d > threshold else "steelblue" for d in cooks_d]
+
+    traces = [
+        {
+            "type": "bar",
+            "x": obs_idx,
+            "y": cooks_d.tolist(),
+            "marker": {"color": colors, "opacity": 0.7},
+            "name": "Cook's D",
+            "showlegend": False,
+            "hovertemplate": "Obs: %{x}<br>Cook's D: %{y:.4f}<extra></extra>",
+        },
+        {
+            "type": "scatter",
+            "x": [1, n],
+            "y": [threshold, threshold],
+            "mode": "lines",
+            "line": {"color": "red", "width": 1.5, "dash": "dash"},
+            "name": f"Threshold (4/n) = {threshold:.4f}",
+            "showlegend": False,
+            "hoverinfo": "skip",
+        },
+    ]
+    layout = {
+        "title": {"text": "Cook's Distance", "x": 0.5},
+        "xaxis": {"title": "Observation Index"},
+        "yaxis": {"title": "Cook's Distance"},
+        "template": "plotly_white",
+    }
+    return {"data": traces, "layout": layout}
+
+
+# ===========================================================================
+# 5. Export
+# ===========================================================================
+
+
+def export_csv(result_json: str) -> str:
+    """Generate a CSV string of the coefficient table."""
+    try:
+        result = json.loads(result_json)
+    except json.JSONDecodeError:
+        return json.dumps({"success": False, "error": "Invalid JSON."})
+
+    coefficients = result.get("coefficients", [])
+    if not coefficients:
+        return json.dumps({"success": False, "error": "No coefficients to export."})
+
+    lines = ["Variable,Coefficient,Std.Err.,t-value,p-value,CI(95%) Low,CI(95%) High,Significance"]
+    for c in coefficients:
+        lines.append(
+            f'"{c["name"]}",{c["coef"]},{c["se"]},{c["t_stat"]},'
+            f'{c["pvalue"]},{c["ci_lower"]},{c["ci_upper"]},{c["significance"]}'
+        )
+
+    csv_text = "\n".join(lines)
+    model_info = (
+        f"\n\n# Model Summary\n"
+        f'# R-squared,{result.get("r_squared", "N/A")}\n'
+        f'# Adj R-squared,{result.get("adj_r_squared", "N/A")}\n'
+        f'# RMSE,{result.get("rmse", "N/A")}\n'
+        f'# AIC,{result.get("aic", "N/A")}\n'
+        f'# BIC,{result.get("bic", "N/A")}\n'
+        f'# N,{result.get("n_obs", "N/A")}\n'
+        f'# Specification,"{result.get("specification", "")}"\n'
+    )
+
+    return json.dumps({"success": True, "csv": csv_text + model_info})
+
+
+def export_excel(result_json: str) -> str:
+    """Export as Excel (base64-encoded) or fallback to CSV."""
+    try:
+        result = json.loads(result_json)
+    except json.JSONDecodeError:
+        return json.dumps({"success": False, "error": "Invalid JSON."})
+
+    import base64
+
+    try:
+        import openpyxl
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Regression Results"
+
+        # Title
+        ws.merge_cells("A1:H1")
+        ws["A1"] = "OLS Regression Results"
+        ws["A1"].font = Font(bold=True, size=14)
+        ws["A1"].alignment = Alignment(horizontal="center")
+
+        # Model info
+        info_items = [
+            ("Dependent Variable", result.get("dep_var", "")),
+            ("Specification", result.get("specification", "")),
+            ("N", result.get("n_obs", "")),
+            ("R-squared", result.get("r_squared", "")),
+            ("Adj R-squared", result.get("adj_r_squared", "")),
+            ("RMSE", result.get("rmse", "")),
+            ("AIC", result.get("aic", "")),
+            ("BIC", result.get("bic", "")),
+            ("F-statistic", f'{result["f_statistic"][0] if result.get("f_statistic") else "N/A"}'),
+        ]
+        for i, (label, value) in enumerate(info_items, start=3):
+            ws.cell(row=i, column=1, value=label).font = Font(bold=True)
+            ws.cell(row=i, column=2, value=value)
+
+        # Coefficient table header
+        start_row = len(info_items) + 5
+        headers = ["Variable", "Coefficient", "Std. Error", "t-value",
+                   "p-value", "CI Low (95%)", "CI High (95%)", "Significance"]
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_font = Font(bold=True, color="FFFFFF")
+
+        for j, h in enumerate(headers, start=1):
+            cell = ws.cell(row=start_row, column=j, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center")
+
+        # Coefficient rows
+        for i, c in enumerate(result.get("coefficients", [])):
+            row = start_row + 1 + i
+            ws.cell(row=row, column=1, value=c["name"])
+            ws.cell(row=row, column=2, value=round(c["coef"], 6))
+            ws.cell(row=row, column=3, value=round(c["se"], 6))
+            ws.cell(row=row, column=4, value=round(c["t_stat"], 4))
+            ws.cell(row=row, column=5, value=c["pvalue"])
+            ws.cell(row=row, column=6, value=round(c["ci_lower"], 6))
+            ws.cell(row=row, column=7, value=round(c["ci_upper"], 6))
+            ws.cell(row=row, column=8, value=c["significance"])
+
+            # Highlight significant rows
+            if c.get("pvalue", 1) < 0.05:
+                for j in range(1, 9):
+                    ws.cell(row=row, column=j).fill = PatternFill(
+                        start_color="E2EFDA", end_color="E2EFDA", fill_type="solid"
+                    )
+
+        # Column widths
+        ws.column_dimensions["A"].width = 20
+        for col in "BCDEFGH":
+            ws.column_dimensions[col].width = 16
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return json.dumps({
+            "success": True,
+            "excel_b64": base64.b64encode(buf.read()).decode("ascii"),
+            "filename": "regression_results.xlsx",
+        })
+    except ImportError:
+        # Fall back to CSV export
+        return export_csv(result_json)
+
+
+# ===========================================================================
+# 6. Gallery data access (pre-computed results as JSON)
+# ===========================================================================
+
+
+def get_gallery_index() -> str:
+    """Return gallery index (lightweight metadata, no data)."""
+    items = [
+        {
+            "id": "survey_happiness",
+            "title": "CGSS Resident Happiness Survey",
+            "persona": "Social Science Grad Student",
+            "description": "Study income, education, health, urban/rural status, and work hours on subjective well-being.",
+            "tags": ["Survey Data", "Categorical", "Multicollinearity"],
+            "n_obs": 400,
+            "dep_var": "happiness_score",
+        },
+        {
+            "id": "trust_experiment",
+            "title": "Social Trust Determinants",
+            "persona": "Social Science Grad Student",
+            "description": "200-sample survey on age, income, education, media exposure, and party membership effects on trust.",
+            "tags": ["Small Sample", "Borderline Significance", "Social Survey"],
+            "n_obs": 200,
+            "dep_var": "trust_index",
+        },
+        {
+            "id": "ecommerce_sales",
+            "title": "E-commerce Sales Drivers",
+            "persona": "Market Researcher",
+            "description": "500 days of e-commerce data: ad spend, price, promotions, competitor price, and season effects on sales.",
+            "tags": ["Business Analytics", "High R-squared", "Multicollinearity"],
+            "n_obs": 500,
+            "dep_var": "sales",
+        },
+        {
+            "id": "customer_satisfaction",
+            "title": "Restaurant Customer Satisfaction",
+            "persona": "Market Researcher",
+            "description": "350 surveys analyzing wait time, service quality, price perception, loyalty, and complaints.",
+            "tags": ["Customer Analysis", "Multi-category", "Service Industry"],
+            "n_obs": 350,
+            "dep_var": "satisfaction_score",
+        },
+        {
+            "id": "policy_effect",
+            "title": "Environmental Policy Evaluation",
+            "persona": "Policy Analyst",
+            "description": "300 city-level data on environmental regulation intensity, GDP, industrial structure, and emission reduction.",
+            "tags": ["Policy Evaluation", "Interaction Terms", "Robust SE"],
+            "n_obs": 300,
+            "dep_var": "emission_reduction",
+        },
+    ]
+    return json.dumps(items)

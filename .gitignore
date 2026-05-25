@@ -58,6 +58,7 @@ exports/
 temp/
 tmp/
 *.html
+!web/**/*.html
 *.pdf
 *.docx
 
