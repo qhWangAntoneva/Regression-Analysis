@@ -67,7 +67,8 @@ async function initPyodide() {
         statusEl.textContent = 'Pyodide: Installing packages...';
 
         // Load required Python packages
-        await pyodide.loadPackage(['numpy', 'pandas', 'statsmodels', 'scipy', 'openpyxl']);
+        await pyodide.loadPackage(['numpy', 'pandas', 'statsmodels', 'scipy']);
+        // openpyxl not available in Pyodide — Excel export falls back to CSV
 
         // Load our bridge module
         const bridgeCode = await fetch('py/bridge.py').then(r => r.text());
