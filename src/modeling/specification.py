@@ -210,3 +210,41 @@ def build_design_matrix(
         )
 
     return X, y
+
+
+def build_variable_labels(
+    spec: ModelSpec,
+    X_columns: List[str],
+) -> Dict[str, str]:
+    """Generate human-readable labels for design matrix columns.
+
+    Parses patsy-generated column names (e.g. ``C(education)[T.本科]``)
+    into user-friendly labels (e.g. ``education: 本科``).
+    Non-categorical columns keep their original name.
+
+    Args:
+        spec: The model specification (for reference, not directly used
+            by the parsing logic).
+        X_columns: List of column names from the design matrix DataFrame.
+
+    Returns:
+        A dictionary mapping each raw column name to its display label.
+    """
+    import re
+
+    labels: Dict[str, str] = {}
+    cat_pattern = re.compile(r"^C\((.+?)\)\[T\.(.+?)\]$")
+
+    for col in X_columns:
+        if col == "Intercept":
+            labels[col] = "Intercept"
+            continue
+        m = cat_pattern.match(col)
+        if m:
+            var_name = m.group(1)
+            level = m.group(2)
+            labels[col] = f"{var_name}: {level}"
+        else:
+            labels[col] = col
+
+    return labels

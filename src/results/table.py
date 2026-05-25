@@ -141,6 +141,11 @@ class ModelResult:
     se_type: str = "nonrobust"
     """Standard error type used (``'nonrobust'``, ``'HC0'``, etc.)."""
 
+    variable_labels: Dict[str, str] = field(default_factory=dict)
+    """Mapping from raw coefficient names to human-readable display labels.
+    For categorical dummies like ``C(education)[T.本科]`` the label would
+    be ``education: 本科``.  Non-categorical columns map to themselves."""
+
     # ------------------------------------------------------------------
     # Existing methods
     # ------------------------------------------------------------------

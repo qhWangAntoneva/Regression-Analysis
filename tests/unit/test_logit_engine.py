@@ -73,7 +73,7 @@ class TestLogitBasic:
         """Coefficients should have expected signs from DGP."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         coef_map = {c.name: c for c in result.coefficients}
@@ -86,7 +86,7 @@ class TestLogitBasic:
         """All standard errors should be positive."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         for c in result.coefficients:
@@ -96,7 +96,7 @@ class TestLogitBasic:
         """All p-values should be between 0 and 1."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         for c in result.coefficients:
@@ -113,7 +113,7 @@ class TestPseudoRSquared:
         """Pseudo R-squared should be in [0, 1]."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         assert result.pseudo_r_squared is not None
@@ -143,7 +143,7 @@ class TestZStatistics:
         """z-statistics should be available on coefficient rows."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         for c in result.coefficients:
@@ -153,7 +153,7 @@ class TestZStatistics:
         """z-statistics should be non-zero for reasonably predictive vars."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         coef_map = {c.name: c for c in result.coefficients}
@@ -170,7 +170,7 @@ class TestOLSFieldsNoneForLogit:
         """Logit should not have OLS R-squared."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         assert result.r_squared is None
@@ -180,7 +180,7 @@ class TestOLSFieldsNoneForLogit:
         """Logit should not have F-statistic."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         assert result.f_statistic is None
@@ -189,7 +189,7 @@ class TestOLSFieldsNoneForLogit:
         """Logit should have RMSE as None."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         assert result.rmse is None
@@ -205,7 +205,7 @@ class TestSummaryDictLogit:
         """Summary dict should have logit-specific keys."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         d = result.to_summary_dict()
@@ -228,7 +228,7 @@ class TestDataFrameLogit:
         """Logit DataFrame should use 'z值' column header."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         df = result.to_dataframe()
@@ -238,7 +238,7 @@ class TestDataFrameLogit:
         """All values in logit DataFrame should be finite."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         df = result.to_dataframe()
@@ -249,7 +249,7 @@ class TestDataFrameLogit:
         """CI lower should be less than CI upper for all coefficients."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         df = result.to_dataframe()
@@ -285,7 +285,7 @@ class TestOddsRatios:
         """OR = exp(coef), OR_CI = exp(conf_int)."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         for c in result.coefficients:
@@ -298,7 +298,7 @@ class TestOddsRatios:
         """Odds ratio CI = exp(coef CI)."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         for c in result.coefficients:
@@ -317,7 +317,7 @@ class TestLikelihoodRatioTest:
         """LLR should be set for logit results."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         assert result.llr is not None
@@ -327,7 +327,7 @@ class TestLikelihoodRatioTest:
         """LLR p-value should be set."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         assert result.llr_pvalue is not None
@@ -353,7 +353,7 @@ class TestSpectorDataset:
             indep_vars=["GPA", "TUCE", "PSI"],
             model_type="logit",
         )
-        fitted = run_logit(df, spec)
+        fitted, _ = run_logit(df, spec)
         result = extract_logit(fitted)
 
         assert result.model_type == "logit"
@@ -393,7 +393,7 @@ class TestLogitMultipleVars:
             indep_vars=["x1", "x2", "x3", "x4", "x5"],
             model_type="logit",
         )
-        fitted = run_logit(df, spec)
+        fitted, _ = run_logit(df, spec)
         result = extract_logit(fitted)
 
         assert len(result.coefficients) == 6  # Intercept + 5 predictors
@@ -412,7 +412,7 @@ class TestLogitMultipleVars:
             control_vars=["x3"],
             model_type="logit",
         )
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         coef_names = [c.name for c in result.coefficients]
@@ -479,7 +479,7 @@ class TestSummaryMethod:
         """Logit summary should show pseudo R-squared."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         summary_text = result.summary()
@@ -500,7 +500,7 @@ class TestLatexRowLogit:
         """Logit LaTeX row should not contain OLS-style fields."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         latex = result.to_latex_row()
@@ -521,7 +521,7 @@ class TestAnovaLogit:
         """ANOVA table should be empty DataFrame for logit."""
         data = make_binary_data(seed=42)
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
-        fitted = run_logit(data, spec)
+        fitted, _ = run_logit(data, spec)
         result = extract_logit(fitted)
 
         anova = result.anova_table()

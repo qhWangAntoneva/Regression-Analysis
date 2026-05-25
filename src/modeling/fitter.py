@@ -125,12 +125,13 @@ class ModelFitter:
             spec_str += f"  [SE: {cov_type}]"
 
         if spec.model_type == "logit":
-            fitted = run_logit(working_data, fit_spec)
+            fitted, var_labels = run_logit(working_data, fit_spec)
             result = extract_logit(
                 fitted_model=fitted,
                 alpha=alpha,
                 dep_var=spec.dep_var,
                 specification=spec_str,
+                variable_labels=var_labels,
             )
         else:
             result = run_ols(

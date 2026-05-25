@@ -41,6 +41,9 @@ def render_coefficient_table(
     is_logit = getattr(result, "model_type", "") == "logit"
     df = result.to_dataframe().reset_index()
 
+    # Use human-readable variable labels if available
+    variable_labels: Dict[str, str] = getattr(result, "variable_labels", {}) or {}
+
     rows: List[Dict[str, object]] = []
     for _, row in df.iterrows():
         p_val = row["p值"]
@@ -50,8 +53,10 @@ def render_coefficient_table(
         stat_col = "z值" if is_logit else "t值"
         stat_val = row.get(stat_col, row.get("t值", row.get("z值", 0)))
 
+        raw_name = str(row["变量"])
+        display_name = variable_labels.get(raw_name, raw_name)
         row_data = {
-            "变量": row["变量"],
+            "变量": display_name,
             "系数(B)": round(float(row["系数"]), 6),
             "标准误": round(float(row["标准误"]), 6),
             stat_col: round(float(stat_val), 4),

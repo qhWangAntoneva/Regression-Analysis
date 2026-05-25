@@ -411,6 +411,45 @@ def _build_design_matrix(
     return X, y, coef_names, transform_map
 
 
+def _build_variable_labels_for_web(
+    coef_names: List[str],
+    transform_map: Dict[str, List[str]],
+) -> Dict[str, str]:
+    """Build human-readable labels for coefficient names.
+
+    For categorical dummy columns (e.g. ``education_本科``) the label is
+    ``education: 本科``.  Numeric columns and ``Intercept`` keep their
+    original names.
+
+    Args:
+        coef_names: List of coefficient names from the design matrix.
+        transform_map: Mapping from original variable name to the list of
+            column names it produced in the design matrix.
+
+    Returns:
+        Dictionary mapping each coefficient name to its display label.
+    """
+    # Build reverse lookup: column_name -> original variable name
+    col_to_var: Dict[str, str] = {}
+    for var_name, col_names in transform_map.items():
+        for cname in col_names:
+            col_to_var[cname] = var_name
+
+    labels: Dict[str, str] = {}
+    for name in coef_names:
+        if name == "Intercept":
+            labels[name] = "Intercept"
+        elif name in col_to_var and col_to_var[name] != name:
+            # Categorical dummy: extract level after the variable prefix
+            var_name = col_to_var[name]
+            level = name[len(var_name) + 1:]  # +1 for the "_" separator
+            labels[name] = f"{var_name}: {level}"
+        else:
+            labels[name] = name
+
+    return labels
+
+
 def _extract_model_result(
     fitted,
     df: pd.DataFrame,
@@ -423,6 +462,8 @@ def _extract_model_result(
     transform_map: Dict[str, List[str]],
 ) -> str:
     """Extract ModelResult from fitted statsmodels OLS and return JSON."""
+    variable_labels = _build_variable_labels_for_web(coef_names, transform_map)
+
     params = np.asarray(fitted.params)
     bse = np.asarray(fitted.bse)
     tvalues = np.asarray(fitted.tvalues)
@@ -495,6 +536,7 @@ def _extract_model_result(
         "residuals": residuals,
         "fitted_values": fitted_values,
         "indep_vars": indep_vars,
+        "variable_labels": variable_labels,
     }
 
     return json.dumps(result)
@@ -511,6 +553,8 @@ def _extract_logit_result(
     df_clean: pd.DataFrame,
 ) -> str:
     """Extract logit regression results into JSON."""
+    variable_labels = _build_variable_labels_for_web(coef_names, transform_map)
+
     params = np.asarray(fitted.params)
     bse = np.asarray(fitted.bse)
     zvalues = np.asarray(fitted.tvalues)  # statsmodels stores z as tvalues for Logit
@@ -590,6 +634,7 @@ def _extract_logit_result(
         "fitted_values": fitted_values,
         "y_actual": y_actual,
         "indep_vars": indep_vars,
+        "variable_labels": variable_labels,
     }
 
     return json.dumps(result)

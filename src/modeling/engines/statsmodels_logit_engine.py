@@ -7,13 +7,13 @@ and converts the results into the unified ModelResult data structure.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
-from src.modeling.specification import ModelSpec, build_design_matrix
+from src.modeling.specification import ModelSpec, build_design_matrix, build_variable_labels
 from src.results.table import CoefficientRow, ModelResult
 
 
@@ -21,7 +21,7 @@ def run_logit(
     data: pd.DataFrame,
     spec: ModelSpec,
     alpha: float = 0.05,
-) -> Any:
+) -> Tuple[Any, Dict[str, str]]:
     """Fit a binary logistic regression model using statsmodels.
 
     Args:
@@ -30,12 +30,14 @@ def run_logit(
         alpha: Significance level for confidence intervals (default 0.05).
 
     Returns:
-        A fitted ``sm.Logit`` Results object.
+        A tuple of ``(fitted_model, variable_labels)`` where
+        ``variable_labels`` maps raw column names to human-readable labels.
 
     Raises:
         ValueError: If the model fails to fit or does not converge.
     """
     X, y = build_design_matrix(spec, data)
+    labels = build_variable_labels(spec, list(X.columns))
 
     try:
         logit_model = sm.Logit(y, X)
@@ -52,7 +54,7 @@ def run_logit(
             "Consider removing problematic predictors or using regularization."
         )
 
-    return fitted
+    return fitted, labels
 
 
 def extract_logit(
@@ -60,6 +62,7 @@ def extract_logit(
     alpha: float = 0.05,
     dep_var: str = "",
     specification: str = "",
+    variable_labels: Optional[Dict[str, str]] = None,
 ) -> ModelResult:
     """Extract logit regression results into a ModelResult.
 
@@ -69,6 +72,8 @@ def extract_logit(
             yielding 95% CIs).
         dep_var: Name of the dependent variable.
         specification: String representation of the model formula.
+        variable_labels: Optional mapping from raw column names to
+            human-readable display labels.
 
     Returns:
         A ``ModelResult`` populated with logit-specific statistics.
@@ -141,4 +146,5 @@ def extract_logit(
         dep_var=dep_var,
         specification=specification,
         method="Logit",
+        variable_labels=variable_labels if variable_labels is not None else {},
     )
