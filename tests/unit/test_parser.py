@@ -193,3 +193,81 @@ class TestDetectEncoding:
         """测试文件不存在时抛出 FileNotFoundError。"""
         with pytest.raises(FileNotFoundError):
             detect_encoding("/nonexistent/path/file.csv")
+
+
+class TestParseExcel:
+    """Excel 文件解析测试（.xls / .xlsx）。"""
+
+    @pytest.fixture
+    def sample_excel_path(self):
+        """Create an in-memory Excel file with openpyxl and write to temp file."""
+        import openpyxl
+        import tempfile
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Sheet1"
+        # Header row
+        ws.append(["id", "name", "score", "grade"])
+        # Data rows
+        ws.append([1, "Alice", 95.5, "A"])
+        ws.append([2, "Bob", 82.0, "B"])
+        ws.append([3, "Charlie", 74.3, "C"])
+        ws.append([4, "Diana", 88.0, "B"])
+        ws.append([5, "Eve", 91.2, "A"])
+
+        fd, path = tempfile.mkstemp(suffix=".xlsx")
+        wb.save(path)
+        import os
+        os.close(fd)
+        yield path
+        os.unlink(path)
+
+    def test_parse_excel_basic(self, sample_excel_path):
+        """Test basic Excel parsing through FileParser.parse()."""
+        parser = FileParser()
+        df = parser.parse(sample_excel_path)
+
+        assert isinstance(df, pd.DataFrame)
+        assert df.shape == (5, 4)
+        assert list(df.columns) == ["id", "name", "score", "grade"]
+        assert df["id"].tolist() == [1, 2, 3, 4, 5]
+        assert df["name"].tolist() == ["Alice", "Bob", "Charlie", "Diana", "Eve"]
+
+    def test_parse_excel_with_nrows(self, sample_excel_path):
+        """Test Excel parsing with nrows to limit rows."""
+        parser = FileParser()
+        df = parser.parse(sample_excel_path, nrows=3)
+
+        assert isinstance(df, pd.DataFrame)
+        assert df.shape == (3, 4)
+        assert df["id"].tolist() == [1, 2, 3]
+
+    def test_parse_excel_numeric_values(self, sample_excel_path):
+        """Test that numeric values are correctly parsed from Excel."""
+        parser = FileParser()
+        df = parser.parse(sample_excel_path)
+
+        assert df["score"].dtype.kind in ("f", "i")  # float or int
+        # Check specific values
+        assert float(df["score"].iloc[0]) == pytest.approx(95.5)
+        assert float(df["score"].iloc[2]) == pytest.approx(74.3)
+
+    def test_parse_excel_unsupported_format(self):
+        """Unsupported file extensions should raise ValueError."""
+        parser = FileParser()
+        import tempfile
+        fd, path = tempfile.mkstemp(suffix=".pdf")
+        import os
+        os.close(fd)
+        try:
+            with pytest.raises(ValueError, match="不支持的文件格式"):
+                parser.parse(path)
+        finally:
+            os.unlink(path)
+
+    def test_parse_excel_file_not_found(self):
+        """Non-existent Excel file should raise FileNotFoundError."""
+        parser = FileParser()
+        with pytest.raises(FileNotFoundError):
+            parser.parse("/nonexistent/path/file.xlsx")
