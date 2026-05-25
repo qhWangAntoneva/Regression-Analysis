@@ -475,3 +475,502 @@ class TestPvalueLabel:
         assert _pvalue_label(0.009) == "p<0.01"
         assert _pvalue_label(0.049) == "p<0.05"
         assert _pvalue_label(0.099) == "p<0.1"
+
+
+# =========================================================================
+# Test: summary_generator — full branch coverage
+# =========================================================================
+
+class TestSummaryGeneratorBranches:
+    """Achieve full branch coverage for generate_summary_text."""
+
+    def test_f_p_less_than_001(self) -> None:
+        """p < 0.001 branch: should say '<0.001'."""
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=1.5, se=0.2, t_stat=7.5,
+                    pvalue=0.001, ci_lower=1.1, ci_upper=1.9
+                )
+            ],
+            n_obs=100,
+            n_params=2,
+            df_resid=98,
+            r_squared=0.65,
+            adj_r_squared=0.64,
+            aic=120.0,
+            bic=125.0,
+            rmse=0.8,
+            f_statistic=(25.0, 0.0005),  # p < 0.001
+            dep_var="y",
+        )
+        text = generate_summary_text(result)
+        assert "p<0.001" in text
+
+    def test_f_p_between_001_and_005(self) -> None:
+        """p between 0.001 and 0.05: should show formatted p-value."""
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=0.8, se=0.3, t_stat=2.67,
+                    pvalue=0.01, ci_lower=0.2, ci_upper=1.4
+                )
+            ],
+            n_obs=100,
+            n_params=2,
+            df_resid=98,
+            r_squared=0.20,
+            adj_r_squared=0.19,
+            aic=200.0,
+            bic=205.0,
+            rmse=0.9,
+            f_statistic=(7.12, 0.0089),  # 0.001 < p < 0.05
+            dep_var="y",
+        )
+        text = generate_summary_text(result)
+        assert "F(" in text
+        assert "p=0.0089" in text
+
+    def test_f_p_borderline_significant(self) -> None:
+        """p between 0.05 and 0.1: should say '边缘显著'."""
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=0.5, se=0.3, t_stat=1.67,
+                    pvalue=0.1, ci_lower=-0.1, ci_upper=1.1
+                )
+            ],
+            n_obs=100,
+            n_params=2,
+            df_resid=98,
+            r_squared=0.03,
+            adj_r_squared=0.02,
+            aic=250.0,
+            bic=255.0,
+            rmse=1.0,
+            f_statistic=(2.78, 0.072),  # 0.05 < p < 0.1
+            dep_var="y",
+        )
+        text = generate_summary_text(result)
+        assert "边缘显著" in text
+
+    def test_f_p_not_significant(self) -> None:
+        """p >= 0.1: should say '不显著'."""
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=0.1, se=0.2, t_stat=0.5,
+                    pvalue=0.62, ci_lower=-0.3, ci_upper=0.5
+                )
+            ],
+            n_obs=100,
+            n_params=2,
+            df_resid=98,
+            r_squared=0.002,
+            adj_r_squared=0.0,
+            aic=300.0,
+            bic=305.0,
+            rmse=1.2,
+            f_statistic=(0.25, 0.62),  # p >= 0.1
+            dep_var="y",
+        )
+        text = generate_summary_text(result)
+        assert "不显著" in text
+
+    def test_no_r_squared(self) -> None:
+        """r_squared is None: R-squared text should be omitted."""
+        result = ModelResult(
+            model_type="WLS",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=1.0, se=0.1, t_stat=10.0,
+                    pvalue=0.001, ci_lower=0.8, ci_upper=1.2
+                )
+            ],
+            n_obs=50,
+            n_params=2,
+            df_resid=48,
+            r_squared=None,
+            adj_r_squared=None,
+            aic=100.0,
+            bic=105.0,
+            rmse=0.5,
+        )
+        text = generate_summary_text(result)
+        # Should not contain "R²="
+        assert "R²=" not in text
+
+    def test_no_n_obs(self) -> None:
+        """n_obs is None/0: sample size line should be omitted."""
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=1.0, se=0.1, t_stat=10.0,
+                    pvalue=0.001, ci_lower=0.8, ci_upper=1.2
+                )
+            ],
+            n_obs=0,
+            n_params=2,
+            df_resid=0,
+            r_squared=0.5,
+            aic=100.0,
+            bic=105.0,
+            rmse=0.5,
+        )
+        text = generate_summary_text(result)
+        # N=0 should not produce N text (falsy)
+        assert "N=0" not in text
+
+    def test_no_dep_var_no_spec(self) -> None:
+        """Empty dep_var and specification: defaults should be used."""
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=1.0, se=0.1, t_stat=10.0,
+                    pvalue=0.001, ci_lower=0.8, ci_upper=1.2
+                )
+            ],
+            n_obs=50,
+            n_params=2,
+            df_resid=48,
+            r_squared=0.5,
+            aic=100.0,
+            bic=105.0,
+            rmse=0.5,
+            dep_var="",
+            specification="",
+        )
+        text = generate_summary_text(result)
+        assert "因变量" in text
+        assert "未指定" in text
+
+    def test_adj_r_squared_present(self) -> None:
+        """When adj_r_squared is available, it should appear."""
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=1.0, se=0.1, t_stat=10.0,
+                    pvalue=0.001, ci_lower=0.8, ci_upper=1.2
+                )
+            ],
+            n_obs=100,
+            n_params=2,
+            df_resid=98,
+            r_squared=0.75,
+            adj_r_squared=0.74,
+            aic=100.0,
+            bic=105.0,
+            rmse=0.5,
+        )
+        text = generate_summary_text(result)
+        assert "调整R²" in text
+        assert "0.7400" in text
+
+    def test_adj_r_squared_none(self) -> None:
+        """When adj_r_squared is None, only R² should appear."""
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=1.0, se=0.1, t_stat=10.0,
+                    pvalue=0.001, ci_lower=0.8, ci_upper=1.2
+                )
+            ],
+            n_obs=100,
+            n_params=2,
+            df_resid=98,
+            r_squared=0.75,
+            adj_r_squared=None,
+            aic=100.0,
+            bic=105.0,
+            rmse=0.5,
+        )
+        text = generate_summary_text(result)
+        assert "调整R²" not in text
+
+
+# =========================================================================
+# Test: generate_coefficient_interpretation — all branches
+# =========================================================================
+
+class TestCoefficientInterpretationBranches:
+    """Cover all significance and sign branches in coefficient interpretation."""
+
+    def test_highly_significant_0001(self) -> None:
+        """p < 0.001: should show 'p<0.001'."""
+        row = CoefficientRow(
+            name="edu", coef=3.5, se=0.5, t_stat=7.0,
+            pvalue=0.0005, ci_lower=2.5, ci_upper=4.5
+        )
+        text = generate_coefficient_interpretation(row, "wage")
+        assert "p<0.001" in text
+
+    def test_significant_001(self) -> None:
+        """p < 0.01: should show 'p<0.01' (from _sig_star_text)."""
+        row = CoefficientRow(
+            name="exp", coef=0.8, se=0.2, t_stat=4.0,
+            pvalue=0.005, ci_lower=0.4, ci_upper=1.2
+        )
+        text = generate_coefficient_interpretation(row, "wage")
+        assert "p<0.01" in text
+
+    def test_significant_005(self) -> None:
+        """p < 0.05: should show 'p<0.05'."""
+        row = CoefficientRow(
+            name="tenure", coef=0.5, se=0.2, t_stat=2.5,
+            pvalue=0.03, ci_lower=0.1, ci_upper=0.9
+        )
+        text = generate_coefficient_interpretation(row, "wage")
+        assert "p<0.05" in text
+
+    def test_weakly_significant(self) -> None:
+        """p < 0.1: should show 'p<0.1'."""
+        row = CoefficientRow(
+            name="region", coef=0.2, se=0.12, t_stat=1.67,
+            pvalue=0.08, ci_lower=-0.04, ci_upper=0.44
+        )
+        text = generate_coefficient_interpretation(row, "income")
+        assert "p<0.1" in text
+
+    def test_not_significant(self) -> None:
+        """p >= 0.1: should show 'p>=0.1（不显著）'."""
+        row = CoefficientRow(
+            name="noise", coef=0.05, se=0.1, t_stat=0.5,
+            pvalue=0.62, ci_lower=-0.15, ci_upper=0.25
+        )
+        text = generate_coefficient_interpretation(row, "outcome")
+        assert "p>=0.1" in text
+        assert "不显著" in text
+
+    def test_zero_coefficient(self) -> None:
+        """Zero coefficient: direction should be '增加' (>=0), value 0.0."""
+        row = CoefficientRow(
+            name="zero_var", coef=0.0, se=0.1, t_stat=0.0,
+            pvalue=1.0, ci_lower=-0.2, ci_upper=0.2
+        )
+        text = generate_coefficient_interpretation(row, "y")
+        # coef >= 0 so direction should be 增加
+        assert "增加" in text
+        assert "0.0000" in text
+
+    def test_very_small_positive_coefficient(self) -> None:
+        """Very small positive coefficient should use '增加'."""
+        row = CoefficientRow(
+            name="tiny", coef=0.0001, se=0.0001, t_stat=1.0,
+            pvalue=0.32, ci_lower=-0.0001, ci_upper=0.0003
+        )
+        text = generate_coefficient_interpretation(row, "y")
+        assert "增加" in text
+        assert "0.0001" in text
+
+    def test_very_small_negative_coefficient(self) -> None:
+        """Very small negative coefficient should use '减少'."""
+        row = CoefficientRow(
+            name="tiny_neg", coef=-0.0001, se=0.0001, t_stat=-1.0,
+            pvalue=0.32, ci_lower=-0.0003, ci_upper=0.0001
+        )
+        text = generate_coefficient_interpretation(row, "y")
+        assert "减少" in text
+        assert "0.0001" in text
+
+    def test_large_coefficient(self) -> None:
+        """Large coefficient value."""
+        row = CoefficientRow(
+            name="big", coef=12345.6789, se=500.0, t_stat=24.69,
+            pvalue=0.0001, ci_lower=11345.0, ci_upper=13346.0
+        )
+        text = generate_coefficient_interpretation(row, "y")
+        assert "增加" in text
+        assert "12345.6789" in text
+
+    def test_contains_keywords_in_order(self) -> None:
+        """Verify the Chinese interpretation template is well-formed."""
+        row = CoefficientRow(
+            name="x1", coef=1.5, se=0.3, t_stat=5.0,
+            pvalue=0.002, ci_lower=0.9, ci_upper=2.1
+        )
+        text = generate_coefficient_interpretation(row, "response")
+        assert "在其他变量保持不变的情况下" in text
+        assert "每增加一个单位" in text
+        assert "平均" in text
+        assert "个单位" in text
+
+
+# =========================================================================
+# Test: generate_assumption_check_text — full branch coverage
+# =========================================================================
+
+class TestAssumptionCheckTextBranches:
+    """Cover every branch in generate_assumption_check_text()."""
+
+    # --- VIF tests ---
+
+    def test_high_vif(self, fitted_result: ModelResult) -> None:
+        """VIF with 'High' diagnosis should report severe multicollinearity."""
+        import pandas as pd
+
+        vif_df = pd.DataFrame({
+            "variable": ["const", "x1", "x2"],
+            "vif": [1.0, 25.0, 30.0],
+            "diagnosis": ["Low", "High", "High"],
+        })
+        text = generate_assumption_check_text(fitted_result, vif_df=vif_df)
+        assert "严重多重共线性" in text
+        assert "x1(VIF=25.00)" in text
+        assert "x2(VIF=30.00)" in text
+
+    def test_moderate_vif(self, fitted_result: ModelResult) -> None:
+        """VIF with 'Moderate' diagnosis (no 'High') should report moderate."""
+        import pandas as pd
+
+        vif_df = pd.DataFrame({
+            "variable": ["const", "x1", "x2"],
+            "vif": [1.0, 5.5, 6.2],
+            "diagnosis": ["Low", "Moderate", "Moderate"],
+        })
+        text = generate_assumption_check_text(fitted_result, vif_df=vif_df)
+        assert "中等程度多重共线性" in text
+        assert "x1(VIF=5.50)" in text
+        assert "x2(VIF=6.20)" in text
+
+    def test_low_vif_all_ok(self, fitted_result: ModelResult) -> None:
+        """All VIF < 5: should report no multicollinearity."""
+        import pandas as pd
+
+        vif_df = pd.DataFrame({
+            "variable": ["const", "x1", "x2", "x3"],
+            "vif": [1.0, 1.2, 2.3, 3.4],
+            "diagnosis": ["Low", "Low", "Low", "Low"],
+        })
+        text = generate_assumption_check_text(fitted_result, vif_df=vif_df)
+        assert "未发现严重的多重共线性" in text
+
+    def test_vif_empty_dataframe(self, fitted_result: ModelResult) -> None:
+        """Empty VIF DataFrame (not None, but .empty) should show no VIF data."""
+        import pandas as pd
+
+        vif_df = pd.DataFrame(columns=["variable", "vif", "diagnosis"])
+        text = generate_assumption_check_text(fitted_result, vif_df=vif_df)
+        assert "未提供VIF数据" in text
+
+    def test_vif_with_const_ignored(self, fitted_result: ModelResult) -> None:
+        """VIF with only const (which is ignored) should be treated as no VIF."""
+        import pandas as pd
+
+        vif_df = pd.DataFrame({
+            "variable": ["const"],
+            "vif": [100.0],
+            "diagnosis": ["High"],
+        })
+        text = generate_assumption_check_text(fitted_result, vif_df=vif_df)
+        # const is ignored, no other vars → no multicollinearity
+        assert "未发现严重的多重共线性" in text
+
+    def test_vif_with_intercept_ignored(self, fitted_result: ModelResult) -> None:
+        """VIF with 'Intercept' (which is ignored) should be treated as no issue."""
+        import pandas as pd
+
+        vif_df = pd.DataFrame({
+            "variable": ["Intercept", "x1"],
+            "vif": [50.0, 1.5],
+            "diagnosis": ["High", "Low"],
+        })
+        text = generate_assumption_check_text(fitted_result, vif_df=vif_df)
+        # Intercept is ignored, x1 is Low
+        assert "未发现严重的多重共线性" in text
+
+    # --- Residual diagnostic tests ---
+
+    def test_shapiro_normal_yes(self, fitted_result: ModelResult) -> None:
+        """Shapiro-Wilk normal: should report approximate normality."""
+        rt = {"shapiro_normal": "Yes"}
+        text = generate_assumption_check_text(fitted_result, residual_tests=rt)
+        assert "近似正态分布" in text
+
+    def test_shapiro_normal_no_with_pvalue(self, fitted_result: ModelResult) -> None:
+        """Shapiro-Wilk not normal with p-value: should report non-normality."""
+        rt = {"shapiro_normal": "No", "shapiro_pvalue": 0.001}
+        text = generate_assumption_check_text(fitted_result, residual_tests=rt)
+        assert "不服从正态分布" in text
+        assert "p=0.0010" in text
+
+    def test_shapiro_normal_no_without_pvalue(self, fitted_result: ModelResult) -> None:
+        """Shapiro-Wilk not normal without p-value: should still report issue."""
+        rt = {"shapiro_normal": "No"}
+        text = generate_assumption_check_text(fitted_result, residual_tests=rt)
+        assert "不服从正态分布" in text
+
+    def test_shapiro_unknown_value(self, fitted_result: ModelResult) -> None:
+        """Unexpected shapiro_normal value: should be directly displayed."""
+        rt = {"shapiro_normal": "Insufficient data"}
+        text = generate_assumption_check_text(fitted_result, residual_tests=rt)
+        assert "残差正态性检查: Insufficient data。" in text
+
+    def test_dw_no_autocorrelation(self, fitted_result: ModelResult) -> None:
+        """DW indicates no autocorrelation."""
+        rt = {
+            "shapiro_normal": "Yes",
+            "dw_autocorrelation": "None",
+            "dw_stat": 2.05,
+        }
+        text = generate_assumption_check_text(fitted_result, residual_tests=rt)
+        assert "无明显自相关" in text
+        assert "2.0500" in text
+
+    def test_dw_positive_autocorrelation(self, fitted_result: ModelResult) -> None:
+        """DW indicates positive autocorrelation."""
+        rt = {
+            "shapiro_normal": "Yes",
+            "dw_autocorrelation": "Positive",
+            "dw_stat": 0.85,
+        }
+        text = generate_assumption_check_text(fitted_result, residual_tests=rt)
+        assert "存在Positive自相关" in text
+        assert "标准误可能被低估" in text
+
+    def test_dw_negative_autocorrelation(self, fitted_result: ModelResult) -> None:
+        """DW indicates negative autocorrelation."""
+        rt = {
+            "shapiro_normal": "Yes",
+            "dw_autocorrelation": "Negative",
+            "dw_stat": 3.2,
+        }
+        text = generate_assumption_check_text(fitted_result, residual_tests=rt)
+        assert "存在Negative自相关" in text
+
+    def test_dw_insufficient_data(self, fitted_result: ModelResult) -> None:
+        """DW with 'Insufficient data' status."""
+        rt = {
+            "dw_autocorrelation": "Insufficient data",
+            "dw_stat": float("nan"),
+        }
+        text = generate_assumption_check_text(fitted_result, residual_tests=rt)
+        assert "数据不足以判断" in text
+
+    def test_combined_vif_and_residual(self, fitted_result: ModelResult) -> None:
+        """Full combination: VIF + normality + DW."""
+        import pandas as pd
+
+        vif_df = pd.DataFrame({
+            "variable": ["const", "x1", "x2"],
+            "vif": [1.0, 1.3, 2.1],
+            "diagnosis": ["Low", "Low", "Low"],
+        })
+        rt = {
+            "shapiro_normal": "Yes",
+            "dw_autocorrelation": "None",
+            "dw_stat": 1.98,
+        }
+        text = generate_assumption_check_text(
+            fitted_result, vif_df=vif_df, residual_tests=rt
+        )
+        assert "未发现严重的多重共线性" in text
+        assert "近似正态分布" in text
+        assert "无明显自相关" in text
