@@ -320,6 +320,8 @@ function clearResults() {
     document.getElementById('no-export-message').classList.remove('hidden');
     document.getElementById('compare-chart-section').classList.add('hidden');
     document.getElementById('visualizations-section').classList.add('hidden');
+    document.getElementById('roc-chart-section').classList.add('hidden');
+    document.getElementById('or-chart-section').classList.add('hidden');
     clearElement('visualizations-grid');
     clearElement('model-compare-list');
 }
@@ -445,10 +447,17 @@ function populateVariableSelectors() {
 function initModelForm() {
     const dvSelect = document.getElementById('dep-var-select');
     const runBtn = document.getElementById('btn-run-regression');
+    const modelTypeSelect = document.getElementById('opt-model-type');
 
     // Enable run button when DV and at least one IV are selected
     dvSelect.addEventListener('change', checkRunButton);
     document.getElementById('indep-var-list').addEventListener('change', checkRunButton);
+
+    // Model type change: show/hide relevant options
+    if (modelTypeSelect) {
+        modelTypeSelect.addEventListener('change', onModelTypeChange);
+        onModelTypeChange(); // Initialize state
+    }
 
     runBtn.addEventListener('click', runRegression);
 
@@ -459,6 +468,18 @@ function initModelForm() {
     document.getElementById('btn-save-model').addEventListener('click', saveModelForComparison);
     document.getElementById('btn-compare-models').addEventListener('click', compareModels);
     document.getElementById('btn-clear-compare').addEventListener('click', clearModelHistory);
+}
+
+function onModelTypeChange() {
+    const modelType = document.getElementById('opt-model-type').value;
+    const isLogit = modelType === 'logit';
+    const covSelect = document.getElementById('opt-cov');
+    // Logit uses MLE, no HC covariance types
+    if (covSelect) {
+        covSelect.disabled = isLogit;
+        if (isLogit) covSelect.value = 'nonrobust';
+    }
+    // Interaction terms are still valid for logit
 }
 
 function checkRunButton() {
@@ -571,6 +592,7 @@ async function runRegression() {
             alpha: parseFloat(document.getElementById('opt-alpha').value),
             cov_type: document.getElementById('opt-cov').value,
             missing_strategy: document.getElementById('opt-missing').value,
+            model_type: document.getElementById('opt-model-type').value,
         };
 
         // Collect transforms and interactions from UI
@@ -607,12 +629,24 @@ async function runRegression() {
         renderResults(result);
 
         // After showing results, compute diagnostics and charts in parallel
-        await Promise.all([
-            computeAndRenderDiagnostics(dataJson, resultJson),
+        const parallelTasks = [
             generateAndRenderCharts(resultJson),
             generateCoefficientChart(resultJson),
-            generateAllScatterCharts(dataJson, result),
-        ]);
+        ];
+
+        // OLS-specific tasks
+        if (result.model_type !== 'logit') {
+            parallelTasks.push(computeAndRenderDiagnostics(dataJson, resultJson));
+            parallelTasks.push(generateAllScatterCharts(dataJson, result));
+        }
+
+        // Logit-specific tasks
+        if (result.model_type === 'logit') {
+            parallelTasks.push(generateROCChart(dataJson, result.dep_var));
+            parallelTasks.push(generateORChart(resultJson));
+        }
+
+        await Promise.all(parallelTasks);
 
     } catch (err) {
         console.error('[Regression] Error:', err);
@@ -652,20 +686,41 @@ function renderResults(result) {
 
 function renderStatsGrid(result) {
     const grid = document.getElementById('model-stats-grid');
-    const stats = [
-        { label: 'R-squared', value: fmtNum(result.r_squared, '.6f') },
-        { label: 'Adj R-squared', value: fmtNum(result.adj_r_squared, '.6f') },
-        { label: 'RMSE', value: fmtNum(result.rmse, '.4f') },
+    const isLogit = result.model_type === 'logit';
+    const stats = [];
+
+    if (isLogit) {
+        stats.push(
+            { label: 'Pseudo R-squared', value: fmtNum(result.pseudo_r_squared, '.6f') },
+            { label: 'Log-Likelihood', value: fmtNum(result.log_likelihood, '.2f') },
+        );
+        if (result.llr != null) {
+            stats.push({
+                label: 'LR chi2',
+                value: `${fmtNum(result.llr, '.4f')} (p=${fmtPvalue(result.llr_pvalue)})`,
+            });
+        }
+    } else {
+        stats.push(
+            { label: 'R-squared', value: fmtNum(result.r_squared, '.6f') },
+            { label: 'Adj R-squared', value: fmtNum(result.adj_r_squared, '.6f') },
+            { label: 'RMSE', value: fmtNum(result.rmse, '.4f') },
+        );
+        if (result.f_statistic) {
+            stats.push({
+                label: 'F-statistic',
+                value: `${fmtNum(result.f_statistic[0], '.4f')} (p=${fmtPvalue(result.f_statistic[1])})`,
+            });
+        }
+    }
+
+    stats.push(
         { label: 'AIC', value: fmtNum(result.aic, '.2f') },
         { label: 'BIC', value: fmtNum(result.bic, '.2f') },
         { label: 'N', value: result.n_obs },
-        { label: 'Log-Likelihood', value: fmtNum(result.log_likelihood, '.2f') },
-    ];
-    if (result.f_statistic) {
-        stats.push({
-            label: 'F-statistic',
-            value: `${fmtNum(result.f_statistic[0], '.4f')} (p=${fmtPvalue(result.f_statistic[1])})`,
-        });
+    );
+    if (!isLogit) {
+        stats.push({ label: 'Log-Likelihood', value: fmtNum(result.log_likelihood, '.2f') });
     }
 
     grid.innerHTML = stats.map(s => `
@@ -677,19 +732,36 @@ function renderStatsGrid(result) {
 }
 
 function renderCoefficientTable(coefs) {
+    const isLogit = STATE.result && STATE.result.model_type === 'logit';
+    const statLabel = isLogit ? 'z-value' : 't-value';
+    const statField = isLogit ? 'z_stat' : 't_stat';
+
+    // Update table header
+    const thead = document.querySelector('#coef-table thead tr');
+    let headerHTML = '<th>Variable</th><th>Coefficient</th><th>Std. Error</th>';
+    headerHTML += `<th>${statLabel}</th>`;
+    if (isLogit) headerHTML += '<th>Odds Ratio</th>';
+    headerHTML += '<th>p-value</th><th>95% CI Low</th><th>95% CI High</th><th>Sig.</th>';
+    thead.innerHTML = headerHTML;
+
     const tbody = document.querySelector('#coef-table tbody');
     tbody.innerHTML = coefs.map(c => {
         const pClass = c.pvalue < 0.05 ? 'p-significant' : (c.pvalue < 0.1 ? 'p-marginal' : '');
-        return `<tr>
+        const statVal = c[statField] != null ? c[statField] : (c.t_stat || 0);
+        let rowHTML = `<tr>
             <td><strong>${escapeHtml(c.name)}</strong></td>
             <td class="numeric">${fmtNum(c.coef, '.6f')}</td>
             <td class="numeric">${fmtNum(c.se, '.6f')}</td>
-            <td class="numeric">${fmtNum(c.t_stat, '.4f')}</td>
-            <td class="numeric ${pClass}">${fmtPvalue(c.pvalue)}</td>
+            <td class="numeric">${fmtNum(statVal, '.4f')}</td>`;
+        if (isLogit) {
+            rowHTML += `<td class="numeric">${fmtNum(c.odds_ratio, '.4f')}</td>`;
+        }
+        rowHTML += `<td class="numeric ${pClass}">${fmtPvalue(c.pvalue)}</td>
             <td class="numeric">${fmtNum(c.ci_lower, '.6f')}</td>
             <td class="numeric">${fmtNum(c.ci_upper, '.6f')}</td>
             <td style="color:var(--color-danger);font-weight:600">${c.significance || ''}</td>
         </tr>`;
+        return rowHTML;
     }).join('');
 
     // Update export table visibility
@@ -715,27 +787,44 @@ function renderAnovaTable(anova) {
 
 function renderSummaryText(result) {
     const el = document.getElementById('summary-text');
+    const isLogit = result.model_type === 'logit';
     let text = '';
-    text += `OLS Regression: ${result.specification || 'Unspecified'}\n\n`;
+    text += `${isLogit ? 'Logit' : 'OLS'} Regression: ${result.specification || 'Unspecified'}\n\n`;
 
-    if (result.f_statistic) {
-        const df1 = result.n_params - 1;
-        const df2 = result.df_resid;
-        const fv = result.f_statistic[0];
-        const fp = result.f_statistic[1];
-        const sigLabel = fp < 0.001 ? '<0.001' : fp < 0.05 ? `<0.05` : fp < 0.1 ? `<0.10` : `>=0.10`;
-        text += `Overall model: F(${df1},${df2}) = ${fv.toFixed(4)}, p ${sigLabel}.\n`;
+    if (isLogit) {
+        // Logit-specific stats
+        text += `Pseudo R-squared = ${result.pseudo_r_squared != null ? result.pseudo_r_squared.toFixed(4) : 'N/A'}.\n`;
+        if (result.llr != null) {
+            const llrP = result.llr_pvalue != null ? result.llr_pvalue : 1;
+            const sigLabel = llrP < 0.001 ? '<0.001' : llrP < 0.05 ? '<0.05' : llrP < 0.1 ? '<0.10' : '>=0.10';
+            text += `Overall model: LR chi2 = ${result.llr.toFixed(4)}, p ${sigLabel}.\n`;
+        }
+    } else {
+        // OLS-specific stats
+        if (result.f_statistic) {
+            const df1 = result.n_params - 1;
+            const df2 = result.df_resid;
+            const fv = result.f_statistic[0];
+            const fp = result.f_statistic[1];
+            const sigLabel = fp < 0.001 ? '<0.001' : fp < 0.05 ? `<0.05` : fp < 0.1 ? `<0.10` : `>=0.10`;
+            text += `Overall model: F(${df1},${df2}) = ${fv.toFixed(4)}, p ${sigLabel}.\n`;
+        }
+        text += `R-squared = ${result.r_squared != null ? result.r_squared.toFixed(4) : 'N/A'}`;
+        if (result.adj_r_squared != null) text += `, Adj R-squared = ${result.adj_r_squared.toFixed(4)}`;
+        text += `.\nRMSE = ${result.rmse != null ? result.rmse.toFixed(4) : 'N/A'}.\n`;
     }
-
-    text += `R-squared = ${result.r_squared != null ? result.r_squared.toFixed(4) : 'N/A'}`;
-    if (result.adj_r_squared != null) text += `, Adj R-squared = ${result.adj_r_squared.toFixed(4)}`;
-    text += `.\nRMSE = ${result.rmse != null ? result.rmse.toFixed(4) : 'N/A'}.\n`;
+    text += `Log-Likelihood = ${result.log_likelihood != null ? result.log_likelihood.toFixed(2) : 'N/A'}.\n`;
     text += `AIC = ${result.aic != null ? result.aic.toFixed(2) : 'N/A'}, BIC = ${result.bic != null ? result.bic.toFixed(2) : 'N/A'}.\n`;
     text += `N = ${result.n_obs}.\n\n`;
 
-    text += 'Coefficients:\n';
+    text += `${isLogit ? 'Logit ' : ''}Coefficients:\n`;
     (result.coefficients || []).forEach(c => {
-        text += `  ${c.name.padEnd(20)} ${c.coef.toFixed(6).padStart(12)} (SE: ${c.se.toFixed(6)}, p=${fmtPvalue(c.pvalue)}) ${c.significance}\n`;
+        const statVal = isLogit ? (c.z_stat != null ? c.z_stat : c.t_stat || 0) : (c.t_stat || 0);
+        let coefLine = `  ${c.name.padEnd(20)} ${c.coef.toFixed(6).padStart(12)} (SE: ${c.se.toFixed(6)}, ${isLogit ? 'z' : 't'}=${statVal.toFixed(4)}, p=${fmtPvalue(c.pvalue)}) ${c.significance}`;
+        if (isLogit && c.odds_ratio != null) {
+            coefLine += ` OR=${c.odds_ratio.toFixed(4)}`;
+        }
+        text += coefLine + '\n';
     });
 
     el.textContent = text;
@@ -1057,6 +1146,63 @@ function renderScatterCharts() {
 }
 
 // =========================================================================
+// Logit-specific Charts: ROC and OR Forest Plot
+// =========================================================================
+
+async function generateROCChart(dataJson, depVar) {
+    try {
+        const pyodide = STATE.pyodide;
+        const chartJson = pyodide.runPython(`
+            generate_roc_chart(${JSON.stringify(dataJson)}, ${JSON.stringify(depVar)})
+        `);
+        const chart = JSON.parse(chartJson);
+        if (chart.success && chart.chart) {
+            STATE.rocChart = chart.chart;
+            STATE.rocAUC = chart.auc;
+            renderROCChart();
+        } else {
+            console.warn('[ROC] Chart generation failed:', chart.error);
+        }
+    } catch (err) {
+        console.error('[ROC] Error:', err);
+    }
+}
+
+async function generateORChart(resultJson) {
+    try {
+        const pyodide = STATE.pyodide;
+        const chartJson = pyodide.runPython(`
+            generate_or_chart(${JSON.stringify(resultJson)})
+        `);
+        const chart = JSON.parse(chartJson);
+        if (chart.success && chart.chart) {
+            STATE.orChart = chart.chart;
+            renderORChart();
+        } else {
+            console.warn('[OR] Chart generation failed:', chart.error);
+        }
+    } catch (err) {
+        console.error('[OR] Error:', err);
+    }
+}
+
+function renderROCChart() {
+    if (!STATE.rocChart) return;
+    const section = document.getElementById('roc-chart-section');
+    section.classList.remove('hidden');
+    const config = { responsive: true, displayModeBar: true, displaylogo: false };
+    Plotly.newPlot('roc-chart', STATE.rocChart.data, STATE.rocChart.layout, config);
+}
+
+function renderORChart() {
+    if (!STATE.orChart) return;
+    const section = document.getElementById('or-chart-section');
+    section.classList.remove('hidden');
+    const config = { responsive: true, displayModeBar: true, displaylogo: false };
+    Plotly.newPlot('or-chart', STATE.orChart.data, STATE.orChart.layout, config);
+}
+
+// =========================================================================
 // Gallery (Pre-computed Scenarios)
 // =========================================================================
 
@@ -1326,15 +1472,31 @@ async function exportFormat(format) {
 }
 
 function generateCSVFromResult(result) {
-    let lines = ['Variable,Coefficient,Std.Err.,t-value,p-value,CI(95%) Low,CI(95%) High,Significance'];
+    const isLogit = result.model_type === 'logit';
+    const statLabel = isLogit ? 'z-value' : 't-value';
+    const statField = isLogit ? 'z_stat' : 't_stat';
+    const orHeader = isLogit ? ',Odds Ratio' : '';
+
+    let lines = [`Variable,Coefficient,Std.Err.,${statLabel}${orHeader},p-value,CI(95%) Low,CI(95%) High,Significance`];
     (result.coefficients || []).forEach(c => {
-        lines.push(`"${c.name}",${c.coef},${c.se},${c.t_stat},${c.pvalue},${c.ci_lower},${c.ci_upper},${c.significance}`);
+        const statVal = c[statField] != null ? c[statField] : (c.t_stat || 0);
+        const orVal = isLogit ? `,${c.odds_ratio || ''}` : '';
+        lines.push(`"${c.name}",${c.coef},${c.se},${statVal}${orVal},${c.pvalue},${c.ci_lower},${c.ci_upper},${c.significance}`);
     });
     lines.push('');
     lines.push('# Model Summary');
-    lines.push(`# R-squared,${result.r_squared}`);
-    lines.push(`# Adj R-squared,${result.adj_r_squared}`);
-    lines.push(`# RMSE,${result.rmse}`);
+    if (isLogit) {
+        lines.push(`# Model Type,Logit`);
+        lines.push(`# Pseudo R-squared,${result.pseudo_r_squared}`);
+        lines.push(`# LR chi2,${result.llr}`);
+        lines.push(`# LR p-value,${result.llr_pvalue}`);
+    } else {
+        lines.push(`# Model Type,OLS`);
+        lines.push(`# R-squared,${result.r_squared}`);
+        lines.push(`# Adj R-squared,${result.adj_r_squared}`);
+        lines.push(`# RMSE,${result.rmse}`);
+    }
+    lines.push(`# Log-Likelihood,${result.log_likelihood}`);
     lines.push(`# AIC,${result.aic}`);
     lines.push(`# BIC,${result.bic}`);
     lines.push(`# N,${result.n_obs}`);

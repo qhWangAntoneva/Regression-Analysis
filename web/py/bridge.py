@@ -233,6 +233,7 @@ def run_regression(data_json: str, spec_json: str) -> str:
     alpha = spec_dict.get("alpha", 0.05)
     cov_type = spec_dict.get("cov_type", "nonrobust")
     missing_strategy = spec_dict.get("missing_strategy", "drop")
+    model_type = spec_dict.get("model_type", "ols").lower()
 
     if not dep_var or not indep_vars:
         return json.dumps({"success": False, "error": "Must specify dep_var and indep_vars."})
@@ -332,21 +333,38 @@ def run_regression(data_json: str, spec_json: str) -> str:
     except Exception as e:
         return json.dumps({"success": False, "error": f"Design matrix error: {e}"})
 
-    # Fit OLS
+    # Fit model (OLS or Logit)
     try:
         import statsmodels.api as sm
-        ols_model = sm.OLS(y, X)
-        if cov_type and cov_type != "nonrobust":
-            fitted = ols_model.fit(cov_type=cov_type)
+        if model_type == "logit":
+            # Logit requires binary response (0/1)
+            y_unique = np.unique(y)
+            if len(y_unique) != 2:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Logit requires a binary dependent variable. "
+                             f"Found {len(y_unique)} unique values in '{dep_var}': {list(y_unique)[:10]}."
+                })
+            logit_model = sm.Logit(y, X)
+            fitted = logit_model.fit(disp=False)
         else:
-            fitted = ols_model.fit()
+            ols_model = sm.OLS(y, X)
+            if cov_type and cov_type != "nonrobust":
+                fitted = ols_model.fit(cov_type=cov_type)
+            else:
+                fitted = ols_model.fit()
     except Exception as e:
-        return json.dumps({"success": False, "error": f"OLS fit error: {e}"})
+        return json.dumps({"success": False, "error": f"Fit error: {e}"})
 
     # Extract results
-    return _extract_model_result(fitted, df_clean, dep_var, indep_vars,
-                                 coef_names, has_intercept, alpha, cov_type,
-                                 transform_map)
+    if model_type == "logit":
+        return _extract_logit_result(fitted, dep_var, indep_vars,
+                                     coef_names, has_intercept, alpha,
+                                     transform_map, df_clean)
+    else:
+        return _extract_model_result(fitted, df_clean, dep_var, indep_vars,
+                                     coef_names, has_intercept, alpha, cov_type,
+                                     transform_map)
 
 
 def _build_design_matrix(
@@ -476,6 +494,101 @@ def _extract_model_result(
         "se_type": cov_type if cov_type else "nonrobust",
         "residuals": residuals,
         "fitted_values": fitted_values,
+        "indep_vars": indep_vars,
+    }
+
+    return json.dumps(result)
+
+
+def _extract_logit_result(
+    fitted,
+    dep_var: str,
+    indep_vars: List[str],
+    coef_names: List[str],
+    has_intercept: bool,
+    alpha: float,
+    transform_map: Dict[str, List[str]],
+    df_clean: pd.DataFrame,
+) -> str:
+    """Extract logit regression results into JSON."""
+    params = np.asarray(fitted.params)
+    bse = np.asarray(fitted.bse)
+    zvalues = np.asarray(fitted.tvalues)  # statsmodels stores z as tvalues for Logit
+    pvalues = np.asarray(fitted.pvalues)
+    conf_int = np.asarray(fitted.conf_int(alpha=alpha))
+
+    coefficients = []
+    for i, name in enumerate(coef_names):
+        pv = float(pvalues[i])
+        coef_val = float(params[i]) if not np.isnan(params[i]) else 0.0
+        coefficients.append({
+            "name": name,
+            "coef": coef_val,
+            "se": float(bse[i]) if not np.isnan(bse[i]) else 0.0,
+            "z_stat": float(zvalues[i]) if not np.isnan(zvalues[i]) else 0.0,
+            "pvalue": pv if not np.isnan(pv) else 1.0,
+            "ci_lower": float(conf_int[i, 0]) if not np.isnan(conf_int[i, 0]) else 0.0,
+            "ci_upper": float(conf_int[i, 1]) if not np.isnan(conf_int[i, 1]) else 0.0,
+            "odds_ratio": float(np.exp(coef_val)) if not np.isnan(coef_val) else 0.0,
+            "or_ci_lower": float(np.exp(conf_int[i, 0])) if not np.isnan(conf_int[i, 0]) else 0.0,
+            "or_ci_upper": float(np.exp(conf_int[i, 1])) if not np.isnan(conf_int[i, 1]) else 0.0,
+            "significance": _significance_stars(pv),
+        })
+
+    n_obs = int(fitted.nobs)
+    n_params = int(fitted.df_model) + (1 if has_intercept else 0)
+    df_resid = int(fitted.df_resid)
+
+    # McFadden's pseudo R-squared
+    ll_model = float(fitted.llf) if hasattr(fitted, "llf") and fitted.llf is not None else 0.0
+    ll_null = float(fitted.llnull) if hasattr(fitted, "llnull") else 0.0
+    pseudo_r_squared = float(1.0 - ll_model / ll_null) if ll_null != 0 else None
+
+    # Likelihood ratio test
+    llr = float(fitted.llr) if hasattr(fitted, "llr") else None
+    llr_pvalue = float(fitted.llr_pvalue) if hasattr(fitted, "llr_pvalue") else None
+
+    log_likelihood = ll_model
+    aic = float(fitted.aic) if hasattr(fitted, "aic") else 0.0
+    bic = float(fitted.bic) if hasattr(fitted, "bic") else 0.0
+
+    # Save residuals and fitted values for diagnostics
+    residuals = fitted.resid_dev.tolist() if hasattr(fitted, "resid_dev") else []
+    fitted_values = fitted.fittedvalues.tolist() if hasattr(fitted, "fittedvalues") else []
+
+    # Model spec string
+    preds_str = " + ".join(indep_vars)
+    spec_str = f"{dep_var} ~ {preds_str}"
+    if not has_intercept:
+        spec_str += " - 1"
+
+    # For logit: store design matrix data for ROC computation
+    # We'll store predicted probabilities separately for efficient ROC generation
+    y_actual = fitted.model.endog.tolist() if hasattr(fitted, "model") else []
+
+    result = {
+        "success": True,
+        "model_type": "logit",
+        "coefficients": coefficients,
+        "n_obs": n_obs,
+        "n_params": n_params,
+        "df_resid": df_resid,
+        "r_squared": None,
+        "adj_r_squared": None,
+        "pseudo_r_squared": pseudo_r_squared,
+        "llr": llr,
+        "llr_pvalue": llr_pvalue,
+        "log_likelihood": log_likelihood,
+        "aic": aic,
+        "bic": bic,
+        "rmse": None,
+        "dep_var": dep_var,
+        "specification": spec_str,
+        "method": "Logit",
+        "se_type": "MLE",
+        "residuals": residuals,
+        "fitted_values": fitted_values,
+        "y_actual": y_actual,
         "indep_vars": indep_vars,
     }
 
@@ -1257,6 +1370,281 @@ def generate_scatter_chart(data_json: str, x_var: str, y_var: str) -> str:
 
 
 # ===========================================================================
+# 6.5. Logit-specific charts: ROC curve and Odds Ratio forest plot
+# ===========================================================================
+
+
+def generate_roc_chart(data_json: str, dep_var: str) -> str:
+    """Generate an ROC curve from data by fitting a simple logit model.
+
+    Uses the entire set of independent variables already defined in the data.
+    Returns a Plotly chart spec JSON.
+
+    Args:
+        data_json: JSON string with 'data' (list of lists) and 'columns'.
+        dep_var: Name of the binary dependent variable.
+
+    Returns:
+        JSON with success and chart (plotly spec).
+    """
+    try:
+        data_dict = json.loads(data_json)
+    except json.JSONDecodeError as e:
+        return json.dumps({"success": False, "error": f"JSON parse error: {e}"})
+
+    # Reconstruct DataFrame
+    try:
+        if "data" in data_dict and isinstance(data_dict["data"], list):
+            rows = data_dict["data"]
+            if len(rows) < 2:
+                return json.dumps({"success": False, "error": "Data has no rows."})
+            headers = rows[0]
+            df = pd.DataFrame(rows[1:], columns=headers)
+            if "columns" in data_dict:
+                for col_info in data_dict["columns"]:
+                    if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
+                        df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
+        else:
+            return json.dumps({"success": False, "error": "Invalid data format."})
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"DataFrame construction error: {e}"})
+
+    if dep_var not in df.columns:
+        return json.dumps({"success": False, "error": f"Variable '{dep_var}' not in data."})
+
+    # Get all numeric independent variables
+    numeric_cols = []
+    for col_info in (data_dict.get("columns") or []):
+        if col_info.get("col_type") == "numeric" and col_info["name"] != dep_var:
+            numeric_cols.append(col_info["name"])
+
+    if not numeric_cols:
+        return json.dumps({"success": False, "error": "No numeric independent variables for ROC computation."})
+
+    # Prepare data for ROC
+    df_roc = df[[dep_var] + numeric_cols].dropna()
+    if len(df_roc) < 5:
+        return json.dumps({"success": False, "error": "Not enough valid observations for ROC (<5)."})
+
+    y = pd.to_numeric(df_roc[dep_var], errors="coerce").values
+    y_unique = np.unique(y)
+    if len(y_unique) != 2:
+        return json.dumps({
+            "success": False,
+            "error": f"ROC requires binary response. Found {len(y_unique)} unique values."
+        })
+
+    # Code y as 0/1
+    y_binary = (y == y_unique[1]).astype(float)
+
+    # Build design matrix from numeric predictors
+    X = df_roc[numeric_cols].astype(float).values
+    X = np.column_stack([np.ones(len(y_binary)), X])  # Add intercept
+
+    # Fit logit and get predicted probabilities
+    import statsmodels.api as sm
+    try:
+        model = sm.Logit(y_binary, X)
+        fitted = model.fit(disp=False)
+        y_pred_prob = fitted.predict()
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"Logit fit error for ROC: {e}"})
+
+    # Compute ROC curve
+    thresholds = np.sort(np.unique(y_pred_prob))[::-1]
+    tpr_list = []
+    fpr_list = []
+
+    for thr in thresholds:
+        y_pred_class = (y_pred_prob >= thr).astype(int)
+        tp = int(np.sum((y_pred_class == 1) & (y_binary == 1)))
+        fp = int(np.sum((y_pred_class == 1) & (y_binary == 0)))
+        fn = int(np.sum((y_pred_class == 0) & (y_binary == 1)))
+        tn = int(np.sum((y_pred_class == 0) & (y_binary == 0)))
+
+        tpr = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        fpr = fp / (fp + tn) if (fp + tn) > 0 else 0.0
+        tpr_list.append(tpr)
+        fpr_list.append(fpr)
+
+    # Compute AUC with trapezoidal rule
+    # Sort by FPR ascending (standard ROC)
+    sorted_pairs = sorted(zip(fpr_list, tpr_list), key=lambda p: p[0])
+    auc = 0.0
+    for i in range(1, len(sorted_pairs)):
+        fpr_prev, tpr_prev = sorted_pairs[i - 1]
+        fpr_curr, tpr_curr = sorted_pairs[i]
+        auc += (fpr_curr - fpr_prev) * (tpr_prev + tpr_curr) / 2.0
+
+    # Build Plotly chart
+    fpr_sorted = [p[0] for p in sorted_pairs]
+    tpr_sorted = [p[1] for p in sorted_pairs]
+
+    traces = [
+        {
+            "type": "scatter",
+            "x": fpr_sorted,
+            "y": tpr_sorted,
+            "mode": "lines",
+            "line": {"color": "steelblue", "width": 2},
+            "name": f"ROC (AUC = {auc:.4f})",
+            "hovertemplate": "FPR: %{x:.4f}<br>TPR: %{y:.4f}<extra></extra>",
+        },
+        {
+            "type": "scatter",
+            "x": [0, 1],
+            "y": [0, 1],
+            "mode": "lines",
+            "line": {"color": "gray", "width": 1.5, "dash": "dash"},
+            "name": "Random Classifier",
+            "showlegend": True,
+            "hoverinfo": "none",
+        },
+    ]
+
+    layout = {
+        "title": {"text": f"ROC Curve (AUC = {auc:.4f})", "x": 0.5},
+        "xaxis": {"title": "False Positive Rate (1 - Specificity)", "range": [0, 1]},
+        "yaxis": {"title": "True Positive Rate (Sensitivity)", "range": [0, 1]},
+        "template": "plotly_white",
+        "height": 400,
+        "showlegend": True,
+        "legend": {"x": 0.6, "y": 0.1},
+    }
+
+    chart_spec = {"data": traces, "layout": layout}
+    return json.dumps({"success": True, "chart": chart_spec, "auc": round(auc, 4)})
+
+
+def generate_or_chart(result_json: str) -> str:
+    """Generate an odds ratio forest plot from logit regression results.
+
+    Args:
+        result_json: JSON string of a logit model result.
+
+    Returns:
+        JSON with success and chart (plotly spec).
+    """
+    try:
+        result = json.loads(result_json)
+    except json.JSONDecodeError as e:
+        return json.dumps({"success": False, "error": f"JSON parse error: {e}"})
+
+    coefficients = result.get("coefficients", [])
+    if not coefficients:
+        return json.dumps({"success": False, "error": "No coefficients."})
+
+    coeffs = [c for c in coefficients if c.get("coef") != 0 or c["name"] == "Intercept"]
+    if not coeffs:
+        return json.dumps({"success": False, "error": "No valid coefficients."})
+
+    # Separate intercept and sort others by OR magnitude
+    intercept = None
+    others = []
+    for c in coeffs:
+        if c["name"] == "Intercept":
+            intercept = c
+        else:
+            others.append(c)
+    others.sort(key=lambda x: abs(x.get("odds_ratio", 1) - 1), reverse=True)
+
+    sorted_coefs = others  # Skip intercept for OR plot
+    if intercept:
+        sorted_coefs = [intercept] + sorted_coefs
+
+    n = len(sorted_coefs)
+    names = [c["name"] for c in sorted_coefs]
+    or_vals = [c.get("odds_ratio", float(np.exp(c["coef"]))) for c in sorted_coefs]
+    or_lows = [c.get("or_ci_lower", float(np.exp(c["ci_lower"]))) for c in sorted_coefs]
+    or_highs = [c.get("or_ci_upper", float(np.exp(c["ci_upper"]))) for c in sorted_coefs]
+
+    # Limit OR range for display
+    max_or = max(max(or_highs), 3.0)
+
+    traces = []
+    for i in range(n):
+        traces.append({
+            "type": "scatter",
+            "x": [or_lows[i], or_highs[i]],
+            "y": [n - 1 - i, n - 1 - i],
+            "mode": "lines",
+            "line": {"color": "#1f77b4", "width": 2},
+            "showlegend": False,
+            "hoverinfo": "none",
+        })
+
+    traces.append({
+        "type": "scatter",
+        "x": or_vals,
+        "y": list(range(n - 1, -1, -1)),
+        "mode": "markers",
+        "marker": {"color": "#1f77b4", "size": 10, "symbol": "circle"},
+        "name": "Odds Ratio",
+        "showlegend": False,
+        "hovertemplate": "OR: %{x:.4f}<br>%{customdata}<extra></extra>",
+        "customdata": [f"OR={v:.4f} 95%CI [{l:.4f}, {h:.4f}] {_significance_stars(c.get('pvalue', 1))}"
+                       for v, l, h, c in zip(or_vals, or_lows, or_highs, sorted_coefs)],
+    })
+
+    # Reference line at OR = 1
+    traces.append({
+        "type": "scatter",
+        "x": [1, 1],
+        "y": [-0.5, n - 0.5],
+        "mode": "lines",
+        "line": {"color": "red", "width": 1.5, "dash": "dash"},
+        "name": "OR = 1",
+        "showlegend": True,
+        "hoverinfo": "none",
+    })
+
+    # Build annotations with OR values on the right side
+    annotations = []
+    for i, (name, or_v, or_l, or_h) in enumerate(zip(names, or_vals, or_lows, or_highs)):
+        stars = _significance_stars(sorted_coefs[i].get("pvalue", 1))
+        annotations.append({
+            "xref": "paper",
+            "yref": "y",
+            "x": 1.02,
+            "y": n - 1 - i,
+            "text": f"OR={or_v:.4f} [{or_l:.4f}, {or_h:.4f}] {stars}",
+            "showarrow": False,
+            "font": {"size": 9, "color": "#333"},
+            "xanchor": "left",
+        })
+
+    layout = {
+        "title": {"text": "Odds Ratio Forest Plot", "x": 0.5},
+        "xaxis": {
+            "title": "Odds Ratio (log scale)",
+            "type": "log",
+            "range": [np.log10(max(0.01, min(min(or_lows) * 0.5, 0.5))), np.log10(max_or * 1.5)],
+            "tickformat": ".4f",
+        },
+        "yaxis": {
+            "tickvals": list(range(n)),
+            "ticktext": list(reversed(names)),
+            "title": "",
+        },
+        "template": "plotly_white",
+        "height": max(300, n * 45 + 60),
+        "margin": {"r": 250},
+        "annotations": annotations
+                     + [{
+                         "xref": "paper", "yref": "paper",
+                         "x": 1, "y": -0.08,
+                         "text": "*** p<0.01, ** p<0.05, * p<0.1",
+                         "showarrow": False,
+                         "font": {"size": 10, "color": "gray"},
+                         "xanchor": "right",
+                     }],
+    }
+
+    chart_spec = {"data": traces, "layout": layout}
+    return json.dumps({"success": True, "chart": chart_spec})
+
+
+# ===========================================================================
 # 7. Export
 # ===========================================================================
 
@@ -1272,24 +1660,44 @@ def export_csv(result_json: str) -> str:
     if not coefficients:
         return json.dumps({"success": False, "error": "No coefficients to export."})
 
-    lines = ["Variable,Coefficient,Std.Err.,t-value,p-value,CI(95%) Low,CI(95%) High,Significance"]
+    is_logit = result.get("model_type", "") == "logit"
+    stat_col = "z-value" if is_logit else "t-value"
+    or_col = ",Odds Ratio" if is_logit else ""
+
+    header = f"Variable,Coefficient,Std.Err.,{stat_col},p-value,CI(95%) Low,CI(95%) High{or_col},Significance"
+    lines = [header]
     for c in coefficients:
+        stat_val = c.get("z_stat", c.get("t_stat", 0))
+        or_val = f',{c.get("odds_ratio", "")}' if is_logit else ""
         lines.append(
-            f'"{c["name"]}",{c["coef"]},{c["se"]},{c["t_stat"]},'
-            f'{c["pvalue"]},{c["ci_lower"]},{c["ci_upper"]},{c["significance"]}'
+            f'"{c["name"]}",{c["coef"]},{c["se"]},{stat_val},'
+            f'{c["pvalue"]},{c["ci_lower"]},{c["ci_upper"]}{or_val},{c["significance"]}'
         )
 
     csv_text = "\n".join(lines)
-    model_info = (
-        f"\n\n# Model Summary\n"
-        f'# R-squared,{result.get("r_squared", "N/A")}\n'
-        f'# Adj R-squared,{result.get("adj_r_squared", "N/A")}\n'
-        f'# RMSE,{result.get("rmse", "N/A")}\n'
-        f'# AIC,{result.get("aic", "N/A")}\n'
-        f'# BIC,{result.get("bic", "N/A")}\n'
-        f'# N,{result.get("n_obs", "N/A")}\n'
-        f'# Specification,"{result.get("specification", "")}"\n'
-    )
+    if is_logit:
+        model_info = (
+            f"\n\n# Model Summary (Logit)\n"
+            f'# Pseudo R-squared,{result.get("pseudo_r_squared", "N/A")}\n'
+            f'# LR chi2,{result.get("llr", "N/A")}\n'
+            f'# LR p-value,{result.get("llr_pvalue", "N/A")}\n'
+            f'# Log-Likelihood,{result.get("log_likelihood", "N/A")}\n'
+            f'# AIC,{result.get("aic", "N/A")}\n'
+            f'# BIC,{result.get("bic", "N/A")}\n'
+            f'# N,{result.get("n_obs", "N/A")}\n'
+            f'# Specification,"{result.get("specification", "")}"\n'
+        )
+    else:
+        model_info = (
+            f"\n\n# Model Summary\n"
+            f'# R-squared,{result.get("r_squared", "N/A")}\n'
+            f'# Adj R-squared,{result.get("adj_r_squared", "N/A")}\n'
+            f'# RMSE,{result.get("rmse", "N/A")}\n'
+            f'# AIC,{result.get("aic", "N/A")}\n'
+            f'# BIC,{result.get("bic", "N/A")}\n'
+            f'# N,{result.get("n_obs", "N/A")}\n'
+            f'# Specification,"{result.get("specification", "")}"\n'
+        )
 
     return json.dumps({"success": True, "csv": csv_text + model_info})
 
@@ -1312,32 +1720,53 @@ def export_excel(result_json: str) -> str:
         ws = wb.active
         ws.title = "Regression Results"
 
+        is_logit = result.get("model_type", "") == "logit"
+
         # Title
-        ws.merge_cells("A1:H1")
-        ws["A1"] = "OLS Regression Results"
+        title_text = "Logit Regression Results" if is_logit else "OLS Regression Results"
+        ws.merge_cells("A1:I1") if is_logit else ws.merge_cells("A1:H1")
+        ws["A1"] = title_text
         ws["A1"].font = Font(bold=True, size=14)
         ws["A1"].alignment = Alignment(horizontal="center")
 
         # Model info
-        info_items = [
-            ("Dependent Variable", result.get("dep_var", "")),
-            ("Specification", result.get("specification", "")),
-            ("N", result.get("n_obs", "")),
-            ("R-squared", result.get("r_squared", "")),
-            ("Adj R-squared", result.get("adj_r_squared", "")),
-            ("RMSE", result.get("rmse", "")),
-            ("AIC", result.get("aic", "")),
-            ("BIC", result.get("bic", "")),
-            ("F-statistic", f'{result["f_statistic"][0] if result.get("f_statistic") else "N/A"}'),
-        ]
+        if is_logit:
+            info_items = [
+                ("Dependent Variable", result.get("dep_var", "")),
+                ("Specification", result.get("specification", "")),
+                ("Method", "Logit (MLE)"),
+                ("N", result.get("n_obs", "")),
+                ("Pseudo R-squared", result.get("pseudo_r_squared", "")),
+                ("LR chi2", result.get("llr", "")),
+                ("LR p-value", result.get("llr_pvalue", "")),
+                ("Log-Likelihood", result.get("log_likelihood", "")),
+                ("AIC", result.get("aic", "")),
+                ("BIC", result.get("bic", "")),
+            ]
+        else:
+            info_items = [
+                ("Dependent Variable", result.get("dep_var", "")),
+                ("Specification", result.get("specification", "")),
+                ("N", result.get("n_obs", "")),
+                ("R-squared", result.get("r_squared", "")),
+                ("Adj R-squared", result.get("adj_r_squared", "")),
+                ("RMSE", result.get("rmse", "")),
+                ("AIC", result.get("aic", "")),
+                ("BIC", result.get("bic", "")),
+                ("F-statistic", f'{result["f_statistic"][0] if result.get("f_statistic") else "N/A"}'),
+            ]
         for i, (label, value) in enumerate(info_items, start=3):
             ws.cell(row=i, column=1, value=label).font = Font(bold=True)
             ws.cell(row=i, column=2, value=value)
 
         # Coefficient table header
         start_row = len(info_items) + 5
-        headers = ["Variable", "Coefficient", "Std. Error", "t-value",
-                   "p-value", "CI Low (95%)", "CI High (95%)", "Significance"]
+        if is_logit:
+            headers = ["Variable", "Coefficient", "Std. Error", "z-value",
+                       "Odds Ratio", "p-value", "CI Low (95%)", "CI High (95%)", "Significance"]
+        else:
+            headers = ["Variable", "Coefficient", "Std. Error", "t-value",
+                       "p-value", "CI Low (95%)", "CI High (95%)", "Significance"]
         header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
         header_font = Font(bold=True, color="FFFFFF")
 
@@ -1348,28 +1777,45 @@ def export_excel(result_json: str) -> str:
             cell.alignment = Alignment(horizontal="center")
 
         # Coefficient rows
+        n_columns = len(headers)
         for i, c in enumerate(result.get("coefficients", [])):
             row = start_row + 1 + i
-            ws.cell(row=row, column=1, value=c["name"])
-            ws.cell(row=row, column=2, value=round(c["coef"], 6))
-            ws.cell(row=row, column=3, value=round(c["se"], 6))
-            ws.cell(row=row, column=4, value=round(c["t_stat"], 4))
-            ws.cell(row=row, column=5, value=c["pvalue"])
-            ws.cell(row=row, column=6, value=round(c["ci_lower"], 6))
-            ws.cell(row=row, column=7, value=round(c["ci_upper"], 6))
-            ws.cell(row=row, column=8, value=c["significance"])
+            stat_val = c.get("z_stat", c.get("t_stat", 0))
+            if is_logit:
+                ws.cell(row=row, column=1, value=c["name"])
+                ws.cell(row=row, column=2, value=round(c["coef"], 6))
+                ws.cell(row=row, column=3, value=round(c["se"], 6))
+                ws.cell(row=row, column=4, value=round(stat_val, 4))
+                ws.cell(row=row, column=5, value=round(c.get("odds_ratio", 0), 6))
+                ws.cell(row=row, column=6, value=c["pvalue"])
+                ws.cell(row=row, column=7, value=round(c["ci_lower"], 6))
+                ws.cell(row=row, column=8, value=round(c["ci_upper"], 6))
+                ws.cell(row=row, column=9, value=c["significance"])
+            else:
+                ws.cell(row=row, column=1, value=c["name"])
+                ws.cell(row=row, column=2, value=round(c["coef"], 6))
+                ws.cell(row=row, column=3, value=round(c["se"], 6))
+                ws.cell(row=row, column=4, value=round(stat_val, 4))
+                ws.cell(row=row, column=5, value=c["pvalue"])
+                ws.cell(row=row, column=6, value=round(c["ci_lower"], 6))
+                ws.cell(row=row, column=7, value=round(c["ci_upper"], 6))
+                ws.cell(row=row, column=8, value=c["significance"])
 
             # Highlight significant rows
             if c.get("pvalue", 1) < 0.05:
-                for j in range(1, 9):
+                for j in range(1, n_columns + 1):
                     ws.cell(row=row, column=j).fill = PatternFill(
                         start_color="E2EFDA", end_color="E2EFDA", fill_type="solid"
                     )
 
         # Column widths
         ws.column_dimensions["A"].width = 20
-        for col in "BCDEFGH":
-            ws.column_dimensions[col].width = 16
+        if is_logit:
+            for col in "BCDEFGHI":
+                ws.column_dimensions[col].width = 16
+        else:
+            for col in "BCDEFGH":
+                ws.column_dimensions[col].width = 16
 
         buf = io.BytesIO()
         wb.save(buf)
