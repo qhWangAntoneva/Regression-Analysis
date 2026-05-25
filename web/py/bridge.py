@@ -332,23 +332,24 @@ def _extract_model_result(
     transform_map: Dict[str, List[str]],
 ) -> str:
     """Extract ModelResult from fitted statsmodels OLS and return JSON."""
-    params = fitted.params
-    bse = fitted.bse
-    tvalues = fitted.tvalues
-    pvalues = fitted.pvalues
-    conf_int = fitted.conf_int(alpha=alpha)
+    params = np.asarray(fitted.params)
+    bse = np.asarray(fitted.bse)
+    tvalues = np.asarray(fitted.tvalues)
+    pvalues = np.asarray(fitted.pvalues)
+    conf_int = np.asarray(fitted.conf_int(alpha=alpha))
 
     coefficients = []
     for i, name in enumerate(coef_names):
+        pv = float(pvalues[i])
         coefficients.append({
             "name": name,
-            "coef": float(params.iloc[i]) if not np.isnan(params.iloc[i]) else 0.0,
-            "se": float(bse.iloc[i]) if not np.isnan(bse.iloc[i]) else 0.0,
-            "t_stat": float(tvalues.iloc[i]) if not np.isnan(tvalues.iloc[i]) else 0.0,
-            "pvalue": float(pvalues.iloc[i]) if not np.isnan(pvalues.iloc[i]) else 1.0,
-            "ci_lower": float(conf_int.iloc[i, 0]) if not np.isnan(conf_int.iloc[i, 0]) else 0.0,
-            "ci_upper": float(conf_int.iloc[i, 1]) if not np.isnan(conf_int.iloc[i, 1]) else 0.0,
-            "significance": _significance_stars(float(pvalues.iloc[i])),
+            "coef": float(params[i]) if not np.isnan(params[i]) else 0.0,
+            "se": float(bse[i]) if not np.isnan(bse[i]) else 0.0,
+            "t_stat": float(tvalues[i]) if not np.isnan(tvalues[i]) else 0.0,
+            "pvalue": pv if not np.isnan(pv) else 1.0,
+            "ci_lower": float(conf_int[i, 0]) if not np.isnan(conf_int[i, 0]) else 0.0,
+            "ci_upper": float(conf_int[i, 1]) if not np.isnan(conf_int[i, 1]) else 0.0,
+            "significance": _significance_stars(pv),
         })
 
     n_obs = int(fitted.nobs)
