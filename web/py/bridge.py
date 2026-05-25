@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -184,6 +185,60 @@ def _safe_value(v: Any) -> Any:
 # ===========================================================================
 
 
+def _validate_columns_metadata(columns_meta: Any, df: pd.DataFrame) -> bool:
+    """Validate that columns metadata is a non-empty list with required fields.
+
+    Checks that each entry has 'name' and 'col_type' fields, and that the
+    names match actual DataFrame column names.
+
+    Args:
+        columns_meta: The columns metadata list (or None/missing).
+        df: The DataFrame to validate against.
+
+    Returns:
+        True if metadata is valid and usable for dtype restoration.
+    """
+    if not isinstance(columns_meta, list) or len(columns_meta) == 0:
+        return False
+    df_cols = set(df.columns)
+    for entry in columns_meta:
+        if not isinstance(entry, dict):
+            return False
+        if "name" not in entry or "col_type" not in entry:
+            return False
+        if entry["name"] not in df_cols:
+            return False
+    return True
+
+
+def _infer_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert columns that appear to be numeric from object/string dtype.
+
+    For each column, attempts pd.to_numeric coercion. If all original
+    non-null values successfully convert to numbers (no new NaN introduced),
+    the column is replaced with the numeric version.
+
+    Args:
+        df: DataFrame potentially with object-dtype columns.
+
+    Returns:
+        The same DataFrame with numeric columns converted in-place.
+    """
+    for col in df.columns:
+        col_series = df[col]
+        nonnull_mask = col_series.notna()
+        if nonnull_mask.sum() == 0:
+            continue
+        try:
+            converted = pd.to_numeric(col_series, errors="coerce")
+        except Exception:
+            continue
+        # Only convert if no original non-null values became NaN
+        if (nonnull_mask & converted.isna()).sum() == 0:
+            df[col] = converted
+    return df
+
+
 def run_regression(data_json: str, spec_json: str) -> str:
     """Run an OLS regression.
 
@@ -216,10 +271,13 @@ def run_regression(data_json: str, spec_json: str) -> str:
             headers = rows[0]
             df = pd.DataFrame(rows[1:], columns=headers)
             # Convert numeric columns back from object dtype (JSON round-trip)
-            if "columns" in data_dict:
+            if _validate_columns_metadata(data_dict.get("columns"), df):
                 for col_info in data_dict["columns"]:
                     if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
                         df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
+            else:
+                print("[bridge] columns metadata missing or invalid, using dtype inference fallback", file=sys.stderr)
+                df = _infer_numeric_columns(df)
         elif "columns" in data_dict and "rows" in data_dict:
             df = pd.DataFrame(data_dict["rows"], columns=data_dict["columns"])
         else:
@@ -709,10 +767,13 @@ def _compute_vif(data_json: str, result: dict) -> Optional[List[dict]]:
                 return None
             df = pd.DataFrame(rows[1:], columns=rows[0])
             # Convert numeric columns back from object dtype (JSON round-trip)
-            if "columns" in data_dict:
+            if _validate_columns_metadata(data_dict.get("columns"), df):
                 for col_info in data_dict["columns"]:
                     if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
                         df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
+            else:
+                print("[bridge] columns metadata missing or invalid, using dtype inference fallback", file=sys.stderr)
+                df = _infer_numeric_columns(df)
         else:
             return None
     except Exception:
@@ -1301,10 +1362,13 @@ def generate_scatter_chart(data_json: str, x_var: str, y_var: str) -> str:
                 return json.dumps({"success": False, "error": "Data has no rows."})
             headers = rows[0]
             df = pd.DataFrame(rows[1:], columns=headers)
-            if "columns" in data_dict:
+            if _validate_columns_metadata(data_dict.get("columns"), df):
                 for col_info in data_dict["columns"]:
                     if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
                         df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
+            else:
+                print("[bridge] columns metadata missing or invalid, using dtype inference fallback", file=sys.stderr)
+                df = _infer_numeric_columns(df)
         else:
             return json.dumps({"success": False, "error": "Invalid data format."})
     except Exception as e:
@@ -1451,10 +1515,13 @@ def generate_roc_chart(data_json: str, dep_var: str) -> str:
                 return json.dumps({"success": False, "error": "Data has no rows."})
             headers = rows[0]
             df = pd.DataFrame(rows[1:], columns=headers)
-            if "columns" in data_dict:
+            if _validate_columns_metadata(data_dict.get("columns"), df):
                 for col_info in data_dict["columns"]:
                     if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
                         df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
+            else:
+                print("[bridge] columns metadata missing or invalid, using dtype inference fallback", file=sys.stderr)
+                df = _infer_numeric_columns(df)
         else:
             return json.dumps({"success": False, "error": "Invalid data format."})
     except Exception as e:
