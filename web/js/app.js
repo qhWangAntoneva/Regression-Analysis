@@ -693,7 +693,7 @@ function renderResults(result) {
     renderStatsGrid(result);
 
     // Coefficient table
-    renderCoefficientTable(result.coefficients || []);
+    renderCoefficientTable(result.coefficients || [], result.variable_labels || {});
 
     // ANOVA table (if diagnostics available)
     if (STATE.diagnostics && STATE.diagnostics.anova) {
@@ -751,7 +751,8 @@ function renderStatsGrid(result) {
     `).join('');
 }
 
-function renderCoefficientTable(coefs) {
+function renderCoefficientTable(coefs, variableLabels) {
+    variableLabels = variableLabels || {};
     const isLogit = STATE.result && STATE.result.model_type === 'logit';
     const statLabel = isLogit ? 'z-value' : 't-value';
     const statField = isLogit ? 'z_stat' : 't_stat';
@@ -768,8 +769,9 @@ function renderCoefficientTable(coefs) {
     tbody.innerHTML = coefs.map(c => {
         const pClass = c.pvalue < 0.05 ? 'p-significant' : (c.pvalue < 0.1 ? 'p-marginal' : '');
         const statVal = c[statField] != null ? c[statField] : (c.t_stat || 0);
+        const displayName = variableLabels[c.name] || c.name;
         let rowHTML = `<tr>
-            <td><strong>${escapeHtml(c.name)}</strong></td>
+            <td><strong>${escapeHtml(displayName)}</strong></td>
             <td class="numeric">${fmtNum(c.coef, '.6f')}</td>
             <td class="numeric">${fmtNum(c.se, '.6f')}</td>
             <td class="numeric">${fmtNum(statVal, '.4f')}</td>`;
