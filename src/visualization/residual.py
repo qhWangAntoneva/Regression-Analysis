@@ -242,6 +242,11 @@ def _approx_norm_ppf(q: np.ndarray) -> np.ndarray:
     """正态分布分位函数的近似计算。
 
     使用 Abramowitz and Stegun 公式 26.2.23 的近似。
+    该公式计算逆互补累积分布函数，即给定尾部概率 p，
+    返回 z 使得 P(Z > z) = p。因此需要将概率 q 映射为
+    尾部概率并正确处理符号：
+      - q <= 0.5: 尾部概率 = q，结果为负值（左尾）
+      - q > 0.5:  尾部概率 = 1-q，结果为正值（右尾）
 
     Args:
         q: 概率值数组。
@@ -253,13 +258,18 @@ def _approx_norm_ppf(q: np.ndarray) -> np.ndarray:
     # 限制范围避免极端值
     p = np.clip(p, 1e-15, 1 - 1e-15)
 
-    # Abramowitz and Stegun 近似
-    t = np.sqrt(-2 * np.log(p))
+    # A&S 26.2.23 公式使用尾部概率 min(p, 1-p)
+    tail = np.where(p <= 0.5, p, 1.0 - p)
+    t = np.sqrt(-2.0 * np.log(tail))
+
     c0, c1, c2 = 2.515517, 0.802853, 0.010328
     d1, d2, d3 = 1.432788, 0.189269, 0.001308
-    result = t - (c0 + c1 * t + c2 * t**2) / (1 + d1 * t + d2 * t**2 + d3 * t**3)
+    numerator = c0 + c1 * t + c2 * t**2
+    denominator = 1.0 + d1 * t + d2 * t**2 + d3 * t**3
+    z = t - numerator / denominator
 
-    return result
+    # q <= 0.5 时结果为负值（左尾），q > 0.5 时为正值（右尾）
+    return np.where(p <= 0.5, -z, z)
 
 
 # ---------------------------------------------------------------------------

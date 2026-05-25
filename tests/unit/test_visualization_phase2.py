@@ -454,3 +454,112 @@ class TestErrorHandling:
 
         with pytest.raises((ValueError, AttributeError)):
             cooks_distance_plot(None, sample_data)  # type: ignore[arg-type]
+
+
+# =========================================================================
+# Test: _norm_ppf / _approx_norm_ppf fallback approximation
+# =========================================================================
+
+
+class TestNormPpfApproximation:
+    """Test _norm_ppf and _approx_norm_ppf function accuracy.
+
+    The A&S 26.2.23 formula approximates the inverse complementary CDF.
+    The original code fed the quantile probability directly into the
+    formula without converting to tail probability or handling sign,
+    producing errors up to 4.65 for quantiles above the median.
+    The fix corrects both the tail-probability mapping and sign handling.
+    """
+
+    def test_norm_ppf_uses_scipy_when_available(self) -> None:
+        """When scipy is available, _norm_ppf should delegate to scipy's norm.ppf."""
+        from scipy.stats import norm
+
+        from src.visualization.residual import _norm_ppf
+
+        q = np.array([0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99])
+        result = _norm_ppf(q)
+        expected = norm.ppf(q)
+        np.testing.assert_allclose(result, expected, atol=1e-12)
+
+    def test_approx_norm_ppf_accuracy(self) -> None:
+        """_approx_norm_ppf should approximate norm.ppf within 0.01 max abs error.
+
+        Tests 101 evenly spaced quantiles across [0.01, 0.99].
+        """
+        from scipy.stats import norm
+
+        from src.visualization.residual import _approx_norm_ppf
+
+        qs = np.linspace(0.01, 0.99, 101)
+        approx = _approx_norm_ppf(qs)
+        true = norm.ppf(qs)
+
+        max_err = np.max(np.abs(approx - true))
+        assert max_err < 0.01, (
+            f"Max absolute error {max_err:.6f} exceeds 0.01 threshold"
+        )
+
+    def test_approx_norm_ppf_symmetry(self) -> None:
+        """_approx_norm_ppf should be antisymmetric: ppf(q) = -ppf(1-q)."""
+        from src.visualization.residual import _approx_norm_ppf
+
+        qs = np.array([0.01, 0.05, 0.1, 0.2, 0.3, 0.4])
+        lower = _approx_norm_ppf(qs)
+        upper = _approx_norm_ppf(1.0 - qs)
+        np.testing.assert_allclose(lower, -upper, atol=1e-6)
+
+    def test_approx_norm_ppf_median_is_zero(self) -> None:
+        """ppf(0.5) should be approximately 0 (within floating-point tolerance)."""
+        from src.visualization.residual import _approx_norm_ppf
+
+        result = _approx_norm_ppf(np.array([0.5]))
+        # A&S approximation at exactly 0.5 gives ~1e-7 (not exact zero),
+        # which is well within acceptable floating-point tolerance
+        assert abs(result[0]) < 1e-6
+
+    def test_qq_plot_produces_symmetric_theoretical_quantiles(self) -> None:
+        """QQ plot theoretical quantiles should be symmetric for symmetric sample.
+
+        Verifies that the full _norm_ppf -> qq_plot pipeline produces
+        correctly signed theoretical quantiles (was the root cause of
+        the _norm_ppf bug — see HANDOVER.md).
+        """
+        if not PLOTLY_AVAILABLE:
+            pytest.skip("plotly 未安装")
+
+        from src.visualization.residual import qq_plot
+
+        rng = np.random.default_rng(42)
+        residuals = rng.normal(0, 1, 100)
+        fig = qq_plot(residuals)
+
+        scatter = fig.data[0]
+        theoretical = np.asarray(scatter.x)
+
+        # With the fix, theoretical quantiles should be approximately
+        # antisymmetric: mid <=> negative tail, high <=> positive tail
+        assert theoretical[0] < -2.0, (
+            "Lowest theoretical quantile should be negative (left tail)"
+        )
+        assert theoretical[-1] > 2.0, (
+            "Highest theoretical quantile should be positive (right tail)"
+        )
+        assert theoretical[49] < 0 < theoretical[50], (
+            "Median quantiles should bracket zero"
+        )
+
+    def test_approx_norm_ppf_error_bounds_near_median(self) -> None:
+        """Approximation error should be small near the median (q in [0.25, 0.75])."""
+        from scipy.stats import norm
+
+        from src.visualization.residual import _approx_norm_ppf
+
+        qs = np.linspace(0.25, 0.75, 51)
+        approx = _approx_norm_ppf(qs)
+        true = norm.ppf(qs)
+
+        max_err = np.max(np.abs(approx - true))
+        assert max_err < 0.001, (
+            f"Max error near median {max_err:.6f} exceeds 0.001"
+        )
