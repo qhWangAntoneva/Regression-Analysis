@@ -27,6 +27,7 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
 
     Returns:
         A dictionary of configuration values:
+            - ``'model_type'``: str, ``'ols'`` or ``'logit'``.
             - ``'add_constant'``: bool, whether to include an intercept.
             - ``'ci_level'``: float, confidence interval level (0.90/0.95/0.99).
             - ``'se_type'``: str, either ``'classic'`` or ``'robust_hc1'``.
@@ -34,11 +35,25 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
     """
     if st is None:
         return {
+            "model_type": "ols",
             "add_constant": True,
             "ci_level": 0.95,
             "se_type": "nonrobust",
             "missing_handling": "drop",
         }
+
+    # --- Model type selector (always visible) ---
+    model_type_label = st.selectbox(
+        "模型类型",
+        options=["OLS", "Logit"],
+        index=0,
+        key=f"{key_prefix}_model_type",
+        help=(
+            "OLS 适用于连续因变量，Logit 适用于二分类因变量 (0/1)。\n\n"
+            "注意：Logit 模型不支持 F 检验，将使用似然比检验 (LR) 替代。"
+        ),
+    )
+    is_logit = model_type_label == "Logit"
 
     with st.expander("高级选项", expanded=False):
         col_a, col_b = st.columns(2)
