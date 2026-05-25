@@ -3,8 +3,8 @@
 > 最后更新: 2026-05-25
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 分支: master
-> 当前提交: fdc7640 (fix: critical dtype loss + 4 regressions)
-> 上次交接: 7659641 (v1.0.0 Phase 4 完成)
+> 当前提交: 1fcaccf (feat: web features — transforms, interactions, comparison, scatter, .xls)
+> 上次交接: ac80cdd (Phase 4.5 完成)
 > 部署: https://qhwangantoneva.github.io/regression-analysis/
 
 ---
@@ -19,7 +19,8 @@
 | Phase 3.5 (Sample Gallery) | 完成 | +31 tests |
 | Phase 4 (v1.0) | 完成 | — |
 | **Phase 4.5 (Web + 测试补充 + Bug修复)** | **完成** | **397 tests** |
-| **合计** | — | **397 tests** |
+| **Phase 5.0 (Web 功能补齐 + 覆盖率 + _norm_ppf)** | **完成** | **471 tests** |
+| **合计** | — | **471 tests** |
 
 ### Phase 4.5 进度 (2026-05-25 本 session)
 
@@ -29,6 +30,16 @@
 | 测试补充 | 完成 | +88 tests (sample_data 0%→100%, scatter 0%→78%, diagnostics 75%→96%) |
 | Code Review | 完成 | 5-angle 深度审查，15 findings |
 | Bug 修复 | 完成 | 5 bugs 修复 (1 critical + 2 high + 2 medium) |
+
+### Phase 5.0 进度 (2026-05-25 本 session)
+
+| 子阶段 | 状态 | 说明 |
+|--------|------|------|
+| Web 功能补齐 | 完成 | 多模型对比图 + 变量转换 UI + 交互项 UI + scatter + .xls 支持 |
+| 测试覆盖率提升 | 完成 | +68 tests (summary_generator 69%→95%, statistics 77%→92%) |
+| _norm_ppf 修复 | 完成 | A&S 26.2.23 尾概率映射 + 符号处理 + 6 tests |
+| Code Review | 完成 | 6 findings (已修复 4: pd.to_numeric 防御, dead code, 重复 history) |
+| 部署 | 完成 | GitHub Pages 已更新 |
 
 ---
 
@@ -296,8 +307,8 @@ e8a707d fix: deploy.sh URL + __pycache__
 
 ## 下个 Session 建议
 
-1. **Web 版功能补齐**: 多模型对比图、变量转换 UI、交互项 UI、scatter_with_regression 集成
-2. **遗留低覆盖率模块**: summary_generator.py (69%), statistics.py (77%)
-3. **xls 格式支持**: bridge.py 目前仅用 openpyxl，不支持旧 .xls (需 xlrd)
-4. **_norm_ppf 休眠 bug**: Q-Q plot 近似公式错误（仅 scipy 缺失时触发，非紧急）
-5. **重新部署**: 修完 bug 后需重新运行 `bash web/deploy.sh` 更新线上版本
+1. **Web 版深度打磨**: Gallery 模式下载 CSV 降级提示、scatter chart 支持 Gallery 场景、交互项名称的 `_x_` 启发式改为显式跟踪
+2. **CI 缺失兜底**: compare_models 中 coefficient 缺少 CI 时跳过 whisker（而非画在 0 处）
+3. **Stata/SPSS 导入**: 支持 .dta/.sav 格式上传
+4. **Docker 部署**: 容器化 Streamlit 版本
+5. **v1.1 规划功能**: 逻辑回归、多层次模型、面板数据 (详见 TODO.md)
