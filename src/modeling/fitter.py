@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 from src.modeling.engines.statsmodels_engine import run_ols
+from src.modeling.engines.statsmodels_logit_engine import extract_logit, run_logit
 from src.modeling.specification import ModelSpec
 from src.modeling.transforms import VariableTransformer
 from src.results.table import ModelResult
@@ -20,9 +21,8 @@ from src.results.table import ModelResult
 class ModelFitter:
     """Dispatcher for fitting regression models.
 
-    Currently supports only OLS. The ``fit()`` method routes to the
-    appropriate engine based on the model type stored in the spec
-    (defaults to OLS).
+    Supports OLS and logit regression. The ``fit()`` method routes to the
+    appropriate engine based on ``spec.model_type`` (defaults to ``'ols'``).
 
     Usage::
 
@@ -106,11 +106,36 @@ class ModelFitter:
             transforms=dict(spec.transforms),
             interaction_terms=fit_interactions,
             missing_strategy=spec.missing_strategy,
+            model_type=spec.model_type,
         )
 
-        result = run_ols(
-            working_data, fit_spec, alpha=alpha, cov_type=cov_type
-        )
+        # Dispatch to the appropriate engine based on model type
+        # Build specification string
+        preds_str = " + ".join(fit_spec.all_predictors)
+        if spec.transforms:
+            transform_parts = [f"{t}({v})" for v, t in spec.transforms.items()]
+            preds_str += "  [" + ", ".join(transform_parts) + "]"
+        if spec.interaction_terms:
+            inter_parts = [f"{v1}:{v2}" for v1, v2 in spec.interaction_terms]
+            preds_str += "  {" + ", ".join(inter_parts) + "}"
+        spec_str = f"{spec.dep_var} ~ {preds_str}"
+        if not spec.has_intercept:
+            spec_str += " - 1 (no intercept)"
+        if cov_type and cov_type != "nonrobust":
+            spec_str += f"  [SE: {cov_type}]"
+
+        if spec.model_type == "logit":
+            fitted = run_logit(working_data, fit_spec)
+            result = extract_logit(
+                fitted_model=fitted,
+                alpha=alpha,
+                dep_var=spec.dep_var,
+                specification=spec_str,
+            )
+        else:
+            result = run_ols(
+                working_data, fit_spec, alpha=alpha, cov_type=cov_type
+            )
 
         # Copy metadata fields back from the fit_spec's result
         result.transforms_applied = dict(spec.transforms)

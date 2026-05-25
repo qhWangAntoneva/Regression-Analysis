@@ -621,3 +621,60 @@ class TestFitterMetadata:
         assert result.se_type == "HC0"
         assert result.r_squared is not None
         assert result.r_squared > 0
+
+
+# =========================================================================
+# Test: Logit dispatch via ModelFitter (Phase 5.1)
+# =========================================================================
+class TestFitterLogitDispatch:
+    """ModelFitter dispatching to logit engine."""
+
+    @pytest.fixture
+    def binary_data(self) -> pd.DataFrame:
+        """Synthetic binary outcome data for logit."""
+        rng = np.random.default_rng(42)
+        n = 200
+        x1 = rng.normal(0, 1, n)
+        x2 = rng.normal(0, 1, n)
+        eta = 0.5 + 1.0 * x1 - 0.8 * x2
+        prob = 1.0 / (1.0 + np.exp(-eta))
+        y = (rng.random(n) < prob).astype(int)
+        return pd.DataFrame({"y": y, "x1": x1, "x2": x2})
+
+    def test_fitter_logit_basic(self, binary_data: pd.DataFrame) -> None:
+        """Fitter dispatches to logit engine when model_type='logit'."""
+        spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
+        fitter = ModelFitter()
+        result = fitter.fit(spec, binary_data)
+
+        assert result.model_type == "logit"
+        assert result.pseudo_r_squared is not None
+        assert 0 <= result.pseudo_r_squared <= 1
+        assert result.r_squared is None
+        assert result.f_statistic is None
+        assert result.rmse is None
+
+    def test_fitter_logit_with_controls(self, binary_data: pd.DataFrame) -> None:
+        """Logit via fitter with control variables."""
+        binary_data["x3"] = np.random.default_rng(77).normal(0, 1, len(binary_data))
+        spec = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "x2"],
+            control_vars=["x3"],
+            model_type="logit",
+        )
+        fitter = ModelFitter()
+        result = fitter.fit(spec, binary_data)
+
+        assert result.model_type == "logit"
+        assert len(result.coefficients) == 4  # Intercept + x1 + x2 + x3
+
+    def test_fitter_ols_still_default(self, sample_data: pd.DataFrame) -> None:
+        """Without model_type, fitter should default to OLS."""
+        spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"])
+        fitter = ModelFitter()
+        result = fitter.fit(spec, sample_data)
+
+        assert result.model_type == "OLS"
+        assert result.r_squared is not None
+        assert result.rmse is not None

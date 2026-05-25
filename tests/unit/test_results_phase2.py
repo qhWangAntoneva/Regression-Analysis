@@ -974,3 +974,78 @@ class TestAssumptionCheckTextBranches:
         assert "未发现严重的多重共线性" in text
         assert "近似正态分布" in text
         assert "无明显自相关" in text
+
+
+# =========================================================================
+# Test: ModelResult with model_type="logit" (Phase 5.1)
+# =========================================================================
+class TestModelResultLogit:
+    """ModelResult behaviour when model_type is 'logit'."""
+
+    @pytest.fixture
+    def logit_result(self) -> ModelResult:
+        """Build a representative logit ModelResult."""
+        return ModelResult(
+            model_type="logit",
+            coefficients=[
+                CoefficientRow(
+                    name="Intercept", coef=-0.5, se=0.3, t_stat=-1.67,
+                    pvalue=0.095, ci_lower=-1.1, ci_upper=0.1
+                ),
+                CoefficientRow(
+                    name="x1", coef=1.2, se=0.4, t_stat=3.0,
+                    pvalue=0.003, ci_lower=0.4, ci_upper=2.0
+                ),
+            ],
+            n_obs=200,
+            n_params=2,
+            df_resid=198,
+            pseudo_r_squared=0.15,
+            log_likelihood=-120.0,
+            aic=244.0,
+            bic=250.0,
+            llr=25.0,
+            llr_pvalue=0.0001,
+            dep_var="y_bin",
+            method="Logit",
+        )
+
+    def test_logit_summary_dict(self, logit_result: ModelResult) -> None:
+        """to_summary_dict() for logit should have logit-specific fields."""
+        d = logit_result.to_summary_dict()
+
+        assert d["model_type"] == "logit"
+        assert d["pseudo_r_squared"] == 0.15
+        assert d["r_squared"] is None
+        assert d["rmse"] is None
+        assert d["f_statistic"] is None
+        assert d["f_pvalue"] is None
+        assert d["llr"] == 25.0
+        assert d["llr_pvalue"] == 0.0001
+
+    def test_logit_to_latex_row(self, logit_result: ModelResult) -> None:
+        """Logit to_latex_row() uses pseudo R² and LR test."""
+        latex = logit_result.to_latex_row()
+        assert latex.endswith("\\\\")
+        parts = latex.split(" & ")
+        assert len(parts) == 7  # dep_var, n, pseudo_r2, llr, llr_p, aic, bic
+        assert "y_bin" in latex
+        assert "200" in latex
+
+    def test_logit_anova_empty(self, logit_result: ModelResult) -> None:
+        """anova_table() returns empty DataFrame for logit."""
+        anova = logit_result.anova_table()
+        assert anova.empty
+
+    def test_logit_to_dataframe_uses_z(self, logit_result: ModelResult) -> None:
+        """Logit to_dataframe() should have 'z值' column."""
+        df = logit_result.to_dataframe()
+        assert "z值" in df.columns
+        assert "t值" not in df.columns
+
+    def test_significance_stars_for_logit_pvalues(self) -> None:
+        """_significance_stars works correctly with typical logit p-values."""
+        assert _significance_stars(0.001) == "***"
+        assert _significance_stars(0.03) == "**"
+        assert _significance_stars(0.07) == "*"
+        assert _significance_stars(0.5) == ""

@@ -75,6 +75,12 @@ class CoefficientRow:
     ci_upper: float
     significance: str = ""
 
+    @property
+    def z_stat(self) -> float:
+        """Alias for ``t_stat`` — used when the test statistic is a z-value
+        (e.g., logit / MLE-based models) rather than a t-value."""
+        return self.t_stat
+
     def __post_init__(self) -> None:
         """Auto-compute significance stars if not provided."""
         if not self.significance:
@@ -114,10 +120,18 @@ class ModelResult:
     log_likelihood: Optional[float] = None
     aic: float = 0.0
     bic: float = 0.0
-    rmse: float = 0.0
+    rmse: Optional[float] = 0.0
     dep_var: str = ""
     specification: str = ""
     method: str = "OLS"
+
+    # Logit-specific fields
+    pseudo_r_squared: Optional[float] = None
+    """McFadden's pseudo R-squared (for logit / MLE models)."""
+    llr: Optional[float] = None
+    """Likelihood ratio test chi-squared statistic."""
+    llr_pvalue: Optional[float] = None
+    """p-value for the likelihood ratio test."""
 
     # Phase 3.1 — advanced modeling metadata
     transforms_applied: Dict[str, str] = field(default_factory=dict)
@@ -136,8 +150,13 @@ class ModelResult:
 
         Returns:
             A DataFrame with columns:
-            [变量, 系数, 标准误, t值, p值, 95%CI低, 95%CI高, 显著性]
+            [变量, 系数, 标准误, t值/z值, p值, 95%CI低, 95%CI高, 显著性]
+
+            The test-statistic column is labelled ``'z值'`` for logit models
+            and ``'t值'`` for OLS / default models.
         """
+        stat_col = "z值" if self.model_type == "logit" else "t值"
+
         rows: List[Dict[str, object]] = []
         for coef_row in self.coefficients:
             rows.append(
@@ -145,7 +164,7 @@ class ModelResult:
                     "变量": coef_row.name,
                     "系数": round(coef_row.coef, 6),
                     "标准误": round(coef_row.se, 6),
-                    "t值": round(coef_row.t_stat, 4),
+                    stat_col: round(coef_row.t_stat, 4),
                     "p值": coef_row.pvalue,
                     "95%CI低": round(coef_row.ci_lower, 6),
                     "95%CI高": round(coef_row.ci_upper, 6),
@@ -158,11 +177,19 @@ class ModelResult:
         return df
 
     def summary(self) -> str:
-        """Return a human-readable model summary string (similar to R's summary.lm).
+        """Return a human-readable model summary string.
+
+        For OLS models the output resembles R's ``summary.lm``.
+        For logit models it shows pseudo R-squared and likelihood-ratio
+        test statistics instead of OLS-specific diagnostics.
 
         Returns:
             A formatted string summarizing the model fit.
         """
+        is_logit = self.model_type == "logit"
+        stat_header = "z" if is_logit else "t"
+        stat_p_label = "p>|z|" if is_logit else "p>|t|"
+
         lines: List[str] = []
         lines.append(f"{'=' * 60}")
         lines.append(f"  {self.method} Regression Results")
@@ -174,22 +201,60 @@ class ModelResult:
         lines.append(f"  No. Parameters:        {self.n_params}")
         lines.append(f"  Residual DF:           {self.df_resid}")
         lines.append("")
-        lines.append(f"  R-squared:             {self.r_squared:.6f}" if self.r_squared is not None else "  R-squared:             N/A")
-        lines.append(f"  Adj. R-squared:        {self.adj_r_squared:.6f}" if self.adj_r_squared is not None else "  Adj. R-squared:        N/A")
-        lines.append(f"  RMSE:                  {self.rmse:.6f}")
-        if self.f_statistic is not None:
-            lines.append(f"  F-statistic:           {self.f_statistic[0]:.4f}")
-            lines.append(f"  Prob (F-statistic):    {self.f_statistic[1]:.6e}")
-        lines.append(f"  Log-Likelihood:        {self.log_likelihood:.4f}" if self.log_likelihood is not None else "  Log-Likelihood:        N/A")
+
+        if is_logit:
+            # Logit-specific diagnostics
+            lines.append(
+                f"  Pseudo R-squared:      {self.pseudo_r_squared:.6f}"
+                if self.pseudo_r_squared is not None
+                else "  Pseudo R-squared:      N/A"
+            )
+            if self.llr is not None:
+                lines.append(f"  LR chi2:               {self.llr:.4f}")
+                lines.append(
+                    f"  Prob > chi2:           {self.llr_pvalue:.6e}"
+                    if self.llr_pvalue is not None
+                    else "  Prob > chi2:           N/A"
+                )
+        else:
+            # OLS-specific diagnostics
+            lines.append(
+                f"  R-squared:             {self.r_squared:.6f}"
+                if self.r_squared is not None
+                else "  R-squared:             N/A"
+            )
+            lines.append(
+                f"  Adj. R-squared:        {self.adj_r_squared:.6f}"
+                if self.adj_r_squared is not None
+                else "  Adj. R-squared:        N/A"
+            )
+            lines.append(
+                f"  RMSE:                  {self.rmse:.6f}"
+                if self.rmse is not None
+                else "  RMSE:                  N/A"
+            )
+            if self.f_statistic is not None:
+                lines.append(f"  F-statistic:           {self.f_statistic[0]:.4f}")
+                lines.append(f"  Prob (F-statistic):    {self.f_statistic[1]:.6e}")
+
+        lines.append(
+            f"  Log-Likelihood:        {self.log_likelihood:.4f}"
+            if self.log_likelihood is not None
+            else "  Log-Likelihood:        N/A"
+        )
         lines.append(f"  AIC:                   {self.aic:.4f}")
         lines.append(f"  BIC:                   {self.bic:.4f}")
         lines.append("")
         lines.append(f"{'-' * 60}")
-        lines.append(f"  {'Variable':<20} {'Coefficient':>12} {'Std.Err.':>10} {'t':>8} {'p>|t|':>8}")
+        lines.append(
+            f"  {'Variable':<20} {'Coefficient':>12} {'Std.Err.':>10} "
+            f"{stat_header:>8} {stat_p_label:>8}"
+        )
         lines.append(f"{'-' * 60}")
         for c in self.coefficients:
             lines.append(
-                f"  {c.name:<20} {c.coef:>12.6f} {c.se:>10.6f} {c.t_stat:>8.4f} {c.pvalue:>8.4f} {c.significance}"
+                f"  {c.name:<20} {c.coef:>12.6f} {c.se:>10.6f} "
+                f"{c.t_stat:>8.4f} {c.pvalue:>8.4f} {c.significance}"
             )
         lines.append(f"{'=' * 60}")
         lines.append(f"  Significance: *** p<0.01, ** p<0.05, * p<0.1")
@@ -205,6 +270,11 @@ class ModelResult:
 
         Returns:
             A flat dictionary containing all model-level statistics.
+
+            For OLS models includes: r_squared, adj_r_squared, rmse,
+            f_statistic, f_pvalue.
+
+            For logit models includes: pseudo_r_squared, llr, llr_pvalue.
         """
         d: Dict[str, Any] = {
             "dep_var": self.dep_var,
@@ -219,6 +289,10 @@ class ModelResult:
             "bic": self.bic,
             "method": self.method,
             "specification": self.specification,
+            "model_type": self.model_type,
+            "pseudo_r_squared": self.pseudo_r_squared,
+            "llr": self.llr,
+            "llr_pvalue": self.llr_pvalue,
         }
         if self.f_statistic is not None:
             d["f_statistic"] = round(self.f_statistic[0], 6)
@@ -234,11 +308,20 @@ class ModelResult:
         Decomposes the total sum of squares into regression (explained) and
         residual components.
 
+        For logit / MLE models there is no sum-of-squares decomposition.
+        An empty DataFrame is returned in that case.
+
         Returns:
             A DataFrame with columns:
             [来源, SS, df, MS, F, p-value]
             and rows: 回归(Explained), 残差(Residual), 总计(Total).
+
+            For non-OLS models returns an empty DataFrame.
         """
+        if self.model_type not in ("OLS", "ols", ""):
+            # Logit / MLE models do not have SS decomposition
+            return pd.DataFrame()
+
         # Recover sums of squares from available statistics
         # RMSE = sqrt(SS_resid / df_resid)  =>  SS_resid = RMSE^2 * df_resid
         ss_resid = self.rmse ** 2 * self.df_resid
@@ -309,27 +392,55 @@ class ModelResult:
 
         Useful for exporting model results into academic papers.
 
+        For OLS: ``dep_var & n & r2 & adj_r2 & f & fp & aic & bic \\\\``
+        For logit: ``dep_var & n & pseudo_r2 & llr & llr_p & aic & bic \\\\``
+
         Returns:
             A LaTeX string with model statistics separated by ``&``,
             terminated by ``\\\\``.
         """
-        r2_str = f"{self.r_squared:.4f}" if self.r_squared is not None else "N/A"
-        adj_r2_str = f"{self.adj_r_squared:.4f}" if self.adj_r_squared is not None else "N/A"
+        n_str = str(self.n_obs)
         aic_str = f"{self.aic:.2f}"
         bic_str = f"{self.bic:.2f}"
-        n_str = str(self.n_obs)
 
-        if self.f_statistic is not None:
-            f_str = f"{self.f_statistic[0]:.4f}"
-            fp_str = f"{self.f_statistic[1]:.4f}"
+        if self.model_type == "logit":
+            # Logit: pseudo-R² + LR test
+            pseudo_str = (
+                f"{self.pseudo_r_squared:.4f}"
+                if self.pseudo_r_squared is not None
+                else "N/A"
+            )
+            llr_str = f"{self.llr:.4f}" if self.llr is not None else "N/A"
+            llr_p_str = (
+                f"{self.llr_pvalue:.4f}" if self.llr_pvalue is not None else "N/A"
+            )
+            return (
+                f"{self.dep_var} & {n_str} & {pseudo_str} & "
+                f"{llr_str} & {llr_p_str} & {aic_str} & {bic_str} \\\\"
+            )
         else:
-            f_str = "N/A"
-            fp_str = "N/A"
+            # OLS: R² + F-test
+            r2_str = (
+                f"{self.r_squared:.4f}"
+                if self.r_squared is not None
+                else "N/A"
+            )
+            adj_r2_str = (
+                f"{self.adj_r_squared:.4f}"
+                if self.adj_r_squared is not None
+                else "N/A"
+            )
+            if self.f_statistic is not None:
+                f_str = f"{self.f_statistic[0]:.4f}"
+                fp_str = f"{self.f_statistic[1]:.4f}"
+            else:
+                f_str = "N/A"
+                fp_str = "N/A"
 
-        return (
-            f"{self.dep_var} & {n_str} & {r2_str} & {adj_r2_str} & "
-            f"{f_str} & {fp_str} & {aic_str} & {bic_str} \\\\"
-        )
+            return (
+                f"{self.dep_var} & {n_str} & {r2_str} & {adj_r2_str} & "
+                f"{f_str} & {fp_str} & {aic_str} & {bic_str} \\\\"
+            )
 
 
 # ------------------------------------------------------------------

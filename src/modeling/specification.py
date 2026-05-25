@@ -35,6 +35,7 @@ class ModelSpec:
     transforms: Dict[str, str] = field(default_factory=dict)
     interaction_terms: List[Tuple[str, str]] = field(default_factory=list)
     missing_strategy: str = "drop"
+    model_type: str = "ols"
 
     @property
     def all_predictors(self) -> List[str]:
