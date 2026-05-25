@@ -49,6 +49,12 @@ class HtmlReportGenerator:
   h2 { color: #16213e; font-size: 18px; margin-top: 28px; border-left: 4px solid #0f3460; padding-left: 10px; }
   h3 { color: #0f3460; font-size: 15px; margin-top: 20px; }
   .timestamp { color: #888; font-size: 13px; margin-bottom: 20px; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    font-size: 12px; font-weight: 600; color: #fff; margin-left: 8px;
+  }
+  .badge-ols { background: #1976d2; }
+  .badge-logit { background: #388e3c; }
   table {
     border-collapse: collapse; width: 100%; margin: 12px 0 16px;
     font-size: 13px;
@@ -64,6 +70,7 @@ class HtmlReportGenerator:
   .chart-item { flex: 1 1 45%; min-width: 280px; }
   .chart-item img { width: 100%; height: auto; border: 1px solid #eee; border-radius: 4px; }
   .notes { background: #fffde7; border-left: 4px solid #f9a825; padding: 10px 14px; margin: 16px 0; font-size: 13px; }
+  .info-box { background: #e8f5e9; border-left: 4px solid #388e3c; padding: 10px 14px; margin: 16px 0; font-size: 13px; }
   .footer { margin-top: 30px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 12px; color: #999; text-align: center; }
   .spec-box { background: #f3f4f6; padding: 10px 14px; border-radius: 4px; font-family: "Consolas", "Courier New", monospace; font-size: 13px; margin: 8px 0; }
 </style>
@@ -71,7 +78,7 @@ class HtmlReportGenerator:
 <body>
 <div class="container">
 
-<h1>{{ title }}</h1>
+<h1>{{ title }}<span class="badge {{ badge_class }}">{{ model_type_label }}</span></h1>
 <div class="timestamp">生成时间: {{ timestamp }}</div>
 
 <!-- 1. Model specification -->
@@ -143,6 +150,18 @@ class HtmlReportGenerator:
 
 <!-- 5. Diagnostic charts -->
 <h2>诊断图</h2>
+{% if is_logit %}
+<div class="info-box">
+  <strong>注意：</strong>Logistic 回归模型的传统残差诊断图（残差-拟合值图、Q-Q 图）
+  参考价值有限，因为残差项并非来自正态分布。建议使用以下替代诊断方法：
+  <ul>
+    <li><strong>ROC 曲线</strong> — 评估模型区分能力</li>
+    <li><strong>Hosmer-Lemeshow 检验</strong> — 评估拟合优度</li>
+    <li><strong>分类表（混淆矩阵）</strong> — 评估预测准确性</li>
+    <li><strong>偏差残差图</strong> — 替代普通残差进行诊断</li>
+  </ul>
+</div>
+{% endif %}
 {% if charts %}
 <div class="chart-grid">
   {% for label, b64 in charts %}
@@ -163,7 +182,12 @@ class HtmlReportGenerator:
   <li>因变量: <strong>{{ dep_var }}</strong></li>
   <li>观测数: <strong>{{ n_obs }}</strong></li>
   <li>显著性标记: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.1</li>
+  {% if is_logit %}
+  <li>Logistic 回归系数为对数几率（log-odds），OR = exp(B) 表示优势比。</li>
+  <li>McFadden 伪 R² 的值通常低于 OLS 的 R²，0.2-0.4 已是良好的拟合。</li>
+  {% else %}
   <li>标准误区估计采用OLS标准误，如有异方差或自相关问题请使用稳健标准误。</li>
+  {% endif %}
   <li>本报告由 Regression Analysis Tool 自动生成，仅供参考。</li>
 </ul>
 </div>
@@ -198,9 +222,14 @@ class HtmlReportGenerator:
             A complete HTML document string.
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        is_logit = model_result.model_type == "logit"
         title = "回归分析报告"
         dep_var = model_result.dep_var or "N/A"
         n_obs = str(model_result.n_obs)
+
+        # Model type badge
+        badge_class = "badge-logit" if is_logit else "badge-ols"
+        model_type_label = "Logit" if is_logit else "OLS"
 
         # Coefficient table
         coef_table: Optional[pd.DataFrame] = None
@@ -209,17 +238,30 @@ class HtmlReportGenerator:
         except Exception:
             pass
 
-        # Model fit statistics
+        # Model fit statistics (conditional on model type)
         fit_stats: Dict[str, str] = {}
-        if model_result.r_squared is not None:
-            fit_stats["R²"] = f"{model_result.r_squared:.4f}"
-        if model_result.adj_r_squared is not None:
-            fit_stats["调整 R²"] = f"{model_result.adj_r_squared:.4f}"
-        if model_result.rmse:
-            fit_stats["RMSE"] = f"{model_result.rmse:.4f}"
-        if model_result.f_statistic is not None:
-            fit_stats["F 统计量"] = f"{model_result.f_statistic[0]:.4f}"
-            fit_stats["F 检验 p 值"] = f"{model_result.f_statistic[1]:.6e}"
+        if is_logit:
+            # Logit-specific fit statistics
+            if model_result.pseudo_r_squared is not None:
+                fit_stats["McFadden 伪 R²"] = f"{model_result.pseudo_r_squared:.4f}"
+            if model_result.llr is not None:
+                fit_stats["LR χ²"] = f"{model_result.llr:.4f}"
+            if model_result.llr_pvalue is not None:
+                fit_stats["LR χ² p 值"] = f"{model_result.llr_pvalue:.6e}"
+            if model_result.log_likelihood is not None:
+                fit_stats["对数似然"] = f"{model_result.log_likelihood:.4f}"
+        else:
+            # OLS-specific fit statistics
+            if model_result.r_squared is not None:
+                fit_stats["R²"] = f"{model_result.r_squared:.4f}"
+            if model_result.adj_r_squared is not None:
+                fit_stats["调整 R²"] = f"{model_result.adj_r_squared:.4f}"
+            if model_result.rmse:
+                fit_stats["RMSE"] = f"{model_result.rmse:.4f}"
+            if model_result.f_statistic is not None:
+                fit_stats["F 统计量"] = f"{model_result.f_statistic[0]:.4f}"
+                fit_stats["F 检验 p 值"] = f"{model_result.f_statistic[1]:.6e}"
+        # Common fit stats
         if model_result.aic:
             fit_stats["AIC"] = f"{model_result.aic:.2f}"
         if model_result.bic:
@@ -245,6 +287,9 @@ class HtmlReportGenerator:
             charts=charts,
             dep_var=dep_var,
             n_obs=n_obs,
+            badge_class=badge_class,
+            model_type_label=model_type_label,
+            is_logit=is_logit,
         )
 
     # ==================================================================

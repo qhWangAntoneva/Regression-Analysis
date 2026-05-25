@@ -231,6 +231,16 @@ class DataExporter:
         except Exception as e:
             exported["summary_txt"] = f"导出失败: {e}"
 
+        # 5. 模型摘要 JSON（含 model_type）
+        try:
+            json_path = f"{prefix}_summary.json"
+            summary_dict = getattr(result, "to_summary_dict", lambda: {})()
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(summary_dict, f, ensure_ascii=False, indent=2, default=str)
+            exported["summary_json"] = json_path
+        except Exception as e:
+            exported["summary_json"] = f"导出失败: {e}"
+
         return exported
 
     @staticmethod
@@ -339,7 +349,10 @@ class DataExporter:
 
     @staticmethod
     def _build_reproduce_script(model_spec: Any, model_result: Any) -> str:
-        """生成自包含的 statsmodels 复现 Python 脚本。"""
+        """生成自包含的 statsmodels 复现 Python 脚本。
+
+        根据 model_type 自动选择 smf.ols 或 smf.logit。
+        """
         dep_var = getattr(model_spec, "dep_var", "y")
         indep_vars: list[str] = getattr(model_spec, "indep_vars", [])
         control_vars: list[str] = getattr(model_spec, "control_vars", [])
@@ -353,6 +366,9 @@ class DataExporter:
             rhs = f"{rhs} - 1"
 
         formula = f"{dep_var} ~ {rhs}"
+
+        is_logit = model_type == "logit"
+        smf_method = "logit" if is_logit else "ols"
 
         lines = [
             '"""',
@@ -368,7 +384,7 @@ class DataExporter:
             f'df = pd.read_csv("data.csv", encoding="utf-8-sig")',
             "",
             f'# Fit model',
-            f'result = smf.{model_type.lower() if model_type else "ols"}(',
+            f'result = smf.{smf_method}(',
             f'    formula=r"""{formula}""",',
             f"    data=df,",
             f").fit(cov_type='nonrobust')",
@@ -376,14 +392,35 @@ class DataExporter:
             f'# Print detailed summary',
             f'print(result.summary())',
             "",
-            f'# Key statistics',
-            f'print(f"R-squared: {{result.rsquared:.4f}}")',
-            f'print(f"Adj. R-squared: {{result.rsquared_adj:.4f}}")',
-            f'print(f"N: {{int(result.nobs)}}")',
-            f'print(f"AIC: {{result.aic:.2f}}")',
-            f'print(f"BIC: {{result.bic:.2f}}")',
-            "",
         ]
+
+        if is_logit:
+            lines += [
+                f'# Key statistics (logit)',
+                f'print(f"Pseudo R-squared: {{result.prsquared:.4f}}")',
+                f'print(f"Log-Likelihood: {{result.llf:.4f}}")',
+                f'print(f"LLR p-value: {{result.llr_pvalue:.4f}}")',
+                f'print(f"N: {{int(result.nobs)}}")',
+                f'print(f"AIC: {{result.aic:.2f}}")',
+                f'print(f"BIC: {{result.bic:.2f}}")',
+                "",
+                f'# Odds ratios',
+                f'import numpy as np',
+                f'print("\\nOdds Ratios:")',
+                f'for name, coef in zip(result.params.index, result.params.values):',
+                f'    print(f"  {{name}}: {{np.exp(coef):.4f}}")',
+                "",
+            ]
+        else:
+            lines += [
+                f'# Key statistics (OLS)',
+                f'print(f"R-squared: {{result.rsquared:.4f}}")',
+                f'print(f"Adj. R-squared: {{result.rsquared_adj:.4f}}")',
+                f'print(f"N: {{int(result.nobs)}}")',
+                f'print(f"AIC: {{result.aic:.2f}}")',
+                f'print(f"BIC: {{result.bic:.2f}}")',
+                "",
+            ]
 
         if specification:
             lines.insert(3, f"Model specification: {specification}")
@@ -415,7 +452,10 @@ def _is_matplotlib_figure(fig: Any) -> bool:
 
 
 def _get_model_summary(result: Any) -> str:
-    """从 ModelResult 对象生成模型摘要文本。"""
+    """从 ModelResult 对象生成模型摘要文本。
+
+    对 logit 模型自动显示伪 R²、似然比检验，对 OLS 模型显示 R²、F 检验。
+    """
     lines: list[str] = []
     lines.append("=" * 60)
     lines.append("  回归模型结果摘要")
@@ -427,10 +467,12 @@ def _get_model_summary(result: Any) -> str:
     spec = getattr(result, "specification", "")
     model_type = getattr(result, "model_type", "OLS")
     method = getattr(result, "method", "OLS")
+    is_logit = model_type == "logit"
 
     lines.append(f"  因变量 (Dependent Variable):  {dep_var}")
     lines.append(f"  模型公式:                     {spec}")
     lines.append(f"  估计方法:                     {method}")
+    lines.append(f"  模型类型:                     {model_type.upper() if model_type else 'OLS'}")
     lines.append("")
 
     # 模型统计量
@@ -442,21 +484,33 @@ def _get_model_summary(result: Any) -> str:
     lines.append(f"  残差自由度 (Residual DF):     {df_resid}" if df_resid is not None else "")
     lines.append("")
 
-    rsq = getattr(result, "r_squared", None)
-    rsq_adj = getattr(result, "adj_r_squared", None)
-    rmse = getattr(result, "rmse", None)
-    if rsq is not None:
-        lines.append(f"  R² (R-squared):               {rsq:.6f}")
-    if rsq_adj is not None:
-        lines.append(f"  调整 R² (Adj. R-squared):     {rsq_adj:.6f}")
-    if rmse is not None:
-        lines.append(f"  RMSE:                         {rmse:.6f}")
-    lines.append("")
+    if is_logit:
+        # Logit-specific: pseudo R² and LR test
+        pseudo_r2 = getattr(result, "pseudo_r_squared", None)
+        if pseudo_r2 is not None:
+            lines.append(f"  伪 R² (Pseudo R-squared):     {pseudo_r2:.6f}")
+        llr = getattr(result, "llr", None)
+        llr_pvalue = getattr(result, "llr_pvalue", None)
+        if llr is not None:
+            lines.append(f"  LR χ² (Likelihood Ratio):     {llr:.4f}")
+        if llr_pvalue is not None:
+            lines.append(f"  LR 检验 p 值:                 {llr_pvalue:.6e}")
+    else:
+        # OLS-specific: R² and F test
+        rsq = getattr(result, "r_squared", None)
+        rsq_adj = getattr(result, "adj_r_squared", None)
+        rmse = getattr(result, "rmse", None)
+        if rsq is not None:
+            lines.append(f"  R² (R-squared):               {rsq:.6f}")
+        if rsq_adj is not None:
+            lines.append(f"  调整 R² (Adj. R-squared):     {rsq_adj:.6f}")
+        if rmse is not None:
+            lines.append(f"  RMSE:                         {rmse:.6f}")
 
-    f_stat = getattr(result, "f_statistic", None)
-    if f_stat is not None and len(f_stat) == 2:
-        lines.append(f"  F 统计量 (F-statistic):       {f_stat[0]:.4f}")
-        lines.append(f"  F 检验 p 值:                  {f_stat[1]:.6e}")
+        f_stat = getattr(result, "f_statistic", None)
+        if f_stat is not None and len(f_stat) == 2:
+            lines.append(f"  F 统计量 (F-statistic):       {f_stat[0]:.4f}")
+            lines.append(f"  F 检验 p 值:                  {f_stat[1]:.6e}")
     lines.append("")
 
     log_likelihood = getattr(result, "log_likelihood", None)
@@ -473,8 +527,9 @@ def _get_model_summary(result: Any) -> str:
     # 系数表
     coefficients = getattr(result, "coefficients", None)
     if coefficients:
+        stat_header = "z值" if is_logit else "t值"
         lines.append("-" * 60)
-        lines.append(f"  {'变量':<20} {'系数':>12} {'标准误':>10} {'t值':>8} {'p值':>8}")
+        lines.append(f"  {'变量':<20} {'系数':>12} {'标准误':>10} {stat_header:>8} {'p值':>8}")
         lines.append("-" * 60)
         for c in coefficients:
             name = getattr(c, "name", "?")

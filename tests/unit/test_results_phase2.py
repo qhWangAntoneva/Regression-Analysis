@@ -1050,3 +1050,184 @@ class TestModelResultLogit:
         assert _significance_stars(0.03) == "**"
         assert _significance_stars(0.07) == "*"
         assert _significance_stars(0.5) == ""
+
+    def test_logit_to_dataframe_has_or(self, logit_result: ModelResult) -> None:
+        """Logit to_dataframe() should include OR(exp(B)) column."""
+        df = logit_result.to_dataframe()
+        assert "OR(exp(B))" in df.columns
+        import math
+        # Check first row: Intercept coef=-0.5, OR = exp(-0.5)
+        or_val = df["OR(exp(B))"].iloc[0]
+        assert abs(or_val - math.exp(-0.5)) < 0.001
+
+    def test_ols_to_dataframe_no_or(self, fitted_result: ModelResult) -> None:
+        """OLS to_dataframe() should NOT have OR column."""
+        df = fitted_result.to_dataframe()
+        assert "OR(exp(B))" not in df.columns
+
+
+# =========================================================================
+# Test: LatexRenderer with logit models (TODO 5.1.6)
+# =========================================================================
+class TestLatexRendererLogit:
+    """LaTeX renderer behaviour for logit models."""
+
+    @pytest.fixture
+    def logit_result(self) -> ModelResult:
+        """Build a representative logit ModelResult."""
+        return ModelResult(
+            model_type="logit",
+            coefficients=[
+                CoefficientRow(
+                    name="Intercept", coef=-0.5, se=0.3, t_stat=-1.67,
+                    pvalue=0.095, ci_lower=-1.1, ci_upper=0.1
+                ),
+                CoefficientRow(
+                    name="x1", coef=1.2, se=0.4, t_stat=3.0,
+                    pvalue=0.003, ci_lower=0.4, ci_upper=2.0
+                ),
+            ],
+            n_obs=200,
+            n_params=2,
+            df_resid=198,
+            rmse=None,
+            pseudo_r_squared=0.15,
+            log_likelihood=-120.0,
+            aic=244.0,
+            bic=250.0,
+            llr=25.0,
+            llr_pvalue=0.0001,
+            dep_var="y_bin",
+            method="Logit",
+        )
+
+    def test_render_single_logit_uses_or_and_z(self, logit_result: ModelResult) -> None:
+        """render_single for logit should use OR column and z-statistic."""
+        from src.export.latex_renderer import LatexRenderer
+
+        latex = LatexRenderer.render_single(logit_result)
+        # Should use z instead of t
+        assert "$z$" in latex
+        assert "$t$" not in latex
+        # Should show OR (exp(B))
+        assert "OR (exp($B$))" in latex
+        # Should show pseudo R-squared
+        assert "pseudo-$R^2$" in latex
+        # Should show LR chi2
+        assert "LR $\\chi^2$" in latex
+        # Should NOT show R-squared or F-statistic
+        assert "R$^2$" not in latex
+        assert "F-statistic" not in latex
+
+    def test_render_single_logit_odds_ratios(self, logit_result: ModelResult) -> None:
+        """Logit render_single should show exponentiated coefficients."""
+        from src.export.latex_renderer import LatexRenderer
+        import math
+
+        latex = LatexRenderer.render_single(logit_result)
+        # OR for Intercept: exp(-0.5) ≈ 0.6065
+        or_intercept = math.exp(-0.5)
+        # OR for x1: exp(1.2) ≈ 3.3201
+        or_x1 = math.exp(1.2)
+        # Check that OR values appear (formatted to 4 decimal places)
+        assert f"{or_intercept:.4f}" in latex
+        assert f"{or_x1:.4f}" in latex
+
+    def test_render_single_logit_caption(self, logit_result: ModelResult) -> None:
+        """render_single with default caption should use 'Logistic Regression'."""
+        from src.export.latex_renderer import LatexRenderer
+
+        latex = LatexRenderer.render_single(
+            logit_result, title="Table 1"
+        )
+        assert "Logistic Regression Results" in latex
+        assert "OLS" not in latex
+
+    def test_render_comparison_mixed_models(self, fitted_result: ModelResult) -> None:
+        """render_comparison with mixed OLS+logit should add model type row."""
+        from src.export.latex_renderer import LatexRenderer
+
+        logit = ModelResult(
+            model_type="logit",
+            coefficients=[
+                CoefficientRow(
+                    name="Intercept", coef=-0.5, se=0.3, t_stat=-1.67,
+                    pvalue=0.095, ci_lower=-1.1, ci_upper=0.1
+                ),
+            ],
+            n_obs=200,
+            n_params=1,
+            df_resid=199,
+            pseudo_r_squared=0.15,
+            aic=244.0,
+            bic=250.0,
+            dep_var="y_bin",
+        )
+
+        latex = LatexRenderer.render_comparison(
+            [fitted_result, logit],
+            model_labels=["OLS Model", "Logit Model"],
+        )
+        # Should have a model type row
+        assert "Model type" in latex
+        assert "Logit" in latex
+        # Should show both R² and Pseudo-R² rows
+        assert "Pseudo-$R^2$" in latex
+        # Should show both F-statistic and LR chi2 rows
+        assert "F-statistic" in latex
+        assert "LR $\\chi^2$" in latex
+
+    def test_render_comparison_all_logit(self) -> None:
+        """render_comparison with all-logit should show model type and logit stats."""
+        from src.export.latex_renderer import LatexRenderer
+
+        logit1 = ModelResult(
+            model_type="logit",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=1.0, se=0.3, t_stat=3.33,
+                    pvalue=0.001, ci_lower=0.4, ci_upper=1.6
+                ),
+            ],
+            n_obs=150,
+            n_params=1,
+            df_resid=149,
+            pseudo_r_squared=0.10,
+            aic=180.0,
+            bic=185.0,
+            llr=15.0,
+            dep_var="y",
+        )
+        logit2 = ModelResult(
+            model_type="logit",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=1.5, se=0.4, t_stat=3.75,
+                    pvalue=0.0002, ci_lower=0.7, ci_upper=2.3
+                ),
+                CoefficientRow(
+                    name="x2", coef=-0.3, se=0.15, t_stat=-2.0,
+                    pvalue=0.045, ci_lower=-0.6, ci_upper=0.0
+                ),
+            ],
+            n_obs=150,
+            n_params=2,
+            df_resid=148,
+            pseudo_r_squared=0.18,
+            aic=160.0,
+            bic=168.0,
+            llr=22.0,
+            dep_var="y",
+        )
+
+        latex = LatexRenderer.render_comparison(
+            [logit1, logit2],
+            model_labels=["Base", "Extended"],
+        )
+        assert "Model type" in latex
+        assert "Logit" in latex
+        assert "Pseudo-$R^2$" in latex
+        assert "LR $\\chi^2$" in latex
+        # Should NOT show F-statistic or R² for all-logit comparison
+        # (F-statistic is only shown for OLS or mixed; all-logit uses LR chi2)
+        assert "F-statistic" not in latex

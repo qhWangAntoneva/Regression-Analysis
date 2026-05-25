@@ -111,7 +111,10 @@ def _manual_roc_curve(
 
 def _manual_auc(fpr: np.ndarray, tpr: np.ndarray) -> float:
     """Compute AUC via the trapezoidal rule (identical to sklearn's auc)."""
-    return float(np.trapz(tpr, fpr))
+    # np.trapz was removed in NumPy 2.0; np.trapezoid is the replacement
+    if hasattr(np, "trapezoid"):
+        return float(np.trapezoid(tpr, fpr))
+    return float(np.trapz(tpr, fpr))  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------

@@ -159,18 +159,20 @@ class ModelResult:
 
         rows: List[Dict[str, object]] = []
         for coef_row in self.coefficients:
-            rows.append(
-                {
-                    "变量": coef_row.name,
-                    "系数": round(coef_row.coef, 6),
-                    "标准误": round(coef_row.se, 6),
-                    stat_col: round(coef_row.t_stat, 4),
-                    "p值": coef_row.pvalue,
-                    "95%CI低": round(coef_row.ci_lower, 6),
-                    "95%CI高": round(coef_row.ci_upper, 6),
-                    "显著性": coef_row.significance,
-                }
-            )
+            row: Dict[str, object] = {
+                "变量": coef_row.name,
+                "系数": round(coef_row.coef, 6),
+                "标准误": round(coef_row.se, 6),
+                stat_col: round(coef_row.t_stat, 4),
+                "p值": coef_row.pvalue,
+                "95%CI低": round(coef_row.ci_lower, 6),
+                "95%CI高": round(coef_row.ci_upper, 6),
+                "显著性": coef_row.significance,
+            }
+            # Logit models: add odds ratio column
+            if self.model_type == "logit":
+                row["OR(exp(B))"] = round(np.exp(coef_row.coef), 6)
+            rows.append(row)
 
         df = pd.DataFrame(rows)
         df = df.set_index("变量")
@@ -502,14 +504,45 @@ def compare_models(results: Sequence[ModelResult]) -> pd.DataFrame:
         rows.append(row)
 
     # Add summary statistics rows at the bottom
-    stat_labels = ["N", "R²", "Adj-R²", "AIC", "BIC"]
-    stat_getters = [
-        lambda r: str(r.n_obs),
-        lambda r: f"{r.r_squared:.4f}" if r.r_squared is not None else "N/A",
-        lambda r: f"{r.adj_r_squared:.4f}" if r.adj_r_squared is not None else "N/A",
-        lambda r: f"{r.aic:.2f}",
-        lambda r: f"{r.bic:.2f}",
-    ]
+    # Determine if all models are logit, all OLS, or mixed
+    has_logit = any(getattr(r, "model_type", "") == "logit" for r in results)
+    has_ols = any(getattr(r, "model_type", "ols") != "logit" for r in results)
+
+    if has_logit and has_ols:
+        # Mixed: show common stats only
+        stat_labels = ["N", "R² / 伪R²", "AIC", "BIC"]
+        stat_getters = [
+            lambda r: str(r.n_obs),
+            lambda r: (
+                f"{r.pseudo_r_squared:.4f}"
+                if getattr(r, "model_type", "") == "logit" and r.pseudo_r_squared is not None
+                else f"{r.r_squared:.4f}" if r.r_squared is not None
+                else "N/A"
+            ),
+            lambda r: f"{r.aic:.2f}",
+            lambda r: f"{r.bic:.2f}",
+        ]
+    elif has_logit:
+        # All logit
+        stat_labels = ["N", "伪 R²", "LR χ²", "LR p", "AIC", "BIC"]
+        stat_getters = [
+            lambda r: str(r.n_obs),
+            lambda r: f"{r.pseudo_r_squared:.4f}" if r.pseudo_r_squared is not None else "N/A",
+            lambda r: f"{r.llr:.4f}" if r.llr is not None else "N/A",
+            lambda r: f"{r.llr_pvalue:.6f}" if r.llr_pvalue is not None else "N/A",
+            lambda r: f"{r.aic:.2f}",
+            lambda r: f"{r.bic:.2f}",
+        ]
+    else:
+        # All OLS
+        stat_labels = ["N", "R²", "Adj-R²", "AIC", "BIC"]
+        stat_getters = [
+            lambda r: str(r.n_obs),
+            lambda r: f"{r.r_squared:.4f}" if r.r_squared is not None else "N/A",
+            lambda r: f"{r.adj_r_squared:.4f}" if r.adj_r_squared is not None else "N/A",
+            lambda r: f"{r.aic:.2f}",
+            lambda r: f"{r.bic:.2f}",
+        ]
 
     for stat_label, getter in zip(stat_labels, stat_getters):
         row: Dict[str, object] = {"变量": stat_label}

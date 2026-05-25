@@ -201,15 +201,22 @@ def render() -> None:
         _fallback_coefficient_table(selected_result)
 
     # ------------------------------------------------------------------
-    # Phase 2: ANOVA 表
+    # Phase 2: ANOVA 表 (OLS only)
     # ------------------------------------------------------------------
     st.divider()
-    st.subheader("方差分析(ANOVA)表")
 
-    if RESULT_CARD_AVAILABLE:
-        render_anova_table(selected_result)
+    is_logit_result = getattr(selected_result, "model_type", "") == "logit"
+
+    if is_logit_result:
+        st.subheader("方差分析(ANOVA)表")
+        st.info("Logit 模型使用最大似然估计，不使用 ANOVA 平方和分解。"
+                "请参考上方似然比检验 (LR χ²) 来评估模型整体显著性。")
     else:
-        st.info("ANOVA 表组件不可用。")
+        st.subheader("方差分析(ANOVA)表")
+        if RESULT_CARD_AVAILABLE:
+            render_anova_table(selected_result)
+        else:
+            st.info("ANOVA 表组件不可用。")
 
     # ------------------------------------------------------------------
     # Phase 2: 统计警示区
@@ -473,9 +480,12 @@ def _render_dot_whisker_plot(result: Any) -> None:
         opacity=0.5,
     )
 
+    is_logit = getattr(result, "model_type", "") == "logit"
+    x_label = "系数估计值 (log-odds)" if is_logit else "系数估计值"
+
     fig.update_layout(
-        title="系数点图 (Dot-Whisker Plot)",
-        xaxis_title="系数估计值",
+        title="系数点图 (Dot-Whisker Plot)" if not is_logit else "系数点图 (Logit, Dot-Whisker Plot)",
+        xaxis_title=x_label,
         yaxis_title="变量",
         template=cs.get("plot_template", "plotly_white"),
         height=400,
@@ -495,23 +505,39 @@ def _fallback_model_statistics(result: Any) -> None:
     if st is None:
         return
 
+    is_logit = getattr(result, "model_type", "") == "logit"
+
+    # Row 1: Model fit metrics (differs by model type)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        r2 = getattr(result, "r_squared", None)
-        st.metric("R²", f"{r2:.4f}" if r2 is not None else "N/A")
+        if is_logit:
+            pr2 = getattr(result, "pseudo_r_squared", None)
+            st.metric("伪 R² (McFadden)", f"{pr2:.4f}" if pr2 is not None else "N/A")
+        else:
+            r2 = getattr(result, "r_squared", None)
+            st.metric("R²", f"{r2:.4f}" if r2 is not None else "N/A")
     with col2:
-        adj = getattr(result, "adj_r_squared", None)
-        st.metric("Adj. R²", f"{adj:.4f}" if adj is not None else "N/A")
+        if is_logit:
+            llr_val = getattr(result, "llr", None)
+            st.metric("似然比检验 (LR χ²)", f"{llr_val:.4f}" if llr_val is not None else "N/A")
+        else:
+            adj = getattr(result, "adj_r_squared", None)
+            st.metric("Adj. R²", f"{adj:.4f}" if adj is not None else "N/A")
     with col3:
-        f_val = None
-        f_stat = getattr(result, "f_statistic", None)
-        if f_stat is not None:
-            f_val = f_stat[0]
-        st.metric("F 统计量", f"{f_val:.4f}" if f_val is not None else "N/A")
+        if is_logit:
+            llr_p = getattr(result, "llr_pvalue", None)
+            st.metric("LR p值", f"{llr_p:.6f}" if llr_p is not None else "N/A")
+        else:
+            f_val = None
+            f_stat = getattr(result, "f_statistic", None)
+            if f_stat is not None:
+                f_val = f_stat[0]
+            st.metric("F 统计量", f"{f_val:.4f}" if f_val is not None else "N/A")
     with col4:
         n = getattr(result, "n_obs", None)
         st.metric("N", n if n else "N/A")
 
+    # Row 2: Information criteria and LL (same for both model types)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         aic = getattr(result, "aic", None)
@@ -523,8 +549,11 @@ def _fallback_model_statistics(result: Any) -> None:
         ll = getattr(result, "log_likelihood", None)
         st.metric("Log-Likelihood", f"{ll:.4f}" if ll is not None else "N/A")
     with col4:
-        rmse = getattr(result, "rmse", None)
-        st.metric("RMSE", f"{rmse:.4f}" if rmse else "N/A")
+        if not is_logit:
+            rmse = getattr(result, "rmse", None)
+            st.metric("RMSE", f"{rmse:.4f}" if rmse else "N/A")
+        else:
+            st.metric("Pseudo R²", f"{getattr(result, 'pseudo_r_squared', 0):.4f}" if getattr(result, 'pseudo_r_squared', None) is not None else "N/A")
 
 
 def _fallback_coefficient_table(result: Any) -> None:
@@ -544,6 +573,9 @@ def _fallback_coefficient_table(result: Any) -> None:
         except Exception:
             st.info("系数表数据不可用。")
         return
+
+    is_logit = getattr(result, "model_type", "") == "logit"
+    stat_label = "z 值" if is_logit else "t 值"
 
     table_data = []
     for coef in coefficients:
@@ -568,7 +600,7 @@ def _fallback_coefficient_table(result: Any) -> None:
             "变量": name,
             "系数": f"{est:.4f}" if est is not None else "-",
             "标准误": f"{se:.4f}" if se is not None else "-",
-            "t 值": f"{t_stat:.4f}" if t_stat is not None else "-",
+            stat_label: f"{t_stat:.4f}" if t_stat is not None else "-",
             "p 值": f"{p_val:.4f}" if p_val is not None else "-",
             "显著性": sig,
             "95% CI": (
@@ -577,6 +609,11 @@ def _fallback_coefficient_table(result: Any) -> None:
                 else "-"
             ),
         }
+        # Add OR column for logit
+        if is_logit and est is not None:
+            import math
+            or_val = math.exp(est)
+            row["OR (几率比)"] = f"{or_val:.4f}"
         table_data.append(row)
 
     if table_data:

@@ -363,6 +363,177 @@ class TestExportResultsPackage:
 # =========================================================================
 
 
+# =========================================================================
+# Test: logit-specific export behaviour (TODO 5.1.6)
+# =========================================================================
+
+
+class TestExportLogitCSV:
+    """Test CSV export using logit ModelResult dataframe."""
+
+    def test_export_csv_logit_has_or_column(self, temp_dir: str) -> None:
+        """Logit to_dataframe() should include OR column in CSV export."""
+        from src.results.table import CoefficientRow, ModelResult
+
+        result = ModelResult(
+            model_type="logit",
+            coefficients=[
+                CoefficientRow(
+                    name="Intercept", coef=-0.5, se=0.3, t_stat=-1.67,
+                    pvalue=0.095, ci_lower=-1.1, ci_upper=0.1,
+                ),
+                CoefficientRow(
+                    name="x1", coef=1.2, se=0.4, t_stat=3.0,
+                    pvalue=0.003, ci_lower=0.4, ci_upper=2.0,
+                ),
+            ],
+            n_obs=200,
+            n_params=2,
+            df_resid=198,
+            pseudo_r_squared=0.15,
+            aic=244.0,
+            bic=250.0,
+            dep_var="y_bin",
+            method="Logit",
+        )
+
+        coef_df = result.to_dataframe().reset_index()
+        filepath = os.path.join(temp_dir, "logit_coefs.csv")
+        exported = DataExporter.export_csv(coef_df, filepath)
+        assert os.path.exists(exported)
+
+        loaded = pd.read_csv(exported, encoding="utf-8-sig")
+        assert "OR(exp(B))" in loaded.columns
+        assert "z值" in loaded.columns
+        assert "t值" not in loaded.columns
+
+        # Verify OR values: exp(-0.5) and exp(1.2)
+        import math
+        or_intercept = loaded.loc[loaded["变量"] == "Intercept", "OR(exp(B))"].values[0]
+        or_x1 = loaded.loc[loaded["变量"] == "x1", "OR(exp(B))"].values[0]
+        assert abs(or_intercept - math.exp(-0.5)) < 0.001
+        assert abs(or_x1 - math.exp(1.2)) < 0.001
+
+    def test_export_csv_ols_no_or_column(self, temp_dir: str) -> None:
+        """OLS to_dataframe() should NOT include OR column."""
+        from src.results.table import CoefficientRow, ModelResult
+
+        result = ModelResult(
+            model_type="OLS",
+            coefficients=[
+                CoefficientRow(
+                    name="Intercept", coef=2.0, se=0.5, t_stat=4.0,
+                    pvalue=0.001, ci_lower=1.0, ci_upper=3.0,
+                ),
+                CoefficientRow(
+                    name="x1", coef=0.5, se=0.1, t_stat=5.0,
+                    pvalue=0.0001, ci_lower=0.3, ci_upper=0.7,
+                ),
+            ],
+            n_obs=100,
+            n_params=2,
+            df_resid=98,
+            r_squared=0.85,
+            dep_var="y",
+        )
+
+        coef_df = result.to_dataframe().reset_index()
+        filepath = os.path.join(temp_dir, "ols_coefs.csv")
+        exported = DataExporter.export_csv(coef_df, filepath)
+        assert os.path.exists(exported)
+
+        loaded = pd.read_csv(exported, encoding="utf-8-sig")
+        assert "OR(exp(B))" not in loaded.columns
+        assert "t值" in loaded.columns
+        assert "z值" not in loaded.columns
+
+
+class TestExportResultsPackageLogit:
+    """Test results package export with logit model."""
+
+    def test_export_results_package_logit(self, temp_dir: str) -> None:
+        """Logit results package should include summary.json with model_type."""
+        from src.results.table import CoefficientRow, ModelResult
+
+        result = ModelResult(
+            model_type="logit",
+            coefficients=[
+                CoefficientRow(
+                    name="Intercept", coef=-0.5, se=0.3, t_stat=-1.67,
+                    pvalue=0.095, ci_lower=-1.1, ci_upper=0.1,
+                ),
+                CoefficientRow(
+                    name="x1", coef=1.2, se=0.4, t_stat=3.0,
+                    pvalue=0.003, ci_lower=0.4, ci_upper=2.0,
+                ),
+            ],
+            n_obs=200,
+            n_params=2,
+            df_resid=198,
+            pseudo_r_squared=0.15,
+            log_likelihood=-120.0,
+            aic=244.0,
+            bic=250.0,
+            llr=25.0,
+            llr_pvalue=0.0001,
+            dep_var="y_bin",
+            method="Logit",
+        )
+
+        coef_df = result.to_dataframe().reset_index()
+        chart_figs: dict = {}
+
+        prefix = os.path.join(temp_dir, "results/logit_run")
+        exported = DataExporter.export_results_package(
+            result, coef_df, chart_figs, prefix
+        )
+
+        assert "coefficients_csv" in exported
+        assert "summary_txt" in exported
+        assert "summary_json" in exported
+
+        # Verify JSON contains model_type
+        import json
+        with open(exported["summary_json"], "r", encoding="utf-8") as f:
+            summary = json.load(f)
+        assert summary["model_type"] == "logit"
+        assert summary["pseudo_r_squared"] == 0.15
+        assert summary["llr"] == 25.0
+        assert summary["llr_pvalue"] == 0.0001
+
+    def test_summary_text_logit(self) -> None:
+        """Logit summary text should mention pseudo R-squared and LR chi2."""
+        from src.results.table import CoefficientRow, ModelResult
+
+        result = ModelResult(
+            model_type="logit",
+            coefficients=[
+                CoefficientRow(
+                    name="x1", coef=1.5, se=0.3, t_stat=5.0,
+                    pvalue=0.001, ci_lower=0.9, ci_upper=2.1,
+                ),
+            ],
+            n_obs=100,
+            n_params=2,
+            df_resid=98,
+            pseudo_r_squared=0.25,
+            log_likelihood=-80.0,
+            aic=164.0,
+            bic=170.0,
+            llr=30.0,
+            llr_pvalue=0.0001,
+            dep_var="y_bin",
+            method="Logit",
+        )
+
+        summary = _get_model_summary(result)
+        assert "伪 R²" in summary or "Pseudo R-squared" in summary
+        assert "LR" in summary
+        assert "Logit" in summary or "LOGIT" in summary
+        assert "z值" in summary
+        assert "t值" not in summary
+
+
 class TestExportReproducibilityPackage:
     """测试分析复现包导出功能。"""
 

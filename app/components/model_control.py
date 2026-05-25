@@ -73,25 +73,29 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
                 help="系数置信区间的置信水平。",
             )
 
-        se_type = st.radio(
-            "标准误类型",
-            options=[
-                "普通标准误",
-                "HC0 (异方差稳健)",
-                "HC1 (默认)",
-                "HC2",
-                "HC3",
-            ],
-            index=0,
-            horizontal=True,
-            key=f"{key_prefix}_se",
-            help=(
-                "稳健标准误在异方差情况下提供更可靠的推断。\n"
-                "- HC0: 普通稳健标准误\n"
-                "- HC1: HC0 带小样本校正（Stata 默认）\n"
-                "- HC2/HC3: 更激进的校正"
-            ),
-        )
+        # Standard error options — hidden for logit (MLE uses different theory)
+        if not is_logit:
+            se_type = st.radio(
+                "标准误类型",
+                options=[
+                    "普通标准误",
+                    "HC0 (异方差稳健)",
+                    "HC1 (默认)",
+                    "HC2",
+                    "HC3",
+                ],
+                index=0,
+                horizontal=True,
+                key=f"{key_prefix}_se",
+                help=(
+                    "稳健标准误在异方差情况下提供更可靠的推断。\n"
+                    "- HC0: 普通稳健标准误\n"
+                    "- HC1: HC0 带小样本校正（Stata 默认）\n"
+                    "- HC2/HC3: 更激进的校正"
+                ),
+            )
+        else:
+            se_type = "普通标准误"
 
         missing_handling = st.selectbox(
             "缺失值处理",
@@ -109,6 +113,7 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
         "HC3": "HC3",
     }
     return {
+        "model_type": "logit" if is_logit else "ols",
         "add_constant": add_constant,
         "ci_level": ci_level,
         "se_type": _se_map.get(se_type, "nonrobust"),

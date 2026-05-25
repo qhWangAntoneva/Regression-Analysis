@@ -31,7 +31,6 @@ try:
     )
     from src.modeling.fitter import ModelFitter
     from src.modeling.specification import ModelSpec, build_formula
-    from src.modeling.engines.statsmodels_engine import run_ols
     from src.results.table import ModelResult
 
     MODELING_AVAILABLE = True
@@ -252,6 +251,26 @@ def render() -> None:
 
     model_config = render_model_controls(key_prefix="model_main")
 
+    # ------------------------------------------------------------------
+    # Auto-suggest and validate model type based on dependent variable
+    # ------------------------------------------------------------------
+    if dep_var and df is not None:
+        dep_series = df[dep_var].dropna()
+        unique_vals = dep_series.nunique()
+        is_binary = unique_vals == 2
+
+        if model_config["model_type"] == "logit" and not is_binary:
+            st.warning(
+                f":material/warning: 因变量「{dep_var}」有 {unique_vals} 个不同值，"
+                f"不适用于 Logit 模型。Logit 要求二分类因变量 (0/1)。"
+                f"请切换为 OLS 或选择二分类因变量。"
+            )
+        elif model_config["model_type"] == "ols" and is_binary:
+            st.info(
+                f":material/info: 因变量「{dep_var}」只有 2 个不同值 ({sorted(dep_series.unique().tolist())})，"
+                f"可能是二分类变量。建议使用「Logit」模型进行逻辑回归。"
+            )
+
     # 公式预览（含转换和交互项）
     if dep_var and indep_vars:
         try:
@@ -261,6 +280,7 @@ def render() -> None:
                 has_intercept=model_config["add_constant"],
                 transforms=transforms,
                 interaction_terms=interaction_terms,
+                model_type=model_config["model_type"],
             )
             formula_str = build_formula(spec_preview)
             st.code(f"模型公式: {formula_str}", language="text")
@@ -347,10 +367,12 @@ def _run_regression(
                 transforms=transforms,
                 interaction_terms=interaction_terms,
                 missing_strategy=model_config.get("missing_handling", "drop"),
+                model_type=model_config.get("model_type", "ols"),
             )
 
             cov_type = model_config.get("se_type", "nonrobust")
-            result: ModelResult = run_ols(df, spec, cov_type=cov_type)
+            fitter = ModelFitter()
+            result: ModelResult = fitter.fit(df, spec, cov_type=cov_type)
 
             # 保存到 session state
             st.session_state.model_result = result
@@ -410,6 +432,7 @@ def _run_all_models(
                 transforms=transforms,
                 interaction_terms=interaction_terms,
                 missing_strategy=model_config.get("missing_handling", "drop"),
+                model_type=model_config.get("model_type", "ols"),
             )
             main_result = fitter.fit(
                 main_spec, df, cov_type=cov_type,
@@ -453,17 +476,27 @@ def _run_all_models(
 
 
 def _display_quick_summary(result: ModelResult) -> None:
-    """显示模型的快速摘要（R², Adj-R², N）。"""
+    """显示模型的快速摘要（R²/伪R², F/LR, N）。"""
     if st is None:
         return
 
+    is_logit = getattr(result, "model_type", "") == "logit"
+
     col1, col2, col3 = st.columns(3)
     with col1:
-        r2 = f"{result.r_squared:.4f}" if result.r_squared is not None else "N/A"
-        st.metric("R²", r2)
+        if is_logit:
+            pr2 = f"{result.pseudo_r_squared:.4f}" if result.pseudo_r_squared is not None else "N/A"
+            st.metric("伪 R² (McFadden)", pr2)
+        else:
+            r2 = f"{result.r_squared:.4f}" if result.r_squared is not None else "N/A"
+            st.metric("R²", r2)
     with col2:
-        adj = f"{result.adj_r_squared:.4f}" if result.adj_r_squared is not None else "N/A"
-        st.metric("Adj. R²", adj)
+        if is_logit:
+            llr_val = f"{result.llr:.4f}" if result.llr is not None else "N/A"
+            st.metric("LR χ²", llr_val)
+        else:
+            adj = f"{result.adj_r_squared:.4f}" if result.adj_r_squared is not None else "N/A"
+            st.metric("Adj. R²", adj)
     with col3:
         st.metric("N", result.n_obs)
 

@@ -38,6 +38,7 @@ def render_coefficient_table(
     if st is None:
         return
 
+    is_logit = getattr(result, "model_type", "") == "logit"
     df = result.to_dataframe().reset_index()
 
     rows: List[Dict[str, object]] = []
@@ -46,17 +47,26 @@ def render_coefficient_table(
         sig = row.get("显著性", "") if use_stars else ""
         ci_str = f"[{row['95%CI低']:.4f}, {row['95%CI高']:.4f}]"
 
-        rows.append(
-            {
-                "变量": row["变量"],
-                "系数(B)": round(float(row["系数"]), 6),
-                "标准误": round(float(row["标准误"]), 6),
-                "t值": round(float(row["t值"]), 4),
-                "p值": float(p_val) if isinstance(p_val, (int, float)) else p_val,
-                "95% CI": ci_str,
-                "显著性": sig,
-            }
-        )
+        stat_col = "z值" if is_logit else "t值"
+        stat_val = row.get(stat_col, row.get("t值", row.get("z值", 0)))
+
+        row_data = {
+            "变量": row["变量"],
+            "系数(B)": round(float(row["系数"]), 6),
+            "标准误": round(float(row["标准误"]), 6),
+            stat_col: round(float(stat_val), 4),
+            "p值": float(p_val) if isinstance(p_val, (int, float)) else p_val,
+            "95% CI": ci_str,
+            "显著性": sig,
+        }
+
+        # Add OR column for logit models
+        if is_logit:
+            import math
+            or_val = math.exp(float(row["系数"]))
+            row_data["OR (几率比)"] = round(or_val, 4)
+
+        rows.append(row_data)
 
     display_df = pd.DataFrame(rows)
 
@@ -79,22 +89,29 @@ def render_coefficient_table(
 
     styled = display_df.style.apply(_highlight_rows, axis=1)
 
+    stat_col_label = "z值" if is_logit else "t值"
+    col_config = {
+        "变量": st.column_config.TextColumn("变量"),
+        "系数(B)": st.column_config.NumberColumn("系数(B)", format="%.6f"),
+        "标准误": st.column_config.NumberColumn("标准误", format="%.6f"),
+        stat_col_label: st.column_config.NumberColumn(stat_col_label, format="%.4f"),
+        "p值": st.column_config.NumberColumn("p值", format="%.6f"),
+        "95% CI": st.column_config.TextColumn("95% CI"),
+        "显著性": st.column_config.TextColumn("显著性"),
+    }
+    if is_logit:
+        col_config["OR (几率比)"] = st.column_config.NumberColumn("OR (几率比)", format="%.4f")
+
     st.dataframe(
         styled,
         use_container_width=True,
-        column_config={
-            "变量": st.column_config.TextColumn("变量"),
-            "系数(B)": st.column_config.NumberColumn("系数(B)", format="%.6f"),
-            "标准误": st.column_config.NumberColumn("标准误", format="%.6f"),
-            "t值": st.column_config.NumberColumn("t值", format="%.4f"),
-            "p值": st.column_config.NumberColumn("p值", format="%.6f"),
-            "95% CI": st.column_config.TextColumn("95% CI"),
-            "显著性": st.column_config.TextColumn("显著性"),
-        },
+        column_config=col_config,
         hide_index=True,
     )
 
     st.caption("* p<0.1, ** p<0.05, *** p<0.01")
+    if is_logit:
+        st.caption("OR (几率比) = exp(系数)，表示自变量每增加一个单位，因变量发生概率的倍率变化。")
     # Annotation uses correct color description based on active palette
     if get_color_scheme and st.session_state.get("colorblind_mode", False):
         st.caption("蓝色背景行表示 p<0.05；深蓝色背景行表示 p<0.01（色盲友好）")
@@ -103,7 +120,9 @@ def render_coefficient_table(
 
     # SE type annotation
     se_type = getattr(result, "se_type", "nonrobust")
-    if se_type and se_type != "nonrobust":
+    if is_logit:
+        st.caption("Logit 模型使用最大似然估计 (MLE)，标准误为渐近标准误。")
+    elif se_type and se_type != "nonrobust":
         st.caption(f"使用稳健标准误: {se_type}")
     else:
         st.caption("使用普通标准误")
@@ -124,8 +143,11 @@ def render_coefficient_table(
 def render_model_statistics(result: ModelResult) -> None:
     """Render model statistics as a grid of metric cards.
 
-    Displays R-squared, Adj-R-squared, RMSE, AIC, BIC, Log-Likelihood,
-    F-statistic, F-p-value, and N in a 3x3 grid.
+    Displays R-squared/Pseudo R-squared, Adj-R-squared/LR chi2, RMSE/Pseudo R²,
+    AIC, BIC, Log-Likelihood, F-statistic/LR chi2, p-value, and N in a 3x3 grid.
+
+    For logit models, OLS-specific metrics (R², Adj-R², RMSE, F-test) are
+    replaced with logit counterparts (Pseudo R², LR chi2, LR p-value).
 
     Args:
         result: A ModelResult object.
@@ -134,34 +156,62 @@ def render_model_statistics(result: ModelResult) -> None:
         return
 
     summary = result.to_summary_dict()
+    is_logit = getattr(result, "model_type", "") == "logit"
 
-    # Row 1: R-squared metrics
+    # Row 1: Model fit metrics
     col1, col2, col3 = st.columns(3)
     with col1:
-        r2 = summary.get("r_squared")
-        r2_str = f"{r2:.4f}" if r2 is not None else "N/A"
-        r2_delta = None
-        if r2 is not None and r2 < 0.1:
-            r2_delta = "模型解释力较低"
-        st.metric(
-            label="R²",
-            value=r2_str,
-            delta=r2_delta,
-            delta_color="inverse" if r2_delta else "normal",
-        )
+        if is_logit:
+            pr2 = summary.get("pseudo_r_squared")
+            pr2_str = f"{pr2:.4f}" if pr2 is not None else "N/A"
+            pr2_delta = None
+            if pr2 is not None and pr2 < 0.1:
+                pr2_delta = "模型解释力较低"
+            st.metric(
+                label="伪 R² (McFadden)",
+                value=pr2_str,
+                delta=pr2_delta,
+                delta_color="inverse" if pr2_delta else "normal",
+            )
+        else:
+            r2 = summary.get("r_squared")
+            r2_str = f"{r2:.4f}" if r2 is not None else "N/A"
+            r2_delta = None
+            if r2 is not None and r2 < 0.1:
+                r2_delta = "模型解释力较低"
+            st.metric(
+                label="R²",
+                value=r2_str,
+                delta=r2_delta,
+                delta_color="inverse" if r2_delta else "normal",
+            )
 
     with col2:
-        adj_r2 = summary.get("adj_r_squared")
-        st.metric(
-            label="Adj-R²",
-            value=f"{adj_r2:.4f}" if adj_r2 is not None else "N/A",
-        )
+        if is_logit:
+            llr_val = summary.get("llr")
+            st.metric(
+                label="似然比检验 (LR χ²)",
+                value=f"{llr_val:.4f}" if llr_val is not None else "N/A",
+            )
+        else:
+            adj_r2 = summary.get("adj_r_squared")
+            st.metric(
+                label="Adj-R²",
+                value=f"{adj_r2:.4f}" if adj_r2 is not None else "N/A",
+            )
 
     with col3:
-        rmse = summary.get("rmse")
-        st.metric(label="RMSE", value=f"{rmse:.4f}" if rmse else "N/A")
+        if is_logit:
+            llr_p = summary.get("llr_pvalue")
+            st.metric(
+                label="LR p值",
+                value=f"{llr_p:.6f}" if llr_p is not None else "N/A",
+            )
+        else:
+            rmse = summary.get("rmse")
+            st.metric(label="RMSE", value=f"{rmse:.4f}" if rmse else "N/A")
 
-    # Row 2: Information criteria
+    # Row 2: Information criteria (same for both)
     col1, col2, col3 = st.columns(3)
     with col1:
         aic = summary.get("aic")
@@ -178,29 +228,43 @@ def render_model_statistics(result: ModelResult) -> None:
             value=f"{ll:.4f}" if ll is not None else "N/A",
         )
 
-    # Row 3: F-test and sample size
+    # Row 3: Test statistics (OLS) or sample info (logit)
     col1, col2, col3 = st.columns(3)
     with col1:
-        f_stat = summary.get("f_statistic")
-        st.metric(
-            label="F 统计量",
-            value=f"{f_stat:.4f}" if f_stat is not None else "N/A",
-        )
+        if is_logit:
+            st.metric(label="样本量 (N)", value=f"{summary.get('n_obs', 'N/A')}")
+        else:
+            f_stat = summary.get("f_statistic")
+            st.metric(
+                label="F 统计量",
+                value=f"{f_stat:.4f}" if f_stat is not None else "N/A",
+            )
 
     with col2:
-        f_p = summary.get("f_pvalue")
-        f_p_str = f"{f_p:.6f}" if f_p is not None else "N/A"
-        st.metric(label="F-p值", value=f_p_str)
+        if is_logit:
+            pass  # Row 1 already shows LR χ² and p-value
+        else:
+            f_p = summary.get("f_pvalue")
+            f_p_str = f"{f_p:.6f}" if f_p is not None else "N/A"
+            st.metric(label="F-p值", value=f_p_str)
 
     with col3:
         n = summary.get("n_obs")
         st.metric(label="N (样本量)", value=str(n) if n else "N/A")
 
-    # Warning for low R-squared
-    if r2 is not None and r2 < 0.1:
-        st.warning(
-            ":material/warning: R² = {:.4f}，模型解释力较低。".format(r2)
-        )
+    # Warning for low fit
+    if is_logit:
+        pr2_warn = summary.get("pseudo_r_squared")
+        if pr2_warn is not None and pr2_warn < 0.1:
+            st.warning(
+                ":material/warning: 伪 R² = {:.4f}，模型解释力较低。".format(pr2_warn)
+            )
+    else:
+        r2_warn = summary.get("r_squared")
+        if r2_warn is not None and r2_warn < 0.1:
+            st.warning(
+                ":material/warning: R² = {:.4f}，模型解释力较低。".format(r2_warn)
+            )
 
 
 def render_anova_table(result: ModelResult) -> None:
