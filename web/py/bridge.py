@@ -1216,22 +1216,28 @@ def compare_models(model_results_json: str) -> str:
                 y_pos = n_coefs - 1 - ci + (mi - (n_models - 1) / 2) * 0.3
                 y_positions.append(y_pos)
                 estimates.append(c.get("coef", 0))
-                ci_lows.append(c.get("ci_lower", 0))
-                ci_highs.append(c.get("ci_upper", 0))
+                ci_low = c.get("ci_lower")
+                ci_high = c.get("ci_upper")
+                # Only add CI if both bounds are valid (not None, not both 0)
+                has_ci = (ci_low is not None and ci_high is not None and
+                          not (ci_low == 0 and ci_high == 0))
+                ci_lows.append(ci_low if has_ci else None)
+                ci_highs.append(ci_high if has_ci else None)
         if not estimates:
             continue
 
-        # CI whiskers
+        # CI whiskers — skip coefficients lacking valid CI data
         for i in range(len(estimates)):
-            traces.append({
-                "type": "scatter",
-                "x": [ci_lows[i], ci_highs[i]],
-                "y": [y_positions[i], y_positions[i]],
-                "mode": "lines",
-                "line": {"color": color, "width": 2},
-                "showlegend": False,
-                "hoverinfo": "none",
-            })
+            if ci_lows[i] is not None:
+                traces.append({
+                    "type": "scatter",
+                    "x": [ci_lows[i], ci_highs[i]],
+                    "y": [y_positions[i], y_positions[i]],
+                    "mode": "lines",
+                    "line": {"color": color, "width": 2},
+                    "showlegend": False,
+                    "hoverinfo": "none",
+                })
 
         # Dot markers
         traces.append({

@@ -1322,6 +1322,12 @@ function loadGalleryItem(id) {
     // Switch to results
     switchToTab('results');
 
+    // Generate scatter charts for Gallery items
+    if (STATE.pyodideReady) {
+        const dataJson = JSON.stringify({ data: STATE.data, columns: STATE.columns });
+        generateAllScatterCharts(dataJson, item.result);
+    }
+
     console.log('[Gallery] Loaded:', item.title, 'N:', item.n_obs);
 }
 
@@ -1468,7 +1474,11 @@ async function exportFormat(format) {
                 csvResult = { success: true, csv: generateCSVFromResult(STATE.result) };
             }
             if (csvResult.success) {
-                downloadBlob(csvResult.csv, 'regression_results.csv', 'text/csv');
+                let csv = csvResult.csv;
+                if (STATE.galleryLoaded) {
+                    csv = '# Note: This result is from a pre-computed Gallery sample. Some statistics may be approximate.\n' + csv;
+                }
+                downloadBlob(csv, 'regression_results.csv', 'text/csv');
             }
         } else if (format === 'excel') {
             if (pyodide && STATE.pyodideReady && !STATE.galleryLoaded) {
@@ -1479,12 +1489,19 @@ async function exportFormat(format) {
                     for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
                     downloadBlob(new Blob([bytes]), excelResult.filename || 'regression_results.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
                 } else {
-                    alert('Excel export requires Pyodide. Downloading CSV instead.');
-                    exportFormat('csv');
+                    showError('export-error', 'Excel export failed. Downloading CSV instead.');
+                    const csvResult2 = JSON.parse(pyodide.runPython(`export_csv(${JSON.stringify(resultStr)})`));
+                    if (csvResult2.success) {
+                        downloadBlob(csvResult2.csv, 'regression_results.csv', 'text/csv');
+                    }
                 }
             } else {
-                alert('Excel export requires Pyodide runtime. Downloading CSV instead.');
-                exportFormat('csv');
+                showError('export-error', 'Excel export requires Pyodide runtime. Downloading CSV instead.');
+                let csv = generateCSVFromResult(STATE.result);
+                if (STATE.galleryLoaded) {
+                    csv = '# Note: This result is from a pre-computed Gallery sample. Some statistics may be approximate.\n' + csv;
+                }
+                downloadBlob(csv, 'regression_results.csv', 'text/csv');
             }
         }
     } catch (err) {
