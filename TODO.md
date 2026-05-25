@@ -127,82 +127,82 @@
 
 ### 5.1.1 引擎层: statsmodels_logit_engine.py
 
-- [ ] 新建 `src/modeling/engines/statsmodels_logit_engine.py`
-  - [ ] 实现 `run_logit(data, formula)` -- 基于 statsmodels Logit/GLM
-  - [ ] 实现 `extract_logit(fitted_model)` -- 提取系数/标准误/z值/p值/95%CI
-  - [ ] 计算 Odds Ratio (OR = exp(coef)) + OR 置信区间
-  - [ ] 计算 pseudo R-squared (McFadden's R-squared)
-  - [ ] 计算 Log-Likelihood + AIC/BIC
-  - [ ] 处理完全分离 (perfect separation) 警告, 给出中文提示
-  - [ ] 处理收敛失败警告
-- [ ] 编写 `tests/unit/test_logit_engine.py` (目标 >= 90% 覆盖率)
-  - [ ] 二值因变量数据集 (如 mtcars vs=0/1 或 titanic 模拟)
-  - [ ] 系数正确性对比基准 (与 R `glm(family=binomial)` 对比)
-  - [ ] 完全分离边界情况
-  - [ ] 多分类自变量含有虚拟变量
+- [x] 新建 `src/modeling/engines/statsmodels_logit_engine.py`
+  - [x] 实现 `run_logit(data, formula)` -- 基于 statsmodels Logit/GLM
+  - [x] 实现 `extract_logit(fitted_model)` -- 提取系数/标准误/z值/p值/95%CI
+  - [x] 计算 Odds Ratio (OR = exp(coef)) + OR 置信区间
+  - [x] 计算 pseudo R-squared (McFadden's R-squared)
+  - [x] 计算 Log-Likelihood + AIC/BIC
+  - [x] 处理完全分离 (perfect separation) 警告, 给出中文提示
+  - [x] 处理收敛失败警告
+- [x] 编写 `tests/unit/test_logit_engine.py` (目标 >= 90% 覆盖率)
+  - [x] 二值因变量数据集 (如 mtcars vs=0/1 或 titanic 模拟)
+  - [x] 系数正确性对比基准 (与 R `glm(family=binomial)` 对比)
+  - [x] 完全分离边界情况
+  - [x] 多分类自变量含有虚拟变量
 
 ### 5.1.2 数据结构层: ModelResult 重构 (技术顾问核心建议)
 
-- [ ] `src/results/table.py` 中 `ModelResult` dataclass 改造:
-  - [ ] `r_squared` 字段保持必填但允许 None (logit 无传统 R-squared)
-  - [ ] 新增 `pseudo_r_squared: float | None` 字段 (logit 专用)
-  - [ ] `f_statistic` 字段允许 None (logit 无 F 检验)
-  - [ ] 新增 `log_likelihood: float | None` 字段 (若尚未存在)
-  - [ ] 新增 `model_type: str` 字段 (区分 "ols" / "logit" / "probit")
-  - [ ] `CoefficientRow` 保持通用 (t_or_z 字段命名已兼容, 无需改名)
-- [ ] 所有下游消费者 (UI 组件 + 导出模块 + 图表模块) 适配:
-  - [ ] `app/components/result_card.py` -- 根据 model_type 条件渲染 (OLS 显示 R-squared/F-test, logit 显示 pseudo-R-squared/LR-test)
-  - [ ] `src/results/summary_generator.py` -- 中文摘要区分 OLS 和 logit 文本模板
-  - [ ] `src/data_io/exporter.py` -- 导出表头根据 model_type 自适应
-  - [ ] `src/export/latex_renderer.py` -- LaTeX 模板区分 OLS 和 logit 输出
+- [x] `src/results/table.py` 中 `ModelResult` dataclass 改造:
+  - [x] `r_squared` 字段保持必填但允许 None (logit 无传统 R-squared)
+  - [x] 新增 `pseudo_r_squared: float | None` 字段 (logit 专用)
+  - [x] `f_statistic` 字段允许 None (logit 无 F 检验)
+  - [x] 新增 `log_likelihood: float | None` 字段 (若尚未存在)
+  - [x] 新增 `model_type: str` 字段 (区分 "ols" / "logit" / "probit")
+  - [x] `CoefficientRow` 保持通用 (t_or_z 字段命名已兼容, 无需改名)
+- [x] 所有下游消费者 (UI 组件 + 导出模块 + 图表模块) 适配:
+  - [x] `app/components/result_card.py` -- 根据 model_type 条件渲染 (OLS 显示 R-squared/F-test, logit 显示 pseudo-R-squared/LR-test)
+  - [x] `src/results/summary_generator.py` -- 中文摘要区分 OLS 和 logit 文本模板
+  - [x] `src/data_io/exporter.py` -- 导出表头根据 model_type 自适应
+  - [x] `src/export/latex_renderer.py` -- LaTeX 模板区分 OLS 和 logit 输出
 
 ### 5.1.3 调度层: Fitter 扩展
 
-- [ ] `src/modeling/fitter.py` 中 `ModelFitter` 改造:
-  - [ ] `fit()` 方法新增 `model_type: str = "ols"` 参数
-  - [ ] 根据 model_type 分发: "ols" -> statsmodels_engine, "logit" -> statsmodels_logit_engine
-  - [ ] 统一返回 `ModelResult` (包含 model_type 字段)
-  - [ ] `fit_multiple()` 扩展支持混合模型类型 (部分 OLS + 部分 logit), 对比表中标记
-- [ ] `src/modeling/specification.py` 中 `ModelSpec` 新增 `model_type: str = "ols"` 字段
+- [x] `src/modeling/fitter.py` 中 `ModelFitter` 改造:
+  - [x] `fit()` 方法新增 `model_type: str = "ols"` 参数
+  - [x] 根据 model_type 分发: "ols" -> statsmodels_engine, "logit" -> statsmodels_logit_engine
+  - [x] 统一返回 `ModelResult` (包含 model_type 字段)
+  - [x] `fit_multiple()` 扩展支持混合模型类型 (部分 OLS + 部分 logit), 对比表中标记
+- [x] `src/modeling/specification.py` 中 `ModelSpec` 新增 `model_type: str = "ols"` 字段
 
 ### 5.1.4 UI 层: 模型类型选择器
 
-- [ ] `app/components/model_control.py` 新增:
-  - [ ] 模型类型下拉选择器 (OLS / Logit / Probit)
-  - [ ] 根据模型类型动态显示/隐藏相关选项:
+- [x] `app/components/model_control.py` 新增:
+  - [x] 模型类型下拉选择器 (OLS / Logit / Probit)
+  - [x] 根据模型类型动态显示/隐藏相关选项:
     - Logit/Probit 模式下隐藏 F-test 相关显示
     - Logit/Probit 模式下添加 OR (Odds Ratio) 显示开关
-- [ ] `app/pages/03_model_spec.py` 和 `04_model_results.py` 适配:
-  - [ ] 因变量二值检测: 当用户选择二值因变量时自动建议 logit 模型
-  - [ ] 连续因变量选 logit 时给出确认提示
-  - [ ] 结果页面根据 model_type 展示对应统计量
-- [ ] Web 版 (`web/py/bridge.py` + `web/js/app.js`) 适配:
-  - [ ] `run_regression()` 新增 `model_type` 参数
-  - [ ] 前端添加模型类型选择器 (在 Model Tab)
-  - [ ] 结果渲染区分 OLS 和 logit 统计量
+- [x] `app/pages/03_model_spec.py` 和 `04_model_results.py` 适配:
+  - [x] 因变量二值检测: 当用户选择二值因变量时自动建议 logit 模型
+  - [x] 连续因变量选 logit 时给出确认提示
+  - [x] 结果页面根据 model_type 展示对应统计量
+- [x] Web 版 (`web/py/bridge.py` + `web/js/app.js`) 适配:
+  - [x] `run_regression()` 新增 `model_type` 参数
+  - [x] 前端添加模型类型选择器 (在 Model Tab)
+  - [x] 结果渲染区分 OLS 和 logit 统计量
 
 ### 5.1.5 图表: Logit 专用可视化
 
-- [ ] `src/visualization/` 新增 `src/visualization/logit_plots.py` (或扩展 `coefficient.py`):
-  - [ ] 实现 `roc_curve_plot()` -- ROC 曲线 + AUC 标注 (plotly)
-  - [ ] 实现 `odds_ratio_plot()` -- OR 森林图 (Odds Ratio + 95% CI, 对数尺度)
-  - [ ] Web 版桥接函数 (`bridge.py`): `generate_roc_chart()` + `generate_or_chart()`
-- [ ] 测试: `tests/unit/test_logit_plots.py`
+- [x] `src/visualization/` 新增 `src/visualization/logit_plots.py` (或扩展 `coefficient.py`):
+  - [x] 实现 `roc_curve_plot()` -- ROC 曲线 + AUC 标注 (plotly)
+  - [x] 实现 `odds_ratio_plot()` -- OR 森林图 (Odds Ratio + 95% CI, 对数尺度)
+  - [x] Web 版桥接函数 (`bridge.py`): `generate_roc_chart()` + `generate_or_chart()`
+- [x] 测试: `tests/unit/test_logit_plots.py`
 
 ### 5.1.6 导出: Logit 专用模板
 
-- [ ] LaTeX 导出 (`src/export/latex_renderer.py`):
-  - [ ] logit 模型表: 系数列 -> OR 列 (exp(B)) + 标准误 + z值 + p值
-  - [ ] 脚注区显示 pseudo R-squared 和模型类型注释
-- [ ] 综合报告 (`src/export/html_report.py`):
-  - [ ] logit 专用报告模板: OR 解读 + 模型拟合统计量 (LR chi2/pseudo-R2)
-- [ ] Excel/CSV 导出: 适配 logit 结果字段
+- [x] LaTeX 导出 (`src/export/latex_renderer.py`):
+  - [x] logit 模型表: 系数列 -> OR 列 (exp(B)) + 标准误 + z值 + p值
+  - [x] 脚注区显示 pseudo R-squared 和模型类型注释
+- [x] 综合报告 (`src/export/html_report.py`):
+  - [x] logit 专用报告模板: OR 解读 + 模型拟合统计量 (LR chi2/pseudo-R2)
+- [x] Excel/CSV 导出: 适配 logit 结果字段
 
 ### 5.1.7 Web 版 Logit 可视化集成
 
-- [ ] `web/py/bridge.py` 集成 ROC 图表 + OR 图表生成
-- [ ] `web/js/app.js` 前端渲染 ROC 和 OR 图表
-- [ ] 测试 Web 版 logit 端到端流程
+- [x] `web/py/bridge.py` 集成 ROC 图表 + OR 图表生成
+- [x] `web/js/app.js` 前端渲染 ROC 和 OR 图表
+- [x] 测试 Web 版 logit 端到端流程
 
 ---
 
@@ -212,31 +212,31 @@
 
 ### 5.2.1 Pyodide 加载进度指示
 
-- [ ] `web/index.html` 添加加载进度条组件 (带百分比/预估时间)
-- [ ] `web/js/app.js` 中 Pyodide 初始化阶段分步上报进度:
-  - [ ] 阶段 1: 下载 Pyodide core (0-40%)
-  - [ ] 阶段 2: 加载 micropip + 安装包 (40-70%)
-  - [ ] 阶段 3: 导入 Python 模块 + 预热引擎 (70-95%)
-  - [ ] 阶段 4: 就绪 (95-100%)
-- [ ] 首次加载提示: "首次加载约需 30-60 秒, 后续访问利用浏览器缓存将更快 (约 5-10 秒)"
-- [ ] 加载失败时显示重试按钮 + 诊断信息 (网络检测/浏览器兼容性)
+- [x] `web/index.html` 添加加载进度条组件 (带百分比/预估时间)
+- [x] `web/js/app.js` 中 Pyodide 初始化阶段分步上报进度:
+  - [x] 阶段 1: 下载 Pyodide core (0-40%)
+  - [x] 阶段 2: 加载 micropip + 安装包 (40-70%)
+  - [x] 阶段 3: 导入 Python 模块 + 预热引擎 (70-95%)
+  - [x] 阶段 4: 就绪 (95-100%)
+- [x] 首次加载提示: "首次加载约需 30-60 秒, 后续访问利用浏览器缓存将更快 (约 5-10 秒)"
+- [x] 加载失败时显示重试按钮 + 诊断信息 (网络检测/浏览器兼容性)
 
 ### 5.2.2 分类变量名人性化
 
-- [ ] `src/modeling/specification.py` 中 `build_formula()` 输出可读标签:
-  - [ ] 当前: `C(education)[T.本科]` -> 目标: `教育水平: 本科`
-  - [ ] 方案 A: 保留变量原始标签 (patsy 的 `C(name, Treatment(reference='...'))`)
-  - [ ] 方案 B: 手动构造设计矩阵并附带标签映射, 后续 Consumer 层统一使用映射
-- [ ] `app/components/result_card.py` 系数表渲染使用标签映射
-- [ ] 导出模块 (`exporter.py`, `latex_renderer.py`) 使用标签映射
-- [ ] Web 版 `bridge.py` 中 `run_regression()` 返回 `variable_labels` 字段
-- [ ] `web/js/app.js` 结果表渲染使用标签
+- [x] `src/modeling/specification.py` 中 `build_formula()` 输出可读标签:
+  - [x] 当前: `C(education)[T.本科]` -> 目标: `教育水平: 本科`
+  - [x] 方案 A: 保留变量原始标签 (patsy 的 `C(name, Treatment(reference='...'))`)
+  - [x] 方案 B: 手动构造设计矩阵并附带标签映射, 后续 Consumer 层统一使用映射
+- [x] `app/components/result_card.py` 系数表渲染使用标签映射
+- [x] 导出模块 (`exporter.py`, `latex_renderer.py`) 使用标签映射
+- [x] Web 版 `bridge.py` 中 `run_regression()` 返回 `variable_labels` 字段
+- [x] `web/js/app.js` 结果表渲染使用标签
 
 ### 5.2.3 Streamlit-Web 版本功能对照 (用户认知对齐)
 
-- [ ] 在 README.md 添加功能对照表 (Streamlit vs Web)
-- [ ] 在 Web 版页面底部添加版本说明链接
-- [ ] Streamlit 首页添加"在线版"链接, Web 版添加"桌面版"链接
+- [x] 在 README.md 添加功能对照表 (Streamlit vs Web)
+- [x] 在 Web 版页面底部添加版本说明链接
+- [x] Streamlit 首页添加"在线版"链接, Web 版添加"桌面版"链接
 
 ---
 
