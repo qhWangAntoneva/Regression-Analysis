@@ -4,6 +4,34 @@ All notable changes to Regression Analysis will be documented in this file.
 
 ---
 
+## [1.1.0] — 2026-05-26
+
+### 新增功能
+
+- **Logit 回归支持**：二元 logistic 回归模型，含 OR 值、McFadden 伪 R²、似然比检验
+- **Logit 专用可视化**：ROC 曲线 + AUC、Odds Ratio 森林图
+- **Logit 模型导出**：LaTeX/HTML/CSV/Excel 全格式支持，含 OR 列
+- **Pyodide Web 版加载进度条**：4 阶段进度指示 + 首载提示
+- **分类变量名人性化显示**：`教育水平: 本科` 替代技术格式 `C(education)[T.本科]`
+- **Web 版功能对齐**：变量转换、交互项、多模型对比图在 Web 版均可用
+- **Streamlit-Web 功能对照表** (README)
+
+### 改进
+
+- `build_variable_labels()` 重写：正确解析 patsy 列名（含交互项格式）
+- Web 版系数表使用 variable_labels 渲染
+- Gallery 模式 CSV 降级导出友好提示
+- `compare_models()` CI 缺失时跳过 whisker 而非画在 0 处
+- Web bridge `parse_file` columns 元数据透传完整性检查
+
+### 测试
+
+- 560 tests 全部通过 (从 v1.0 的 309 tests 增长 81%)
+- 新增 Logit 引擎单元测试、Logit 图表测试、variable_labels 测试、Logit 端到端集成测试
+- 跨引擎基准验证：statsmodels Logit vs GLM vs sklearn 5/5 数据集通过
+
+---
+
 ## [1.0.0] — 2026-05-25
 
 ### Phase 1: Proof of Concept (POC)
@@ -181,14 +209,11 @@ regression scenarios based on 3 user personas.
 
 ## Future Versions
 
-### [1.1.0] — Planned
-
-- **Additional Models**: logistic regression, probit, mixed-effects models, panel data FE/RE
-- **User Experience**: analysis snapshots (JSON save/load), user history management
-- **Deployment**: Docker support
-
 ### [1.2.0] — Planned
 
+- **Additional Models**: probit regression, mixed-effects models, panel data FE/RE
+- **User Experience**: analysis snapshots (JSON save/load), user history management
+- **Deployment**: Docker support
 - **Advanced Analysis**: mediation/moderation analysis, instrumental variable regression, bootstrap SE
 - **Machine Learning**: ridge regression, lasso, elastic net
 - **Reporting**: automated analysis summary generation (LLM-assisted or template-based)
