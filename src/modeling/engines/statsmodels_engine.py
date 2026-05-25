@@ -7,14 +7,14 @@ into the unified ModelResult data structure.
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.regression.linear_model import OLS, RegressionResultsWrapper
 
-from src.modeling.specification import ModelSpec, build_design_matrix
+from src.modeling.specification import ModelSpec, build_design_matrix, build_variable_labels
 from src.results.table import CoefficientRow, ModelResult
 
 
@@ -24,6 +24,7 @@ def extract_statsmodels(
     alpha: float = 0.05,
     dep_var: str = "",
     specification: str = "",
+    variable_labels: Optional[Dict[str, str]] = None,
 ) -> ModelResult:
     """Extract results from a statsmodels OLS Results object.
 
@@ -109,6 +110,7 @@ def extract_statsmodels(
         dep_var=dep_var,
         specification=specification,
         method=model_type,
+        variable_labels=variable_labels if variable_labels is not None else {},
     )
 
 
@@ -142,6 +144,7 @@ def run_ols(
             cannot be fitted.
     """
     X, y = build_design_matrix(spec, data)
+    labels = build_variable_labels(spec, list(X.columns))
 
     formula_str = f"{spec.dep_var} ~ {' + '.join(spec.all_predictors)}"
     if not spec.has_intercept:
@@ -178,6 +181,7 @@ def run_ols(
         alpha=alpha,
         dep_var=spec.dep_var,
         specification=spec_str,
+        variable_labels=labels,
     )
     result.transforms_applied = dict(spec.transforms)
     result.interaction_terms_applied = list(spec.interaction_terms)

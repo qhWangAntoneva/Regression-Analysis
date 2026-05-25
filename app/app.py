@@ -171,6 +171,9 @@ st.sidebar.markdown(
     """
 )
 
+st.sidebar.markdown("---")
+st.sidebar.info("Try the [online version](https://qhwangantoneva.github.io/regression-analysis/) — no installation needed!")
+
 # ---------------------------------------------------------------------------
 # Global CSS for responsive layout and visual consistency
 # ---------------------------------------------------------------------------
