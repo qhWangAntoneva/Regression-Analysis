@@ -113,6 +113,51 @@ body {
     color: #721c24;
 }
 
+/* --- Pyodide Progress Bar ------------------------------------------------ */
+.pyodide-progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 220px;
+    max-width: 320px;
+}
+
+.pyodide-progress-track {
+    width: 100%;
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.pyodide-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #1f77b4, #4ea1db);
+    border-radius: 4px;
+    transition: width 0.6s ease;
+    min-width: 0;
+}
+
+.pyodide-progress-text {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    text-align: center;
+}
+
+.pyodide-progress-hint {
+    font-size: 0.68rem;
+    color: var(--color-text-muted);
+    text-align: center;
+    font-style: italic;
+    line-height: 1.3;
+}
+
+/* Hide hint when Pyodide is ready */
+.pyodide-progress-container.ready .pyodide-progress-hint {
+    display: none;
+}
+
 /* --- Tabs Navigation --------------------------------------------------- */
 .tab-nav {
     display: flex;

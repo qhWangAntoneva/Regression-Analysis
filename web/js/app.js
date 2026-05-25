@@ -55,35 +55,55 @@ document.addEventListener('DOMContentLoaded', () => {
 // =========================================================================
 
 async function initPyodide() {
+    const progressContainer = document.getElementById('pyodide-progress-container');
     const statusEl = document.getElementById('pyodide-status');
+
+    // Helper to update progress bar and text
+    function updatePyodideProgress(percent, statusText) {
+        const fill = document.getElementById('pyodide-progress-fill');
+        const text = document.getElementById('pyodide-progress-text');
+        if (fill) fill.style.width = percent + '%';
+        if (text) text.textContent = statusText;
+    }
+
     try {
-        statusEl.textContent = 'Pyodide: Loading...';
-        statusEl.className = 'status-badge loading';
+        // Stage 1: Downloading Pyodide core (0-40%)
+        updatePyodideProgress(5, 'Downloading Pyodide core...');
 
         const pyodide = await loadPyodide({
             indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.5/full/',
         });
 
-        statusEl.textContent = 'Pyodide: Installing packages...';
+        updatePyodideProgress(40, 'Pyodide core loaded. Installing packages...');
 
-        // Load required Python packages
+        // Stage 2: Installing packages (40-70%)
         await pyodide.loadPackage(['numpy', 'pandas', 'statsmodels', 'scipy']);
         // openpyxl not available in Pyodide — Excel export falls back to CSV
 
-        // Load our bridge module
+        updatePyodideProgress(70, 'Packages installed. Importing modules...');
+
+        // Stage 3: Loading bridge module (70-95%)
         const bridgeCode = await fetch('py/bridge.py').then(r => r.text());
         pyodide.runPython(bridgeCode);
 
+        updatePyodideProgress(95, 'Bridge loaded. Finalizing...');
+
+        // Stage 4: Ready (95-100%)
         STATE.pyodide = pyodide;
         STATE.pyodideReady = true;
-        statusEl.textContent = 'Pyodide: Ready';
-        statusEl.className = 'status-badge ready';
+
+        updatePyodideProgress(100, 'Ready');
+        progressContainer.classList.add('ready');
+        statusEl.classList.remove('hidden');
 
         console.log('[Pyodide] Ready with numpy, pandas, statsmodels, scipy, openpyxl');
     } catch (err) {
         console.error('[Pyodide] Failed to initialize:', err);
+        updatePyodideProgress(0, 'Error loading Pyodide');
         statusEl.textContent = 'Pyodide: Error';
         statusEl.className = 'status-badge error';
+        statusEl.classList.remove('hidden');
+        progressContainer.classList.add('hidden');
         showError('data-error', 'Failed to load Python runtime (Pyodide). Please check your internet connection and reload the page.');
     }
 }
