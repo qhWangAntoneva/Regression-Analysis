@@ -7,9 +7,15 @@ on:
       - 'web/**'
       - 'src/**'
       - 'app/**'
+      - '.streamlit/**'
       - 'pyproject.toml'
+      - 'uv.lock'
       - 'Dockerfile'
       - '.github/workflows/deploy.yml'
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   # -----------------------------------------------------------------------
@@ -17,46 +23,24 @@ jobs:
   # -----------------------------------------------------------------------
   deploy-pages:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Deploy to GitHub Pages
-        env:
-          PAGES_REPO: qhWangAntoneva/qhWangAntoneva.github.io
-          TARGET_SUBDIR: regression-analysis
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          set -euo pipefail
-          echo "Deploying web/ to $PAGES_REPO at /$TARGET_SUBDIR/"
-
-          # Clone the pages repo
-          PAGES_DIR="/tmp/gh-pages-deploy-$$"
-          git clone "https://x-access-token:${GH_TOKEN}@github.com/$PAGES_REPO.git" "$PAGES_DIR" --depth 1
-
-          # Clear and copy web assets
-          TARGET="$PAGES_DIR/$TARGET_SUBDIR"
-          rm -rf "$TARGET"
-          mkdir -p "$TARGET"
-          cp -r web/* "$TARGET/"
-          rm -f "$TARGET/deploy.sh"
-
-          # Commit and push
-          cd "$PAGES_DIR"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$TARGET_SUBDIR/"
-          if git diff --cached --quiet; then
-            echo "No changes to deploy."
-          else
-            git commit -m "deploy: regression-analysis web app update
-
-          Source: ${{ github.repository }}@${{ github.sha }}
-          $(date -Iseconds)"
-            git push
-            echo "Deployed successfully to https://qhwangantoneva.github.io/$TARGET_SUBDIR/"
-          fi
-          rm -rf "$PAGES_DIR"
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.GH_PAT }}
+          external_repository: qhWangAntoneva/qhWangAntoneva.github.io
+          publish_dir: ./web
+          destination_dir: regression-analysis
+          publish_branch: master
+          keep_files: true
+          commit_message: "deploy: regression-analysis ${{ github.sha }}"
 
   # -----------------------------------------------------------------------
   # Docker — build image and push to ghcr.io
@@ -86,6 +70,8 @@ jobs:
           tags: |
             type=sha,prefix=sha-
             type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
 
       - name: Build and push Docker image
