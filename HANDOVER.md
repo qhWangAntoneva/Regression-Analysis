@@ -1,6 +1,6 @@
 # Regression Analysis — 交接文档
 
-> 最后更新: 2026-05-27 (Session 6 — 复查完成)
+> 最后更新: 2026-05-27 (Session 7 — deploy key 修复，V1.2 文档同步)
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 部署: https://qhwangantoneva.github.io/regression-analysis/
 
@@ -98,7 +98,7 @@ Regression Analysis/
 | mypy app/ | 0 errors |
 | pytest | 849 passed (852 collected), 3 skipped |
 
-CI 配置: `.github/workflows/ci.yml`。Deploy 需要 `GH_PAT` secret (对 GitHub Pages 仓库的写入权限)。
+CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KEY` secret，仅限 `qhWangAntoneva.github.io` 仓库写权限)。
 
 ---
 
@@ -131,10 +131,15 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 需要 `GH_PAT` secret (对 GitHu
 - [x] **noqa 残留审计**: 107 处 noqa 分布在源文件和测试中，无可疑 QUESTIONABLE 残留；均为合法单行抑制
 - [x] **Web 版 (Pyodide) 新特性验证**: Hausman / Exposure / Robust SE 在 Pyodide 中可用 (commit c7fde7f + 19b9536)
 
-### Session 7 优先事项
+### Session 7 (已完成 — 2026-05-27)
 
-- [ ] **Docker 构建验证**: 需 Docker 环境时运行 `docker build -t regression-analysis . && docker compose up`
-- [ ] **发布 v1.2 tag**: 创建 git tag v1.2.0 (当前 tag: v1.0.0, v1.1.0)
+- [x] **Deploy Pages 修复 (CRITICAL)**: 停用 GH_PAT (secret 缺失导致所有 deploy 运行失败)，改为 SSH deploy key (`DEPLOY_KEY` secret)。3 条 gh CLI 命令完成设置，`deploy.yml` 改为 `deploy_key` 参数，保留 `if` 守卫
+- [x] **文档同步**: HANDOVER/TODO/CHANGELOG/已知问题/memory 全面更新至 v1.2 状态
+
+### Session 8 优先事项
+
+- [ ] **Docker 构建验证**: `docker build -t regression-analysis . && docker compose up`
+- [ ] **发布 v1.2 tag**: `git tag v1.2.0 && git push --tags`
 - [ ] **v1.2 发布说明**: 基于 CHANGELOG 生成 GitHub Release
 - [ ] **Gallery 更新**: 样本场景补充（MixedLM、面板数据展示案例）
 
