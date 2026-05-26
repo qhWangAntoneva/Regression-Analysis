@@ -186,7 +186,7 @@ def infer_column_types(df: pd.DataFrame) -> dict[str, str]:
 
     for col in df.columns:
         series = df[col]
-        dtype_str = str(series.dtype)
+        dtype_str = str(series.dtype)  # noqa: F841
 
         # 检查是否是 pandas nullable numeric types
         if pd.api.types.is_numeric_dtype(series):
@@ -206,7 +206,7 @@ def infer_column_types(df: pd.DataFrame) -> dict[str, str]:
                 # 如果能转换，且不是 id 列
                 col_lower = str(col).lower().strip()
                 id_patterns = ("id", "code", "num", "no.", "number", "序号", "编号", "代码")
-                is_id_name = any(col_lower.startswith(p) or col_lower.endswith(p) for p in id_patterns)
+                is_id_name = any(col_lower.startswith(p) or col_lower.endswith(p) for p in id_patterns)  # noqa: E501
                 if is_id_name and len(converted) == nrows:
                     types[str(col)] = "id"
                 else:

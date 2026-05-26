@@ -72,7 +72,7 @@ class VariableTypeDetector:
 
             numeric_series = self._try_to_numeric(series)
             if numeric_series is not None and len(numeric_series) > 0:
-                mean_val = float(numeric_series.mean()) if not pd.isna(numeric_series.mean()) else None
+                mean_val = float(numeric_series.mean()) if not pd.isna(numeric_series.mean()) else None  # noqa: E501
                 std_val = float(numeric_series.std()) if not pd.isna(numeric_series.std()) else None
                 min_val = float(numeric_series.min()) if not pd.isna(numeric_series.min()) else None
                 max_val = float(numeric_series.max()) if not pd.isna(numeric_series.max()) else None

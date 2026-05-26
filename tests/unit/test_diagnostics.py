@@ -44,7 +44,7 @@ def fitted_ols():
     x1 = rng.normal(0, 1, n)
     x2 = rng.normal(0, 1, n)
     y = 2 + 0.5 * x1 + 1.0 * x2 + rng.normal(0, 0.5, n)
-    X = sm.add_constant(pd.DataFrame({"x1": x1, "x2": x2}))
+    X = sm.add_constant(pd.DataFrame({"x1": x1, "x2": x2}))  # noqa: N806
     return sm.OLS(y, X).fit()
 
 

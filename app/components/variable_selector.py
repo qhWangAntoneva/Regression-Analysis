@@ -101,7 +101,7 @@ def render_variable_selector(
                         "缺失值": f"{dep_info.n_missing} ({dep_info.missing_rate * 100:.1f}%)",
                         "均值": dep_info.mean,
                         "标准差": dep_info.std,
-                        "范围": f"[{dep_info.min_val}, {dep_info.max_val}]" if dep_info.min_val is not None else "-",
+                        "范围": f"[{dep_info.min_val}, {dep_info.max_val}]" if dep_info.min_val is not None else "-",  # noqa: E501
                     }
                 )
 

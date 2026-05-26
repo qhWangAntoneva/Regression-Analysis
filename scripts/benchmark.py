@@ -17,8 +17,8 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-import numpy as np
-import pandas as pd
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 ROW_SIZES = [1_000, 10_000, 50_000, 100_000]
 VAR_COUNTS = [10, 20]
@@ -57,7 +57,7 @@ def time_ols_fit(df: pd.DataFrame, n_vars: int) -> tuple[float, object]:
 
     pred_vars = [f"x{i}" for i in range(1, n_vars + 1)]
     spec = ModelSpec(dep_var="y", indep_vars=pred_vars, has_intercept=True)
-    X, y_vec = build_design_matrix(spec, df)
+    X, y_vec = build_design_matrix(spec, df)  # noqa: N806
 
     t0 = time.perf_counter()
     fitted = OLS(y_vec, X).fit()
@@ -126,7 +126,7 @@ def format_table(results: list[tuple[int, int, dict[str, float]]]) -> str:
              header, "-" * 105]
 
     for n_rows, n_vars, m in results:
-        total = m["generate"] + m["ols_fit"] + m["scatter"] + m["residual"] + m["qq"] + m["coef_plot"]
+        total = m["generate"] + m["ols_fit"] + m["scatter"] + m["residual"] + m["qq"] + m["coef_plot"]  # noqa: E501
         lines.append(
             f"{n_rows:>8,}  {n_vars:>4}  "
             f"{m['generate']:>10.4f}  {m['ols_fit']:>10.4f}  "

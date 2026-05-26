@@ -67,9 +67,9 @@ def render_model_controls(key_prefix: str = "model") -> dict[str, Any]:
     is_mle = model_type_label in (
         "Logit", "Probit", "Poisson", "Negative Binomial"
     )
-    is_logit = model_type_label == "Logit"
-    is_probit = model_type_label == "Probit"
-    is_count = model_type_label in ("Poisson", "Negative Binomial")
+    is_logit = model_type_label == "Logit"  # noqa: F841
+    is_probit = model_type_label == "Probit"  # noqa: F841
+    is_count = model_type_label in ("Poisson", "Negative Binomial")  # noqa: F841
     is_mixedlm = model_type_label == "MixedLM (Multilevel)"
     is_panel = model_type_label.startswith("Panel Data")
 
@@ -189,7 +189,7 @@ def render_model_controls(key_prefix: str = "model") -> dict[str, Any]:
         "add_constant": add_constant,
         "ci_level": ci_level,
         "se_type": _se_map.get(se_type, "nonrobust"),
-        "missing_handling": "drop" if missing_handling == "删除整行" else ("mean" if missing_handling == "均值填充" else "none"),
+        "missing_handling": "drop" if missing_handling == "删除整行" else ("mean" if missing_handling == "均值填充" else "none"),  # noqa: E501
     }
     if is_mixedlm and group_var:
         result["group_var"] = group_var

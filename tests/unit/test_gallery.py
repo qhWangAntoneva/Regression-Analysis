@@ -26,7 +26,7 @@ try:
 except ImportError:
     pass
 
-from src.utils.gallery import (
+from src.utils.gallery import (  # noqa: E402
     GalleryItem,
     get_gallery_index,
     get_gallery_item,
@@ -54,10 +54,10 @@ def _compute_vif(data: pd.DataFrame, target_col: str, other_cols: list[str]) -> 
     except ImportError:
         return float("nan")
 
-    X = data[other_cols].select_dtypes(include=[np.number])
+    X = data[other_cols].select_dtypes(include=[np.number])  # noqa: N806
     if X.empty or X.shape[1] == 0:
         return float("nan")
-    X = add_constant(X)
+    X = add_constant(X)  # noqa: N806
     y = data[target_col]
 
     try:

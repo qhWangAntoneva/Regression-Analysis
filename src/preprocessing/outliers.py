@@ -73,7 +73,7 @@ class OutlierDetector:
 
         series = data[column].dropna()
         if not pd.api.types.is_numeric_dtype(data[column]):
-            raise ValueError(f"列 '{column}' 不是数值类型（{data[column].dtype}），无法计算 Z-Score。")
+            raise ValueError(f"列 '{column}' 不是数值类型（{data[column].dtype}），无法计算 Z-Score。")  # noqa: E501
 
         mean = series.mean()
         std = series.std()

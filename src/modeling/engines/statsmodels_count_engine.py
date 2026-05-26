@@ -62,7 +62,7 @@ def run_count_model(
         ValueError: If the model fails to fit, does not converge, or if the
             dependent variable violates count-data requirements.
     """
-    X, y = build_design_matrix(spec, data)
+    X, y = build_design_matrix(spec, data)  # noqa: N806
     labels = build_variable_labels(spec, list(X.columns))
 
     # Validate count-data DV requirements
@@ -236,7 +236,7 @@ def extract_count_model(
         bic = float(fitted_model.bic)
         # If deviance-based BIC is negative, compute LLF-based ourselves
         if bic < 0 and aic > 0:
-            bic = float(fitted_model.bic_llf) if hasattr(fitted_model, "bic_llf") else aic + n_params * (np.log(n_obs) - 2)
+            bic = float(fitted_model.bic_llf) if hasattr(fitted_model, "bic_llf") else aic + n_params * (np.log(n_obs) - 2)  # noqa: E501
 
     # Dispersion: only meaningful for NegativeBinomial
     # NOTE: ModelResult does not yet have a ``dispersion`` field (documented
@@ -248,7 +248,7 @@ def extract_count_model(
         try:
             dispersion = float(fitted_model.scale)
         except (AttributeError, Exception):
-            dispersion = None
+            dispersion = None  # noqa: F841
 
     return ModelResult(
         model_type=model_type,

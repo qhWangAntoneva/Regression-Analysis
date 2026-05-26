@@ -110,7 +110,7 @@ def render_export_options(
         with adv_cols[0]:
             latex_mode = st.radio(
                 "LaTeX 表格",
-                options=["none", "single", "comparison"] if has_multiple_models else ["none", "single"],
+                options=["none", "single", "comparison"] if has_multiple_models else ["none", "single"],  # noqa: E501
                 format_func=_latex_format_func,
                 key=f"{key_prefix}_latex_mode",
                 help="导出回归结果为 LaTeX 表格",

@@ -21,12 +21,12 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-import numpy as np
-import pandas as pd
-import statsmodels.api as sm
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import statsmodels.api as sm  # noqa: E402
 
-from src.modeling.engines.statsmodels_logit_engine import extract_logit, run_logit
-from src.modeling.specification import ModelSpec, build_design_matrix
+from src.modeling.engines.statsmodels_logit_engine import extract_logit, run_logit  # noqa: E402
+from src.modeling.specification import ModelSpec, build_design_matrix  # noqa: E402
 
 SEED = 42
 RNG = np.random.default_rng(SEED)
@@ -270,7 +270,7 @@ def _fit_logit_engine(
 
 
 def _fit_glm_binomial(
-    X: pd.DataFrame, y: pd.Series
+    X: pd.DataFrame, y: pd.Series  # noqa: N803
 ) -> EngineResult:
     """Fit using statsmodels GLM with Binomial family."""
     try:
@@ -307,14 +307,14 @@ def _fit_glm_binomial(
     )
 
 
-def _fit_sklearn(X: pd.DataFrame, y: pd.Series) -> EngineResult | None:
+def _fit_sklearn(X: pd.DataFrame, y: pd.Series) -> EngineResult | None:  # noqa: N803
     """Fit using sklearn LogisticRegression (no effective regularization)."""
     if not _HAS_SKLEARN:
         return None
 
     try:
         # Strip Intercept column -- sklearn adds its own
-        X_no_intercept = X.drop(columns=["Intercept"], errors="ignore")
+        X_no_intercept = X.drop(columns=["Intercept"], errors="ignore")  # noqa: N806
         clf = LogisticRegression(
             penalty="l2",
             C=1e10,
@@ -450,7 +450,7 @@ def benchmark_dataset(
 ) -> DatasetResult:
     """Run all three engines on one dataset and compute agreement metrics."""
     # Build a common design matrix for fair comparison
-    X, y = build_design_matrix(spec, data)
+    X, y = build_design_matrix(spec, data)  # noqa: N806
     n_obs = len(y)
     n_params = X.shape[1]
     pos_rate = float(y.mean())
@@ -580,7 +580,7 @@ def format_table(results: list[DatasetResult]) -> str:
             f"{r.n_obs:>6}",
             f"{r.pos_rate:>6.1%}",
             f"{conv_str:>10}",
-            f"{r.max_coef_diff_glm:>11.6f}" if not np.isnan(r.max_coef_diff_glm) else f"{'N/A':>11}",
+            f"{r.max_coef_diff_glm:>11.6f}" if not np.isnan(r.max_coef_diff_glm) else f"{'N/A':>11}",  # noqa: E501
             f"{r.pseudo_r2_diff:>13.6f}" if r.pseudo_r2_diff is not None else f"{'N/A':>13}",
             f"{r.ci_overlap_fraction:>9.1%} ",
         ]

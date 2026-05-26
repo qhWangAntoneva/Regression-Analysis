@@ -245,7 +245,7 @@ class TestDescriptiveStats:
         assert len(stats_df) == len(variables)
 
         # Expected columns
-        expected_cols = ["观测数", "均值", "标准差", "最小值", "25%", "50%", "75%", "最大值", "缺失值数", "缺失率"]
+        expected_cols = ["观测数", "均值", "标准差", "最小值", "25%", "50%", "75%", "最大值", "缺失值数", "缺失率"]  # noqa: E501
         for col in expected_cols:
             assert col in stats_df.columns, f"Missing column: {col}"
 

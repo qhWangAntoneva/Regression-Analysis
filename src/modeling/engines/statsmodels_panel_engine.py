@@ -65,7 +65,7 @@ def run_panel(
         )
 
     # Build design matrix (handles missing values, transforms, intercept)
-    X, y = build_design_matrix(spec, data)
+    X, y = build_design_matrix(spec, data)  # noqa: N806
     labels = build_variable_labels(spec, list(X.columns))
 
     # Align entity/time columns with the design matrix rows.
@@ -78,7 +78,7 @@ def run_panel(
         [entity_vals, time_vals], names=[entity_var, time_var]
     )
 
-    X = X.copy()
+    X = X.copy()  # noqa: N806
     y = y.copy()
     X.index = panel_idx
     y.index = panel_idx

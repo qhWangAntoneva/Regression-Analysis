@@ -63,7 +63,7 @@ def build_dataset(
     df["cat2"] = rng.choice(["X", "Y"], size=n_rows, p=[0.6, 0.4])
 
     # Target variable
-    n_predictors = n_continuous + n_categorical  # includes cat dummified
+    n_predictors = n_continuous + n_categorical  # includes cat dummified  # noqa: F841
     coeffs = rng.uniform(low=-0.5, high=1.0, size=n_continuous + 1)  # +1 for cat1
     linear = (
         coeffs[0] * df["x1"]

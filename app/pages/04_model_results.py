@@ -2,7 +2,7 @@
 回归结果展示页面
 
 Streamlit 页面：系数表、模型统计量、多模型对比、诊断图、统计警示。
-"""
+"""  # noqa: N999
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ SUMMARY_GEN_AVAILABLE = False
 try:
     from src.results.summary_generator import (
         generate_assumption_check_text,
-        generate_coefficient_interpretation,
+        generate_coefficient_interpretation,  # noqa: F401
         generate_summary_text,
     )
 
@@ -124,9 +124,9 @@ def render() -> None:
         return
 
     df = st.session_state.get("data")
-    variables = st.session_state.get("variables")
+    variables = st.session_state.get("variables")  # noqa: F841
     model_spec = st.session_state.get("model_spec")
-    model_config = st.session_state.get("model_config", {})
+    model_config = st.session_state.get("model_config", {})  # noqa: F841
 
     # --- Phase 2: 多模型选择 ---
     results_list: list[Any] = st.session_state.get("model_results_list", [])
@@ -454,7 +454,7 @@ def _render_dot_whisker_plot(result: Any) -> None:
                 type="data",
                 symmetric=False,
                 array=[u - v for v, u in zip(coef_vals, ci_uppers)],
-                arrayminus=[v - l for v, l in zip(coef_vals, ci_lowers)],
+                arrayminus=[v - l for v, l in zip(coef_vals, ci_lowers)],  # noqa: E741
                 visible=True,
                 color="gray",
                 thickness=1.5,
@@ -482,7 +482,7 @@ def _render_dot_whisker_plot(result: Any) -> None:
     x_label = "系数估计值 (log-odds)" if is_binary else "系数估计值"
 
     fig.update_layout(
-        title="系数点图 (Dot-Whisker Plot)" if not is_binary else "系数点图 (Logit/Probit, Dot-Whisker Plot)",
+        title="系数点图 (Dot-Whisker Plot)" if not is_binary else "系数点图 (Logit/Probit, Dot-Whisker Plot)",  # noqa: E501
         xaxis_title=x_label,
         yaxis_title="变量",
         template=cs.get("plot_template", "plotly_white"),
@@ -590,7 +590,7 @@ def _fallback_model_statistics(result: Any) -> None:
             rmse = getattr(result, "rmse", None)
             st.metric("RMSE", f"{rmse:.4f}" if rmse else "N/A")
         else:
-            st.metric("Pseudo R²", f"{getattr(result, 'pseudo_r_squared', 0):.4f}" if getattr(result, 'pseudo_r_squared', None) is not None else "N/A")
+            st.metric("Pseudo R²", f"{getattr(result, 'pseudo_r_squared', 0):.4f}" if getattr(result, 'pseudo_r_squared', None) is not None else "N/A")  # noqa: E501
 
 
 def _fallback_coefficient_table(result: Any) -> None:

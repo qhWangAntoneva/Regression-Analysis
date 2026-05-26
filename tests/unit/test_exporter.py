@@ -261,8 +261,8 @@ class TestExportResultsPackage:
         result = ModelResult(
             model_type="OLS",
             coefficients=[
-                CoefficientRow(name="Intercept", coef=2.0, se=0.5, t_stat=4.0, pvalue=0.001, ci_lower=1.0, ci_upper=3.0),
-                CoefficientRow(name="x1", coef=0.5, se=0.1, t_stat=5.0, pvalue=0.0001, ci_lower=0.3, ci_upper=0.7),
+                CoefficientRow(name="Intercept", coef=2.0, se=0.5, t_stat=4.0, pvalue=0.001, ci_lower=1.0, ci_upper=3.0),  # noqa: E501
+                CoefficientRow(name="x1", coef=0.5, se=0.1, t_stat=5.0, pvalue=0.0001, ci_lower=0.3, ci_upper=0.7),  # noqa: E501
             ],
             n_obs=100,
             n_params=2,
@@ -298,8 +298,8 @@ class TestExportResultsPackage:
         result = ModelResult(
             model_type="OLS",
             coefficients=[
-                CoefficientRow(name="Intercept", coef=2.0, se=0.5, t_stat=4.0, pvalue=0.001, ci_lower=1.0, ci_upper=3.0),
-                CoefficientRow(name="x1", coef=0.5, se=0.1, t_stat=5.0, pvalue=0.0001, ci_lower=0.3, ci_upper=0.7),
+                CoefficientRow(name="Intercept", coef=2.0, se=0.5, t_stat=4.0, pvalue=0.001, ci_lower=1.0, ci_upper=3.0),  # noqa: E501
+                CoefficientRow(name="x1", coef=0.5, se=0.1, t_stat=5.0, pvalue=0.0001, ci_lower=0.3, ci_upper=0.7),  # noqa: E501
             ],
             n_obs=100,
             n_params=2,
@@ -546,8 +546,8 @@ class TestExportReproducibilityPackage:
         result = ModelResult(
             model_type="OLS",
             coefficients=[
-                CoefficientRow(name="Intercept", coef=2.0, se=0.5, t_stat=4.0, pvalue=0.001, ci_lower=1.0, ci_upper=3.0),
-                CoefficientRow(name="x1", coef=0.5, se=0.1, t_stat=5.0, pvalue=0.0001, ci_lower=0.3, ci_upper=0.7),
+                CoefficientRow(name="Intercept", coef=2.0, se=0.5, t_stat=4.0, pvalue=0.001, ci_lower=1.0, ci_upper=3.0),  # noqa: E501
+                CoefficientRow(name="x1", coef=0.5, se=0.1, t_stat=5.0, pvalue=0.0001, ci_lower=0.3, ci_upper=0.7),  # noqa: E501
             ],
             n_obs=3,
             n_params=2,
@@ -591,8 +591,8 @@ class TestModelSummary:
         result = ModelResult(
             model_type="OLS",
             coefficients=[
-                CoefficientRow(name="Intercept", coef=2.0, se=0.5, t_stat=4.0, pvalue=0.001, ci_lower=1.0, ci_upper=3.0),
-                CoefficientRow(name="x1", coef=0.5, se=0.1, t_stat=5.0, pvalue=0.0001, ci_lower=0.3, ci_upper=0.7),
+                CoefficientRow(name="Intercept", coef=2.0, se=0.5, t_stat=4.0, pvalue=0.001, ci_lower=1.0, ci_upper=3.0),  # noqa: E501
+                CoefficientRow(name="x1", coef=0.5, se=0.1, t_stat=5.0, pvalue=0.0001, ci_lower=0.3, ci_upper=0.7),  # noqa: E501
             ],
             n_obs=100,
             n_params=2,

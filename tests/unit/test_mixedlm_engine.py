@@ -481,7 +481,7 @@ class TestMultiplePredictors:
         groups = np.repeat(np.arange(n_groups), n_per)
         x1, x2, x3 = rng.normal(0, 1, (3, n_groups * n_per))
         g_eff = rng.normal(0, 0.4, n_groups)
-        y = 1.5 + 0.6 * x1 - 0.4 * x2 + 0.3 * x3 + g_eff[groups] + rng.normal(0, 0.2, n_groups * n_per)
+        y = 1.5 + 0.6 * x1 - 0.4 * x2 + 0.3 * x3 + g_eff[groups] + rng.normal(0, 0.2, n_groups * n_per)  # noqa: E501
         data = pd.DataFrame({"y": y, "x1": x1, "x2": x2, "x3": x3, "group": groups})
 
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2", "x3"], model_type="mixedlm")

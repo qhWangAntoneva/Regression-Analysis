@@ -37,8 +37,8 @@ x4 = RNG.normal(5, 2, N)
 cat1 = RNG.binomial(1, 0.5, N)
 
 # Dummy encoding for x3
-x3_B = (x3_categories == "B").astype(float)
-x3_C = (x3_categories == "C").astype(float)
+x3_B = (x3_categories == "B").astype(float)  # noqa: N816
+x3_C = (x3_categories == "C").astype(float)  # noqa: N816
 
 # Generate error term
 noise = RNG.normal(0, TRUE_NOISE_STD, N)
@@ -73,7 +73,7 @@ missing_idx = RNG.choice(N, size=10, replace=False)
 df.loc[missing_idx, "x4"] = np.nan
 
 # Save
-output_path = Path(__file__).resolve().parent.parent.parent.parent / "tests" / "fixtures" / "sample_ols.csv"
+output_path = Path(__file__).resolve().parent.parent.parent.parent / "tests" / "fixtures" / "sample_ols.csv"  # noqa: E501
 output_path.parent.mkdir(parents=True, exist_ok=True)
 df.to_csv(output_path, index=False, encoding="utf-8")
 print(f"Sample data saved to {output_path}")

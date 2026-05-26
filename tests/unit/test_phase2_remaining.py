@@ -21,7 +21,7 @@ class TestFileSizeLimits:
         """Replica of _check_file_size from 01_data_upload.py."""
         size_mb = file_size_bytes / (1024 * 1024)
         if size_mb > self.BLOCK_FILE_SIZE_MB:
-            return False, f"文件过大（{size_mb:.1f} MB）。当前限制为最大 {self.BLOCK_FILE_SIZE_MB} MB。"
+            return False, f"文件过大（{size_mb:.1f} MB）。当前限制为最大 {self.BLOCK_FILE_SIZE_MB} MB。"  # noqa: E501
         if size_mb > self.WARN_FILE_SIZE_MB:
             return True, f"文件较大（{size_mb:.1f} MB），解析和处理可能需要较长时间。"
         return True, ""

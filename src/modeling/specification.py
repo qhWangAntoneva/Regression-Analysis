@@ -219,7 +219,7 @@ def build_design_matrix(
 
     # Use patsy to build the design matrices
     try:
-        y_dmat, X_dmat = patsy.dmatrices(
+        y_dmat, X_dmat = patsy.dmatrices(  # noqa: N806
             formula,
             working_data,
             return_type="dataframe",
@@ -232,7 +232,7 @@ def build_design_matrix(
     # Convert to the expected return types
     y: pd.Series = y_dmat.iloc[:, 0]
     y.name = spec.dep_var
-    X: pd.DataFrame = X_dmat
+    X: pd.DataFrame = X_dmat  # noqa: N806
 
     if X.shape[0] == 0:
         raise ValueError(
@@ -244,7 +244,7 @@ def build_design_matrix(
 
 def build_variable_labels(
     spec: ModelSpec,
-    X_columns: list[str],
+    X_columns: list[str],  # noqa: N803
 ) -> dict[str, str]:
     """Generate human-readable labels for design matrix columns.
 
@@ -263,7 +263,7 @@ def build_variable_labels(
 
     # Matches both main-effect categoricals (cat[T.level]) and
     # interaction-only categoricals (cat[level], no "T." prefix).
-    _CAT_PART = re.compile(r"^(\w+)\[T?\.?([^\]]+)\]$")
+    _CAT_PART = re.compile(r"^(\w+)\[T?\.?([^\]]+)\]$")  # noqa: N806
 
     labels: dict[str, str] = {}
     for col in X_columns:

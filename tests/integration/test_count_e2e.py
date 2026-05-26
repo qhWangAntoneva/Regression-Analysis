@@ -543,7 +543,7 @@ class TestSummaryMethod:
 class TestBridgeCountIntegration:
     """Simulate the web/bridge.py count-model flow and verify JSON output."""
 
-    @pytest.mark.skip(reason="bridge.py not yet wired for count models — documented in count_shared_changes.txt")
+    @pytest.mark.skip(reason="bridge.py not yet wired for count models — documented in count_shared_changes.txt")  # noqa: E501
     def test_bridge_poisson_basic(self) -> None:
         """Simulate bridge.run_regression with model_type='poisson'."""
         import bridge
@@ -582,7 +582,7 @@ class TestBridgeCountIntegration:
         assert result["pseudo_r_squared"] is not None
         assert len(result["coefficients"]) == 3  # Intercept + x1 + x2
 
-    @pytest.mark.skip(reason="bridge.py not yet wired for count models — documented in count_shared_changes.txt")
+    @pytest.mark.skip(reason="bridge.py not yet wired for count models — documented in count_shared_changes.txt")  # noqa: E501
     def test_bridge_negbin_basic(self) -> None:
         """Simulate bridge.run_regression with model_type='negbin'."""
         import bridge
@@ -651,7 +651,7 @@ class TestBridgeCountIntegration:
 
         assert not result["success"]
 
-    @pytest.mark.skip(reason="bridge.py not yet wired for count models — documented in count_shared_changes.txt")
+    @pytest.mark.skip(reason="bridge.py not yet wired for count models — documented in count_shared_changes.txt")  # noqa: E501
     def test_bridge_poisson_coefficient_structure(self) -> None:
         """Each coefficient in bridge output has all required fields."""
         import bridge

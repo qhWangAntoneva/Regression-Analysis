@@ -115,7 +115,7 @@ class MissingValueHandler:
                     mode_vals = df[col].mode()
                     fill_val = mode_vals.iloc[0] if len(mode_vals) > 0 else None
 
-                if fill_val is not None and not (isinstance(fill_val, float) and np.isnan(fill_val)):
+                if fill_val is not None and not (isinstance(fill_val, float) and np.isnan(fill_val)):  # noqa: E501
                     df[col] = df[col].fillna(fill_val)
 
         return df

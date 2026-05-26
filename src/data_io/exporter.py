@@ -536,7 +536,7 @@ def _get_model_summary(result: Any) -> str:
             t_stat = getattr(c, "t_stat", 0.0)
             pvalue = getattr(c, "pvalue", 1.0)
             sig = getattr(c, "significance", "")
-            lines.append(f"  {name:<20} {coef:>12.6f} {se:>10.6f} {t_stat:>8.4f} {pvalue:>8.4f} {sig}")
+            lines.append(f"  {name:<20} {coef:>12.6f} {se:>10.6f} {t_stat:>8.4f} {pvalue:>8.4f} {sig}")  # noqa: E501
 
         lines.append("-" * 60)
         lines.append("  显著性标记: *** p<0.01, ** p<0.05, * p<0.1")

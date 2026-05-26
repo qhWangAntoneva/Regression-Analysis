@@ -455,7 +455,7 @@ class TestFitterDispatch:
     def test_fitter_multiple_mixed(self) -> None:
         """fit_multiple with mixed OLS and logit specs."""
         data = make_binary_data(seed=42)
-        data["y_cont"] = data["x1"] * 0.5 + data["x2"] * 0.3 + np.random.default_rng(88).normal(0, 0.1, len(data))
+        data["y_cont"] = data["x1"] * 0.5 + data["x2"] * 0.3 + np.random.default_rng(88).normal(0, 0.1, len(data))  # noqa: E501
 
         spec_logit = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="logit")
         spec_ols = ModelSpec(dep_var="y_cont", indep_vars=["x1", "x2"])
@@ -549,7 +549,7 @@ class TestPerfectSeparation:
         # typically raise or at least not converge cleanly.
         try:
             fitted = run_logit(df, spec)
-            result = extract_logit(fitted)
+            result = extract_logit(fitted)  # noqa: F841
             # If it did converge, check that coefficients are huge (separation)
             # This is acceptable - statsmodels can sometimes handle it
         except ValueError as e:

@@ -2,7 +2,7 @@
 数据上传与预览页面
 
 Streamlit 页面：文件上传、数据解析、预览和摘要。
-"""
+"""  # noqa: N999
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ try:
         render_type_override_ui,
         render_variable_info,
     )
-    from src.data_io.parser import FileParser, get_data_summary, preview_dataframe
+    from src.data_io.parser import FileParser, get_data_summary, preview_dataframe  # noqa: F401
     from src.preprocessing.type_detector import VariableTypeDetector
 
     PARSER_AVAILABLE = True
@@ -215,7 +215,7 @@ def _show_data_preview() -> None:
             uploaded_file = st.session_state.get("uploaded_file_obj")
             if uploaded_file is not None:
                 size_mb = uploaded_file.size / (1024 * 1024)
-                size_str = f"{size_mb:.1f} MB" if size_mb >= 1 else f"{uploaded_file.size / 1024:.1f} KB"
+                size_str = f"{size_mb:.1f} MB" if size_mb >= 1 else f"{uploaded_file.size / 1024:.1f} KB"  # noqa: E501
                 st.metric("文件大小", size_str)
             else:
                 st.metric("文件大小", "N/A（模拟数据）")
@@ -266,12 +266,12 @@ def _load_sample_data() -> None:
 
         # 生成模拟数据
         age = np.random.normal(45, 15, n).clip(18, 80)
-        education = np.random.choice(["高中以下", "高中", "本科", "硕士", "博士"], n, p=[0.15, 0.25, 0.35, 0.18, 0.07])
-        income = 3000 + 200 * (age - 18) + 5000 * (education == "本科") + 8000 * (education == "硕士") + 15000 * (education == "博士") + np.random.normal(0, 5000, n)
+        education = np.random.choice(["高中以下", "高中", "本科", "硕士", "博士"], n, p=[0.15, 0.25, 0.35, 0.18, 0.07])  # noqa: E501
+        income = 3000 + 200 * (age - 18) + 5000 * (education == "本科") + 8000 * (education == "硕士") + 15000 * (education == "博士") + np.random.normal(0, 5000, n)  # noqa: E501
         experience = (age - 18) * np.random.uniform(0.5, 1.0, n).clip(0, 50)
         satisfaction = 3 + 0.02 * income / 1000 + np.random.normal(0, 0.8, n).clip(1, 5)
         is_urban = np.random.choice([0, 1], n, p=[0.4, 0.6])
-        spending = 500 + 0.3 * income + 200 * is_urban + np.random.normal(0, 2000, n).clip(100, None)
+        spending = 500 + 0.3 * income + 200 * is_urban + np.random.normal(0, 2000, n).clip(100, None)  # noqa: E501
         id_col = np.arange(1, n + 1)
 
         df = pd.DataFrame(

@@ -4,7 +4,7 @@
 提供数据导出、结果导出、图表导出和一键综合报告功能。
 使用 st.download_button 实现浏览器下载。
 新增: LaTeX 表格导出、HTML 报告导出、分析复现包导出。
-"""
+"""  # noqa: N999
 
 from __future__ import annotations
 

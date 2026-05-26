@@ -45,7 +45,7 @@ class TestLoadHousingData:
 
         df = load_housing_data().dropna()
         y = df["price"]
-        X = sm.add_constant(
+        X = sm.add_constant(  # noqa: N806
             df[["sqft", "bedrooms", "age", "location_score", "floor", "has_garage"]]
         )
         model = sm.OLS(y, X).fit()
@@ -95,7 +95,7 @@ class TestLoadWagesData:
         df["edu_years"] = df["education"].map(edu_map)
 
         y = df["wage"]
-        X = sm.add_constant(df[["edu_years", "experience", "hours_per_week", "years_at_company"]])
+        X = sm.add_constant(df[["edu_years", "experience", "hours_per_week", "years_at_company"]])  # noqa: N806
         model = sm.OLS(y, X).fit()
         coef = model.params
 

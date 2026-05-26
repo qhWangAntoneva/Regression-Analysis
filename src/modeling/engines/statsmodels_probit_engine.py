@@ -40,7 +40,7 @@ def run_probit(
     Raises:
         ValueError: If the model fails to fit or does not converge.
     """
-    X, y = build_design_matrix(spec, data)
+    X, y = build_design_matrix(spec, data)  # noqa: N806
     labels = build_variable_labels(spec, list(X.columns))
 
     try:

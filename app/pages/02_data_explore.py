@@ -3,7 +3,7 @@
 
 Streamlit 页面：描述性统计、相关系数矩阵、变量分布图、
 缺失值处理、异常值检测、样本数据加载。
-"""
+"""  # noqa: N999
 
 from __future__ import annotations
 
@@ -134,7 +134,7 @@ def render() -> None:
         with st.expander("缺失值详情", expanded=False):
             missing_df = missing_counts[missing_counts > 0].reset_index()
             missing_df.columns = ["列名", "缺失数量"]
-            missing_df["缺失率"] = (missing_df["缺失数量"] / len(df) * 100).round(2).apply(lambda x: f"{x}%")
+            missing_df["缺失率"] = (missing_df["缺失数量"] / len(df) * 100).round(2).apply(lambda x: f"{x}%")  # noqa: E501
             st.dataframe(missing_df, use_container_width=True)
 
     # ----- Phase 3.3: 缺失值处理 -----
@@ -167,7 +167,7 @@ def render() -> None:
                 else:
                     level = "🟢 低"
 
-                suggestion = "建议删除列或填充" if pct > 20 else ("建议填充" if pct > 5 else "影响较小")
+                suggestion = "建议删除列或填充" if pct > 20 else ("建议填充" if pct > 5 else "影响较小")  # noqa: E501
 
                 table_rows.append({
                     "变量名": col_name,
@@ -221,7 +221,7 @@ def render() -> None:
                             df_cleaned = handler.handle(df, strategy, columns=target)
 
                             after_rows = len(df_cleaned)
-                            after_missing = int(df_cleaned.isna().sum().sum()) if strategy == "drop" else 0
+                            after_missing = int(df_cleaned.isna().sum().sum()) if strategy == "drop" else 0  # noqa: E501
 
                             # 更新 session_state
                             st.session_state.data = df_cleaned
@@ -236,11 +236,11 @@ def render() -> None:
                                 summary = st.session_state.data_summary
                                 summary["n_rows"] = len(df_cleaned)
                                 summary["missing_rates"] = {
-                                    str(c): float(df_cleaned[c].isna().mean()) for c in df_cleaned.columns
+                                    str(c): float(df_cleaned[c].isna().mean()) for c in df_cleaned.columns  # noqa: E501
                                 }
 
                             st.success("缺失值处理完成！")
-                            st.info(f"处理前: {before_rows} 行, {before_missing} 个缺失值 → 处理后: {after_rows} 行, {after_missing} 个缺失值")
+                            st.info(f"处理前: {before_rows} 行, {before_missing} 个缺失值 → 处理后: {after_rows} 行, {after_missing} 个缺失值")  # noqa: E501
                             st.rerun()
                         except Exception as e:
                             st.error(f"缺失值处理失败: {e}")
@@ -373,7 +373,7 @@ def render() -> None:
                 if show_outlier_rows and st.session_state.get("_outlier_df_result") is not None:
                     df_result = st.session_state._outlier_df_result
                     outlier_cols = st.session_state.get("_outlier_cols", [])
-                    flag_cols = [f"{c}_outlier" for c in outlier_cols if f"{c}_outlier" in df_result.columns]
+                    flag_cols = [f"{c}_outlier" for c in outlier_cols if f"{c}_outlier" in df_result.columns]  # noqa: E501
 
                     if flag_cols:
                         # 合并所有异常值标记

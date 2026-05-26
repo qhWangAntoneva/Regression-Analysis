@@ -91,10 +91,10 @@ def load_wages_data() -> pd.DataFrame:
     rng = np.random.default_rng(42)
 
     n = 400
-    education = rng.choice(["高中以下", "高中", "本科", "硕士", "博士"], n, p=[0.1, 0.25, 0.35, 0.2, 0.1])
+    education = rng.choice(["高中以下", "高中", "本科", "硕士", "博士"], n, p=[0.1, 0.25, 0.35, 0.2, 0.1])  # noqa: E501
     experience = rng.uniform(0, 40, n)
     gender = rng.choice(["男", "女"], n, p=[0.5, 0.5])
-    industry = rng.choice(["制造业", "服务业", "IT", "金融", "教育", "医疗"], n, p=[0.2, 0.2, 0.2, 0.15, 0.15, 0.1])
+    industry = rng.choice(["制造业", "服务业", "IT", "金融", "教育", "医疗"], n, p=[0.2, 0.2, 0.2, 0.15, 0.15, 0.1])  # noqa: E501
     hours_per_week = rng.normal(40, 8, n).clip(20, 80)
     years_at_company = rng.uniform(0, 25, n)
 

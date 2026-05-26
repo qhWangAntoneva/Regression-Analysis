@@ -75,7 +75,7 @@ def run_mixedlm(
         )
 
     # --- build design matrix ---
-    X, y = build_design_matrix(spec, data)
+    X, y = build_design_matrix(spec, data)  # noqa: N806
     labels = build_variable_labels(spec, list(X.columns))
 
     # align the group vector with rows that survived missing-value removal
@@ -164,8 +164,8 @@ def extract_mixedlm(
     # AIC / BIC -- valid only for ML; NaN for REML
     _aic = fitted_model.aic
     _bic = fitted_model.bic
-    aic: float = float(_aic) if not (np.isnan(_aic) if isinstance(_aic, float) else False) else float("nan")
-    bic: float = float(_bic) if not (np.isnan(_bic) if isinstance(_bic, float) else False) else float("nan")
+    aic: float = float(_aic) if not (np.isnan(_aic) if isinstance(_aic, float) else False) else float("nan")  # noqa: E501
+    bic: float = float(_bic) if not (np.isnan(_bic) if isinstance(_bic, float) else False) else float("nan")  # noqa: E501
 
     # RMSE
     rmse: float | None = (

@@ -422,7 +422,7 @@ class TestFitterDispatch:
     def test_fitter_multiple_mixed(self) -> None:
         """fit_multiple with mixed OLS and probit specs."""
         data = make_binary_data(seed=42)
-        data["y_cont"] = data["x1"] * 0.5 + data["x2"] * 0.3 + np.random.default_rng(88).normal(0, 0.1, len(data))
+        data["y_cont"] = data["x1"] * 0.5 + data["x2"] * 0.3 + np.random.default_rng(88).normal(0, 0.1, len(data))  # noqa: E501
 
         spec_probit = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="probit")
         spec_ols = ModelSpec(dep_var="y_cont", indep_vars=["x1", "x2"])
@@ -512,7 +512,7 @@ class TestPerfectSeparation:
 
         try:
             fitted, _ = run_probit(df, spec)
-            result = extract_probit(fitted)
+            result = extract_probit(fitted)  # noqa: F841
             # If it did converge, check that coefficients are huge (separation)
         except ValueError as e:
             assert "converge" in str(e).lower() or "perfect" in str(e).lower()
@@ -614,7 +614,7 @@ class TestConvergenceWellSeparated:
 
         assert result.pseudo_r_squared is not None
         assert result.pseudo_r_squared > 0.3, (
-            f"With strong signal, pseudo R-squared should be high, got {result.pseudo_r_squared:.4f}"
+            f"With strong signal, pseudo R-squared should be high, got {result.pseudo_r_squared:.4f}"  # noqa: E501
         )
 
 

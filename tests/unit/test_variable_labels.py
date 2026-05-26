@@ -28,7 +28,7 @@ class TestBuildVariableLabels:
         labels = build_variable_labels(_make_spec(), ["gender[T.Male]:education[T.本科]"])
         assert labels["gender[T.Male]:education[T.本科]"] == "gender: Male × education: 本科"
 
-    def test_interaction_only_categorical_no_T_prefix(self):
+    def test_interaction_only_categorical_no_T_prefix(self):  # noqa: N802
         labels = build_variable_labels(_make_spec(), ["cat[a]:x"])
         assert labels["cat[a]:x"] == "cat: a × x"
 

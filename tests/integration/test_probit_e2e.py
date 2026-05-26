@@ -473,13 +473,13 @@ class TestConfidenceInterval:
         )
         fitted_small, _ = run_probit(data_small, spec)
         result_small = extract_probit(fitted_small)
-        ci_width_small = result_small.coefficients[1].ci_upper - result_small.coefficients[1].ci_lower
+        ci_width_small = result_small.coefficients[1].ci_upper - result_small.coefficients[1].ci_lower  # noqa: E501
 
         # Large dataset
         data_large = make_binary_data(n=500, seed=42)
         fitted_large, _ = run_probit(data_large, spec)
         result_large = extract_probit(fitted_large)
-        ci_width_large = result_large.coefficients[1].ci_upper - result_large.coefficients[1].ci_lower
+        ci_width_large = result_large.coefficients[1].ci_upper - result_large.coefficients[1].ci_lower  # noqa: E501
 
         assert ci_width_large < ci_width_small, (
             f"CI width should decrease with more data: "

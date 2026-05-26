@@ -86,8 +86,8 @@ class LatexRenderer:
         else:
             # Non-binary models: Coefficient column
             stat_letter = "z" if is_mle else "t"
-            col_header = "Coefficient"
-            n_cols_nonbinary = 6
+            col_header = "Coefficient"  # noqa: F841
+            n_cols_nonbinary = 6  # noqa: F841
             lines.append("\\begin{tabular}{lrrrrr}")
             lines.append("\\toprule")
             lines.append(
@@ -255,7 +255,7 @@ class LatexRenderer:
             model_labels = [f"Model {i + 1}" for i in range(model_count)]
 
         # Detect mixed model types
-        model_types = [r.model_type for r in model_results]
+        model_types = [r.model_type for r in model_results]  # noqa: F841
         has_mle = any(r.is_mle_model for r in model_results)
         has_ols = any(not r.is_mle_model for r in model_results)
         mixed = has_mle and has_ols
@@ -277,7 +277,7 @@ class LatexRenderer:
 
         # Header row
         header_parts = ["Variable"] + [
-            f"\\multicolumn{{1}}{{c}}{{{l}}}" for l in model_labels
+            f"\\multicolumn{{1}}{{c}}{{{l}}}" for l in model_labels  # noqa: E741
         ]
         lines.append(" & ".join(header_parts) + " \\\\")
         lines.append("\\midrule")

@@ -14,7 +14,7 @@ configure_page()
 # ---------------------------------------------------------------------------
 # Crash Recovery: check for unclosed session
 # ---------------------------------------------------------------------------
-from src.utils.persistence import clear_session, load_session, session_cache_exists
+from src.utils.persistence import clear_session, load_session, session_cache_exists  # noqa: E402
 
 
 def _check_crash_recovery() -> None:
@@ -171,7 +171,7 @@ st.sidebar.markdown(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info("Try the [online version](https://qhwangantoneva.github.io/regression-analysis/) — no installation needed!")
+st.sidebar.info("Try the [online version](https://qhwangantoneva.github.io/regression-analysis/) — no installation needed!")  # noqa: E501
 
 # ---------------------------------------------------------------------------
 # Global CSS for responsive layout and visual consistency
@@ -210,7 +210,7 @@ st.markdown(
 # @st.cache_data decorator for expensive operations
 # ---------------------------------------------------------------------------
 
-from src.utils.persistence import save_session
+from src.utils.persistence import save_session  # noqa: E402
 
 
 @st.cache_data(ttl=3600, show_spinner="正在计算相关系数矩阵...")

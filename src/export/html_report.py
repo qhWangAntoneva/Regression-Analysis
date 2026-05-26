@@ -198,7 +198,7 @@ class HtmlReportGenerator:
 </div>
 </body>
 </html>
-""".lstrip("\n")
+""".lstrip("\n")  # noqa: E501
     )
 
     @staticmethod

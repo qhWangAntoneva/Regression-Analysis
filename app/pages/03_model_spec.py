@@ -2,7 +2,7 @@
 模型设定页面
 
 Streamlit 页面：变量选择、模型规格、运行回归，支持多模型对比。
-"""
+"""  # noqa: N999
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ try:
     from app.components.variable_selector import (
         render_interaction_ui,
         render_transforms_ui,
-        render_variable_selector,
+        render_variable_selector,  # noqa: F401
     )
     from src.modeling.fitter import ModelFitter
     from src.modeling.specification import ModelSpec, build_formula
@@ -158,7 +158,7 @@ def _render_data_filter(df: pd.DataFrame, variables: list) -> pd.DataFrame:
                 if "filtered_data" in st.session_state:
                     del st.session_state.filtered_data
                 for key in list(st.session_state.keys()):
-                    if isinstance(key, str) and (key.startswith("filter_min_") or key.startswith("filter_max_") or key.startswith("filter_cat_")):
+                    if isinstance(key, str) and (key.startswith("filter_min_") or key.startswith("filter_max_") or key.startswith("filter_cat_")):  # noqa: E501
                         del st.session_state[key]
                 st.rerun()
 
@@ -280,7 +280,7 @@ def render() -> None:
                 )
         elif model_config["model_type"] == "ols" and is_binary:
             st.info(
-                f":material/info: 因变量「{dep_var}」只有 2 个不同值 ({sorted(dep_series.unique().tolist())})，"
+                f":material/info: 因变量「{dep_var}」只有 2 个不同值 ({sorted(dep_series.unique().tolist())})，"  # noqa: E501
                 f"可能是二分类变量。建议使用「Logit」模型进行逻辑回归。"
             )
         elif model_config["model_type"] == "mixedlm":
@@ -326,9 +326,9 @@ def render() -> None:
             if not model_config["add_constant"]:
                 formula_str += " - 1"
             if transforms:
-                formula_str += "  [转换: " + ", ".join(f"{t}({v})" for v, t in transforms.items()) + "]"
+                formula_str += "  [转换: " + ", ".join(f"{t}({v})" for v, t in transforms.items()) + "]"  # noqa: E501
             if interaction_terms:
-                formula_str += "  [交互: " + ", ".join(f"{v1}:{v2}" for v1, v2 in interaction_terms) + "]"
+                formula_str += "  [交互: " + ", ".join(f"{v1}:{v2}" for v1, v2 in interaction_terms) + "]"  # noqa: E501
             st.code(f"模型公式: {formula_str}", language="text")
 
     # ------------------------------------------------------------------

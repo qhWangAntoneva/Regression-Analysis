@@ -139,7 +139,7 @@ def run_ols(
         ValueError: If the design matrix cannot be built or the model
             cannot be fitted.
     """
-    X, y = build_design_matrix(spec, data)
+    X, y = build_design_matrix(spec, data)  # noqa: N806
     labels = build_variable_labels(spec, list(X.columns))
 
     formula_str = f"{spec.dep_var} ~ {' + '.join(spec.all_predictors)}"

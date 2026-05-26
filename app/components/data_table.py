@@ -39,7 +39,7 @@ def render_data_preview(df: Any, key: str = "data_preview") -> None:
         if missing_count > 0:
             column_config[col_str] = st.column_config.TextColumn(
                 col_str,
-                help=f"缺失值: {missing_count} / {n_rows} ({missing_count / max(n_rows, 1) * 100:.1f}%)",
+                help=f"缺失值: {missing_count} / {n_rows} ({missing_count / max(n_rows, 1) * 100:.1f}%)",  # noqa: E501
             )
 
     st.dataframe(
@@ -233,7 +233,7 @@ def render_outlier_detection_ui(df: Any) -> dict[str, Any] | None:
 
         summary: dict[str, Any] | None = None
 
-        if st.button(":material/search: 检测异常值", type="primary", use_container_width=True, key="detect_outliers"):
+        if st.button(":material/search: 检测异常值", type="primary", use_container_width=True, key="detect_outliers"):  # noqa: E501
             if not selected_cols:
                 st.warning("请至少选择一个数值变量。")
                 return None
@@ -242,7 +242,7 @@ def render_outlier_detection_ui(df: Any) -> dict[str, Any] | None:
                 detector = OutlierDetector()
                 try:
                     threshold_val = 3.0 if method == "zscore" else multiplier
-                    kwargs = {"multiplier": threshold_val} if method == "iqr" else {"threshold": threshold_val}
+                    kwargs = {"multiplier": threshold_val} if method == "iqr" else {"threshold": threshold_val}  # noqa: E501
                     _df_result, summary = detector.flag_outliers(
                         df, selected_cols, method=method, **kwargs
                     )

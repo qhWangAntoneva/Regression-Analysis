@@ -492,12 +492,12 @@ class TestConfidenceInterval:
         )
         fitter = ModelFitter()
         result_small = fitter.fit(spec, data_small)
-        ci_width_small = result_small.coefficients[1].ci_upper - result_small.coefficients[1].ci_lower
+        ci_width_small = result_small.coefficients[1].ci_upper - result_small.coefficients[1].ci_lower  # noqa: E501
 
         # Large dataset
         data_large = make_binary_data(n=500, seed=42)
         result_large = fitter.fit(spec, data_large)
-        ci_width_large = result_large.coefficients[1].ci_upper - result_large.coefficients[1].ci_lower
+        ci_width_large = result_large.coefficients[1].ci_upper - result_large.coefficients[1].ci_lower  # noqa: E501
 
         assert ci_width_large < ci_width_small, (
             f"CI width should decrease with more data: "
@@ -1169,7 +1169,7 @@ class TestBridgeVsPatsyInteraction:
 
         from src.modeling.specification import build_design_matrix
 
-        X, y = build_design_matrix(spec, df)
+        X, y = build_design_matrix(spec, df)  # noqa: N806
         model_type = spec.model_type.lower()
         if model_type == "logit":
             fitted = sm.Logit(y, X).fit(disp=False)

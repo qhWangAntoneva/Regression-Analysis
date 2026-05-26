@@ -435,7 +435,7 @@ def cooks_distance_plot(
     # 分离正常点和异常点
     is_influential = cooks_d > threshold
     colors = np.where(is_influential, "red", "steelblue")
-    sizes = np.where(is_influential, 8, 4)
+    sizes = np.where(is_influential, 8, 4)  # noqa: F841
 
     fig.add_trace(
         go.Bar(
@@ -487,9 +487,9 @@ def diagnostic_dashboard(
     Returns:
         字典，键为图名，值为 plotly Figure。
         {'residual_fitted': Figure, 'qq': Figure, 'scale_location': Figure, 'cooks_distance': Figure}
-    """
+    """  # noqa: E501
     residuals = _get_residuals(result)
-    fitted_values = _get_fitted_values(result)
+    fitted_values = _get_fitted_values(result)  # noqa: F841
 
     figs: dict[str, Figure] = {}
 

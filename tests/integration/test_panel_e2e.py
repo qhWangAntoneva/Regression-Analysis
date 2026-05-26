@@ -33,7 +33,7 @@ def make_panel_data(
     entity_effects = rng.normal(0, 0.8, n_entities)
     x1 = rng.normal(0, 0.5, n_entities * n_periods)
     x2 = rng.normal(0, 0.3, n_entities * n_periods)
-    y = 1.0 + 2.0 * x1 - 1.5 * x2 + entity_effects[entities] + rng.normal(0, 0.2, n_entities * n_periods)
+    y = 1.0 + 2.0 * x1 - 1.5 * x2 + entity_effects[entities] + rng.normal(0, 0.2, n_entities * n_periods)  # noqa: E501
     return pd.DataFrame({
         "entity": entities,
         "time": times,
@@ -58,7 +58,7 @@ def make_spec(entity_var: str, time_var: str, panel_model: str, **kwargs) -> Mod
 # =========================================================================
 
 
-class TestFE_EndToEnd:
+class TestFE_EndToEnd:  # noqa: N801
     """End-to-end panel FE pipeline."""
 
     def test_fe_full_pipeline_basic(self) -> None:
@@ -126,7 +126,7 @@ class TestFE_EndToEnd:
 # =========================================================================
 
 
-class TestRE_EndToEnd:
+class TestRE_EndToEnd:  # noqa: N801
     """End-to-end panel RE pipeline."""
 
     def test_re_full_pipeline_basic(self) -> None:

@@ -44,12 +44,12 @@ def vif(
             no valid observations.
     """
     if use_patsy:
-        X, _ = build_design_matrix(spec, data)
+        X, _ = build_design_matrix(spec, data)  # noqa: N806
     else:
         predictors = spec.all_predictors
-        X = data[predictors].dropna().copy()
+        X = data[predictors].dropna().copy()  # noqa: N806
         # Add constant for VIF computation
-        X = add_constant(X)
+        X = add_constant(X)  # noqa: N806
 
     if X.shape[0] == 0:
         raise ValueError("No valid observations for VIF computation.")

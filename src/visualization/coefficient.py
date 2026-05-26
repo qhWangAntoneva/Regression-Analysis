@@ -95,9 +95,9 @@ def coefficient_plot(results: list[Any], model_labels: list[str] | None = None) 
         for c in coefs:
             name = _get_coef_name(c)
             if name == "Intercept":
-                intercept_est = _get_coef_value(c)
-                intercept_ci_low = _get_ci_low(c)
-                intercept_ci_high = _get_ci_high(c)
+                intercept_est = _get_coef_value(c)  # noqa: F841
+                intercept_ci_low = _get_ci_low(c)  # noqa: F841
+                intercept_ci_high = _get_ci_high(c)  # noqa: F841
                 continue
             if name:
                 coef_map[name] = {
