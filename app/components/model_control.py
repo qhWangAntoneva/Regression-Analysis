@@ -45,16 +45,34 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
     # --- Model type selector (always visible) ---
     model_type_label = st.selectbox(
         "模型类型",
-        options=["OLS", "Logit"],
+        options=[
+            "OLS",
+            "Logit",
+            "Probit",
+            "Poisson",
+            "Negative Binomial",
+            "MixedLM (Multilevel)",
+            "Panel Data — Fixed Effects",
+            "Panel Data — Random Effects",
+        ],
         index=0,
         key=f"{key_prefix}_model_type",
         help=(
-            "OLS 适用于连续因变量，Logit 适用于二分类因变量 (0/1)。\n\n"
-            "注意：Logit 模型不支持 F 检验，将使用似然比检验 (LR) 替代。"
+            "OLS 适用于连续因变量，Logit/Probit 适用于二分类因变量 (0/1)。\n"
+            "Poisson/NegBin 适用于计数因变量（非负整数）。\n"
+            "MixedLM 适用于多层次/分组数据。\n"
+            "Panel 适用于面板数据（固定效应/随机效应）。\n\n"
+            "注意：MLE 模型不支持 F 检验，将使用似然比检验 (LR) 替代。"
         ),
     )
-    is_mle = model_type_label == "Logit"
-    # Future: add "Probit" to the dropdown above, then is_mle drives SE hiding.
+    is_mle = model_type_label in (
+        "Logit", "Probit", "Poisson", "Negative Binomial"
+    )
+    is_logit = model_type_label == "Logit"
+    is_probit = model_type_label == "Probit"
+    is_count = model_type_label in ("Poisson", "Negative Binomial")
+    is_mixedlm = model_type_label == "MixedLM (Multilevel)"
+    is_panel = model_type_label.startswith("Panel Data")
 
     with st.expander("高级选项", expanded=False):
         col_a, col_b = st.columns(2)
@@ -106,6 +124,60 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
             help="选择缺失值的处理方式。",
         )
 
+    # --- MixedLM: group variable selector ---
+    group_var: Optional[str] = None
+    entity_var: Optional[str] = None
+    time_var: Optional[str] = None
+    panel_model: Optional[str] = None
+
+    if is_mixedlm:
+        available_vars = st.session_state.get("available_vars", [])
+        group_var = st.selectbox(
+            "分组变量 (Group Variable)",
+            options=[""] + available_vars,
+            index=0,
+            key=f"{key_prefix}_group_var",
+            help="选择用于定义分组/聚类的列（如学校、医院、国家）。",
+        )
+        if group_var == "":
+            group_var = None
+
+    # --- Panel: entity/time selectors ---
+    if is_panel:
+        available_vars = st.session_state.get("available_vars", [])
+        entity_var = st.selectbox(
+            "实体变量 (Entity ID)",
+            options=[""] + available_vars,
+            index=0,
+            key=f"{key_prefix}_entity_var",
+            help="选择标识横截面个体（如企业、城市）的列。",
+        )
+        if entity_var == "":
+            entity_var = None
+        time_var = st.selectbox(
+            "时间变量 (Time ID)",
+            options=[""] + available_vars,
+            index=0,
+            key=f"{key_prefix}_time_var",
+            help="选择标识时间周期（如年份、季度）的列。",
+        )
+        if time_var == "":
+            time_var = None
+        if model_type_label == "Panel Data — Fixed Effects":
+            panel_model = "fixed"
+        else:
+            panel_model = "random"
+
+    _mt_map = {
+        "OLS": "ols",
+        "Logit": "logit",
+        "Probit": "probit",
+        "Poisson": "poisson",
+        "Negative Binomial": "negbin",
+        "MixedLM (Multilevel)": "mixedlm",
+        "Panel Data — Fixed Effects": "panel",
+        "Panel Data — Random Effects": "panel",
+    }
     _se_map = {
         "普通标准误": "nonrobust",
         "HC0 (异方差稳健)": "HC0",
@@ -113,13 +185,23 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
         "HC2": "HC2",
         "HC3": "HC3",
     }
-    return {
-        "model_type": "logit" if is_mle else "ols",
+    result: Dict[str, Any] = {
+        "model_type": _mt_map.get(model_type_label, "ols"),
         "add_constant": add_constant,
         "ci_level": ci_level,
         "se_type": _se_map.get(se_type, "nonrobust"),
         "missing_handling": "drop" if missing_handling == "删除整行" else ("mean" if missing_handling == "均值填充" else "none"),
     }
+    if is_mixedlm and group_var:
+        result["group_var"] = group_var
+    if is_panel:
+        if entity_var:
+            result["entity_var"] = entity_var
+        if time_var:
+            result["time_var"] = time_var
+        if panel_model:
+            result["panel_model"] = panel_model
+    return result
 
 
 def render_model_comparison_controls(

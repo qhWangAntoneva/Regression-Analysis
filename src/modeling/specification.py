@@ -40,6 +40,18 @@ class ModelSpec:
     missing_strategy: str = "drop"
     model_type: str = "ols"
 
+    # MixedLM-specific
+    group_var: Optional[str] = None
+    """Grouping variable for MixedLM (multilevel) models."""
+
+    # Panel-specific
+    entity_var: Optional[str] = None
+    """Entity (cross-section) identifier for panel data models."""
+    time_var: Optional[str] = None
+    """Time identifier for panel data models."""
+    panel_model: Optional[str] = None
+    """Panel estimator type: ``'fixed'`` or ``'random'``."""
+
     @property
     def all_predictors(self) -> List[str]:
         """Return the combined list of all predictor variables."""
@@ -60,6 +72,21 @@ class ModelSpec:
         combined = self.all_predictors
         if len(combined) != len(set(combined)):
             raise ValueError("Duplicate variable names detected in predictors.")
+
+        # Validate MixedLM: group_var is required
+        if self.model_type == "mixedlm" and not self.group_var:
+            raise ValueError("mixedlm model requires group_var (grouping column name).")
+
+        # Validate Panel: entity_var and time_var are required
+        if self.model_type == "panel":
+            if not self.entity_var:
+                raise ValueError("panel model requires entity_var (entity identifier).")
+            if not self.time_var:
+                raise ValueError("panel model requires time_var (time identifier).")
+            if self.panel_model not in ("fixed", "random", None):
+                raise ValueError(
+                    f"panel_model must be 'fixed' or 'random', got '{self.panel_model}'."
+                )
 
 
 def _term_name(term: patsy.Term) -> str:

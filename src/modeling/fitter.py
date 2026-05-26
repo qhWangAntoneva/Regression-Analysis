@@ -11,8 +11,12 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from src.modeling.engines.statsmodels_count_engine import extract_count_model, run_count_model
 from src.modeling.engines.statsmodels_engine import run_ols
 from src.modeling.engines.statsmodels_logit_engine import extract_logit, run_logit
+from src.modeling.engines.statsmodels_mixedlm_engine import extract_mixedlm, run_mixedlm
+from src.modeling.engines.statsmodels_panel_engine import extract_panel, run_panel
+from src.modeling.engines.statsmodels_probit_engine import extract_probit, run_probit
 from src.modeling.specification import ModelSpec
 from src.modeling.transforms import VariableTransformer
 from src.results.table import ModelResult
@@ -124,9 +128,45 @@ class ModelFitter:
         if cov_type and cov_type != "nonrobust":
             spec_str += f"  [SE: {cov_type}]"
 
-        if spec.model_type in ("logit", "probit", "poisson", "negbin"):
+        if spec.model_type == "logit":
             fitted, var_labels = run_logit(working_data, fit_spec)
             result = extract_logit(
+                fitted_model=fitted,
+                alpha=alpha,
+                dep_var=spec.dep_var,
+                specification=spec_str,
+                variable_labels=var_labels,
+            )
+        elif spec.model_type == "probit":
+            fitted, var_labels = run_probit(working_data, fit_spec)
+            result = extract_probit(
+                fitted_model=fitted,
+                alpha=alpha,
+                dep_var=spec.dep_var,
+                specification=spec_str,
+                variable_labels=var_labels,
+            )
+        elif spec.model_type in ("poisson", "negbin"):
+            fitted, var_labels = run_count_model(working_data, fit_spec)
+            result = extract_count_model(
+                fitted_model=fitted,
+                alpha=alpha,
+                dep_var=spec.dep_var,
+                specification=spec_str,
+                variable_labels=var_labels,
+            )
+        elif spec.model_type == "mixedlm":
+            fitted, var_labels = run_mixedlm(working_data, fit_spec)
+            result = extract_mixedlm(
+                fitted_model=fitted,
+                alpha=alpha,
+                dep_var=spec.dep_var,
+                specification=spec_str,
+                variable_labels=var_labels,
+            )
+        elif spec.model_type == "panel":
+            fitted, var_labels = run_panel(working_data, fit_spec)
+            result = extract_panel(
                 fitted_model=fitted,
                 alpha=alpha,
                 dep_var=spec.dep_var,

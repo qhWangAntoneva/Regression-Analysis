@@ -262,14 +262,45 @@ def render() -> None:
         if model_config["model_type"] in ("logit", "probit") and not is_binary:
             st.warning(
                 f":material/warning: 因变量「{dep_var}」有 {unique_vals} 个不同值，"
-                f"不适用于 Logit 模型。Logit 要求二分类因变量 (0/1)。"
+                f"不适用于 Logit/Probit 模型。要求二分类因变量 (0/1)。"
                 f"请切换为 OLS 或选择二分类因变量。"
             )
+        elif model_config["model_type"] in ("poisson", "negbin"):
+            # Validate count data requirements
+            has_negative = (dep_series < 0).any()
+            is_integer_like = np.allclose(dep_series, np.round(dep_series), atol=1e-8)
+            if has_negative:
+                st.error(
+                    f":material/error: 因变量「{dep_var}」包含负值，"
+                    f"不适用于计数模型 (Poisson/NegBin)。计数模型要求非负整数因变量。"
+                )
+            elif not is_integer_like:
+                st.warning(
+                    f":material/warning: 因变量「{dep_var}」包含非整数值，"
+                    f"计数模型 (Poisson/NegBin) 适用于计数数据（非负整数）。"
+                )
         elif model_config["model_type"] == "ols" and is_binary:
             st.info(
                 f":material/info: 因变量「{dep_var}」只有 2 个不同值 ({sorted(dep_series.unique().tolist())})，"
                 f"可能是二分类变量。建议使用「Logit」模型进行逻辑回归。"
             )
+        elif model_config["model_type"] == "mixedlm":
+            if not model_config.get("group_var"):
+                st.warning(
+                    ":material/warning: MixedLM 模型需要指定分组变量 (Group Variable)。"
+                    "请在高级选项中设置。"
+                )
+        elif model_config["model_type"] == "panel":
+            if not model_config.get("entity_var"):
+                st.warning(
+                    ":material/warning: 面板数据模型需要指定实体变量 (Entity ID)。"
+                    "请在高级选项中设置。"
+                )
+            if not model_config.get("time_var"):
+                st.warning(
+                    ":material/warning: 面板数据模型需要指定时间变量 (Time ID)。"
+                    "请在高级选项中设置。"
+                )
 
     # 公式预览（含转换和交互项）
     if dep_var and indep_vars:
@@ -368,6 +399,10 @@ def _run_regression(
                 interaction_terms=interaction_terms,
                 missing_strategy=model_config.get("missing_handling", "drop"),
                 model_type=model_config.get("model_type", "ols"),
+                group_var=model_config.get("group_var"),
+                entity_var=model_config.get("entity_var"),
+                time_var=model_config.get("time_var"),
+                panel_model=model_config.get("panel_model"),
             )
 
             cov_type = model_config.get("se_type", "nonrobust")

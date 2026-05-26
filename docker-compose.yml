@@ -1,0 +1,18 @@
+# ===========================================================================
+# docker-compose.yml — Regression Analysis Streamlit Service
+# ===========================================================================
+
+services:
+  streamlit:
+    build: .
+    container_name: regression-analysis
+    ports:
+      - "8501:8501"
+    volumes:
+      # Persist uploaded/generated data outside the container
+      - ./data:/app/data
+      # Mount Streamlit secrets if you have any
+      # - ./.streamlit/secrets.toml:/app/.streamlit/secrets.toml:ro
+    restart: unless-stopped
+    environment:
+      - STREAMLIT_SERVER_HEADLESS=true

@@ -146,6 +146,32 @@ class ModelResult:
     For categorical dummies like ``C(education)[T.本科]`` the label would
     be ``education: 本科``.  Non-categorical columns map to themselves."""
 
+    # MixedLM-specific fields
+    group_var: Optional[str] = None
+    """Grouping variable name for MixedLM models."""
+    group_count: Optional[int] = None
+    """Number of groups/clusters for MixedLM models."""
+    re_var: Optional[Dict[str, float]] = None
+    """Random-effects variance components for MixedLM models."""
+
+    # Panel-specific fields
+    entity_count: Optional[int] = None
+    """Number of entities (cross-sections) in panel data."""
+    time_count: Optional[int] = None
+    """Number of time periods in panel data."""
+    panel_type: Optional[str] = None
+    """Panel estimator type ('Panel FE' or 'Panel RE')."""
+    within_r_squared: Optional[float] = None
+    """Within-group R-squared for panel models."""
+    between_r_squared: Optional[float] = None
+    """Between-group R-squared for panel models."""
+    overall_r_squared: Optional[float] = None
+    """Overall R-squared for panel models."""
+
+    # Count model-specific fields
+    dispersion: Optional[float] = None
+    """Dispersion parameter (scale) for NegativeBinomial models."""
+
     # ------------------------------------------------------------------
     # Semantic model-type properties (Phase A)
     # ------------------------------------------------------------------
@@ -176,8 +202,11 @@ class ModelResult:
             A DataFrame with columns:
             [变量, 系数, 标准误, t值/z值, p值, 95%CI低, 95%CI高, 显著性]
 
-            The test-statistic column is labelled ``'z值'`` for logit models
+            The test-statistic column is labelled ``'z值'`` for MLE models
             and ``'t值'`` for OLS / default models.
+
+            For ``model_type == 'logit'`` only, appends an ``OR(exp(B))`` column.
+            For count models (poisson, negbin), appends an ``IRR(exp(B))`` column.
         """
         stat_col = "z值" if self.is_mle_model else "t值"
 
@@ -193,9 +222,13 @@ class ModelResult:
                 "95%CI高": round(coef_row.ci_upper, 6),
                 "显著性": coef_row.significance,
             }
-            # Binary choice models: add odds ratio column
-            if self.is_binary_choice:
+            # Only logit (not probit) gets odds ratio — probit coefficients are
+            # on the probit scale (inverse normal CDF), not log-odds.
+            if self.model_type == "logit":
                 row["OR(exp(B))"] = round(np.exp(coef_row.coef), 6)
+            # Count models get Incidence Rate Ratio
+            if self.is_count_model:
+                row["IRR(exp(B))"] = round(np.exp(coef_row.coef), 6)
             rows.append(row)
 
         df = pd.DataFrame(rows)
@@ -319,6 +352,19 @@ class ModelResult:
             "pseudo_r_squared": self.pseudo_r_squared,
             "llr": self.llr,
             "llr_pvalue": self.llr_pvalue,
+            # Panel-specific
+            "within_r_squared": self.within_r_squared,
+            "between_r_squared": self.between_r_squared,
+            "overall_r_squared": self.overall_r_squared,
+            "entity_count": self.entity_count,
+            "time_count": self.time_count,
+            "panel_type": self.panel_type,
+            # MixedLM-specific
+            "group_var": self.group_var,
+            "group_count": self.group_count,
+            "re_var": self.re_var,
+            # Count model-specific
+            "dispersion": self.dispersion,
         }
         if self.f_statistic is not None:
             d["f_statistic"] = round(self.f_statistic[0], 6)

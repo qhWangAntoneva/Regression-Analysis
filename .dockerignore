@@ -1,0 +1,91 @@
+# ===========================================================================
+# .dockerignore — Exclude files from Docker build context
+# ===========================================================================
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python cache / build artefacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+*.whl
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.uv/
+
+# Claude Code (project metadata, not app code)
+.claude/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+coverage/
+.coverage
+htmlcov/
+*.coverage
+*.cover
+.cache/
+.ruff_cache/
+.mypy_cache/
+
+# Logs / temp
+logs/
+tmp/
+temp/
+output/
+exports/
+
+# Data files (handled by volume at runtime)
+*.csv
+*.xlsx
+*.xls
+*.parquet
+*.feather
+*.dta
+*.sav
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation (not needed at runtime)
+docs/
+notebooks/
+*.md
+!README.md
+
+# Scripts / tools not needed in container
+scripts/
+
+# Test suite
+tests/
+
+# Web (Pyodide) — separate deployment path
+web/
+
+# CI/CD
+.github/
+
+# Misc
+*.log
+*.pdf
+*.docx
+*.ipynb
+.ipynb_checkpoints/
