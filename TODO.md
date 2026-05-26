@@ -37,8 +37,8 @@
 
 ## 工程待办
 
-- [ ] 发布 v1.2 GitHub Release (含版本 tag v1.2.0)
+- [x] 发布 v1.2 GitHub Release (含版本 tag v1.2.0) — https://github.com/qhWangAntoneva/Regression-Analysis/releases/tag/v1.2.0
+- [x] 样本 Gallery 补充（MixedLM、面板数据展示场景）— 2 个新场景，共 7 个
 - [ ] Docker 构建验证（需 Docker 环境）
-- [ ] 样本 Gallery 补充（MixedLM、面板数据展示场景）
 - [ ] noqa 总量优化（当前 ~107 条，逐步减少）
 - [ ] Web 版 (Pyodide) gallery 场景对齐 Streamlit 版

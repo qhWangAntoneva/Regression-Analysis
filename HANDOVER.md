@@ -136,12 +136,13 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KE
 - [x] **Deploy Pages 修复 (CRITICAL)**: 停用 GH_PAT (secret 缺失导致所有 deploy 运行失败)，改为 SSH deploy key (`DEPLOY_KEY` secret)。3 条 gh CLI 命令完成设置，`deploy.yml` 改为 `deploy_key` 参数，保留 `if` 守卫
 - [x] **文档同步**: HANDOVER/TODO/CHANGELOG/已知问题/memory 全面更新至 v1.2 状态
 
-### Session 8 优先事项
+### Session 8 (已完成 — 2026-05-27)
 
-- [ ] **Docker 构建验证**: `docker build -t regression-analysis . && docker compose up`
-- [ ] **发布 v1.2 tag**: `git tag v1.2.0 && git push --tags`
-- [ ] **v1.2 发布说明**: 基于 CHANGELOG 生成 GitHub Release
-- [ ] **Gallery 更新**: 样本场景补充（MixedLM、面板数据展示案例）
+- [x] **Gallery 更新**: 新增 MixedLM（学校学业成绩）和 Panel（省级经济增长）2 个展示场景，共 7 个场景
+- [x] **Code Review Bug 修复**: `_json_to_model_result` 死代码修复（`return` 导致 MixedLM/Panel 字段恢复无效）+ `f_pooled` 元组序列化修复
+- [x] **发布 v1.2 tag**: `git tag v1.2.0 && git push --tags`
+- [x] **v1.2 发布说明**: 基于 CHANGELOG 生成 GitHub Release → https://github.com/qhWangAntoneva/Regression-Analysis/releases/tag/v1.2.0
+- [ ] **Docker 构建验证**: `docker build -t regression-analysis . && docker compose up`（需 Docker 环境）
 
 ### v1.3+ 候选 (来自 TODO.md)
 
