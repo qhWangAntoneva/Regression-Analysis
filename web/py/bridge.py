@@ -101,7 +101,13 @@ def parse_file(filename: str, content_b64: str) -> str:
     try:
         if name_lower.endswith(".csv") or name_lower.endswith(".tsv") or name_lower.endswith(".txt"):
             # Detect encoding and separator
-            sep = "\t" if name_lower.endswith(".tsv") else ","
+            if name_lower.endswith(".tsv"):
+                sep = "\t"
+            elif name_lower.endswith(".txt"):
+                # Auto-detect separator for .txt: count tabs vs commas in first few lines
+                sep = _detect_separator(content_bytes)
+            else:
+                sep = ","
             # Try UTF-8 first, then GBK
             for enc in ["utf-8", "gbk", "latin-1"]:
                 try:
@@ -165,6 +171,15 @@ def parse_file(filename: str, content_b64: str) -> str:
     })
 
 
+def _detect_separator(content_bytes: bytes) -> str:
+    """Auto-detect CSV separator by counting tabs vs commas in first few lines."""
+    sample = content_bytes[:4096].decode("utf-8", errors="ignore")
+    lines = sample.splitlines()[:10]
+    n_tabs = sum(line.count("\t") for line in lines if line.strip())
+    n_commas = sum(line.count(",") for line in lines if line.strip())
+    return "\t" if n_tabs > n_commas else ","
+
+
 def _safe_value(v: Any) -> Any:
     """Convert numpy/pandas types to JSON-safe Python types."""
     if pd.isna(v):
@@ -211,6 +226,35 @@ def _validate_columns_metadata(columns_meta: Any, df: pd.DataFrame) -> bool:
     return True
 
 
+def _apply_data_filter(df: pd.DataFrame, filter_spec: dict) -> pd.DataFrame:
+    """Apply row-subsetting filter to DataFrame.
+
+    Args:
+        df: DataFrame to filter.
+        filter_spec: {col, type: 'numeric'|'categorical', min, max, values}
+
+    Returns:
+        Filtered DataFrame.
+    """
+    col = filter_spec.get("col")
+    if not col or col not in df.columns:
+        return df
+    ftype = filter_spec.get("type", "")
+    if ftype == "numeric":
+        min_v = filter_spec.get("min")
+        max_v = filter_spec.get("max")
+        s = pd.to_numeric(df[col], errors="coerce")
+        if min_v is not None:
+            df = df[s >= min_v]
+        if max_v is not None:
+            df = df[s <= max_v]
+    elif ftype == "categorical":
+        values = filter_spec.get("values", [])
+        if values:
+            df = df[df[col].astype(str).isin(values)]
+    return df
+
+
 def _infer_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Convert columns that appear to be numeric from object/string dtype.
 
@@ -240,7 +284,7 @@ def _infer_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def run_regression(data_json: str, spec_json: str) -> str:
-    """Run an OLS regression.
+    """Run OLS or Logit regression.
 
     Args:
         data_json: JSON string with 'data' (list of lists) or 'columns'+'rows'.
@@ -301,6 +345,14 @@ def run_regression(data_json: str, spec_json: str) -> str:
     for v in indep_vars:
         if v not in df.columns:
             return json.dumps({"success": False, "error": f"Variable '{v}' not in data."})
+
+    # --- Apply data filter (row subsetting) ---
+    filter_spec = spec_dict.get("filter")
+    if filter_spec:
+        try:
+            df = _apply_data_filter(df, filter_spec)
+        except Exception as e:
+            return json.dumps({"success": False, "error": f"Data filter error: {e}"})
 
     # Drop rows with missing values in relevant columns
     cols_used = [dep_var] + indep_vars
@@ -550,12 +602,12 @@ def _extract_model_result(
         pv = float(pvalues[i])
         coefficients.append({
             "name": name,
-            "coef": float(params[i]) if not np.isnan(params[i]) else 0.0,
-            "se": float(bse[i]) if not np.isnan(bse[i]) else 0.0,
-            "t_stat": float(tvalues[i]) if not np.isnan(tvalues[i]) else 0.0,
-            "pvalue": pv if not np.isnan(pv) else 1.0,
-            "ci_lower": float(conf_int[i, 0]) if not np.isnan(conf_int[i, 0]) else 0.0,
-            "ci_upper": float(conf_int[i, 1]) if not np.isnan(conf_int[i, 1]) else 0.0,
+            "coef": float(params[i]) if not np.isnan(params[i]) else None,
+            "se": float(bse[i]) if not np.isnan(bse[i]) else None,
+            "t_stat": float(tvalues[i]) if not np.isnan(tvalues[i]) else None,
+            "pvalue": pv if not np.isnan(pv) else None,
+            "ci_lower": float(conf_int[i, 0]) if not np.isnan(conf_int[i, 0]) else None,
+            "ci_upper": float(conf_int[i, 1]) if not np.isnan(conf_int[i, 1]) else None,
             "significance": _significance_stars(pv),
         })
 
@@ -639,18 +691,18 @@ def _extract_logit_result(
     coefficients = []
     for i, name in enumerate(coef_names):
         pv = float(pvalues[i])
-        coef_val = float(params[i]) if not np.isnan(params[i]) else 0.0
+        coef_val = float(params[i]) if not np.isnan(params[i]) else None
         coefficients.append({
             "name": name,
             "coef": coef_val,
-            "se": float(bse[i]) if not np.isnan(bse[i]) else 0.0,
-            "z_stat": float(zvalues[i]) if not np.isnan(zvalues[i]) else 0.0,
-            "pvalue": pv if not np.isnan(pv) else 1.0,
-            "ci_lower": float(conf_int[i, 0]) if not np.isnan(conf_int[i, 0]) else 0.0,
-            "ci_upper": float(conf_int[i, 1]) if not np.isnan(conf_int[i, 1]) else 0.0,
-            "odds_ratio": float(np.exp(coef_val)) if not np.isnan(coef_val) else 0.0,
-            "or_ci_lower": float(np.exp(conf_int[i, 0])) if not np.isnan(conf_int[i, 0]) else 0.0,
-            "or_ci_upper": float(np.exp(conf_int[i, 1])) if not np.isnan(conf_int[i, 1]) else 0.0,
+            "se": float(bse[i]) if not np.isnan(bse[i]) else None,
+            "z_stat": float(zvalues[i]) if not np.isnan(zvalues[i]) else None,
+            "pvalue": pv if not np.isnan(pv) else None,
+            "ci_lower": float(conf_int[i, 0]) if not np.isnan(conf_int[i, 0]) else None,
+            "ci_upper": float(conf_int[i, 1]) if not np.isnan(conf_int[i, 1]) else None,
+            "odds_ratio": float(np.exp(coef_val)) if coef_val is not None else None,
+            "or_ci_lower": float(np.exp(conf_int[i, 0])) if not np.isnan(conf_int[i, 0]) else None,
+            "or_ci_upper": float(np.exp(conf_int[i, 1])) if not np.isnan(conf_int[i, 1]) else None,
             "significance": _significance_stars(pv),
         })
 

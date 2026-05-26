@@ -103,6 +103,36 @@
 
                 <div id="model-error" class="error-box hidden"></div>
 
+                <!-- Data Filter Section -->
+                <div id="data-filter-section" class="hidden">
+                    <h3>Data Filter</h3>
+                    <p class="panel-desc">Subset rows by variable values before running the regression.</p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="filter-col-select">Filter Column</label>
+                            <select id="filter-col-select" class="form-select form-select-sm">
+                                <option value="">-- Select column to filter --</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="filter-numeric-controls" class="hidden">
+                        <label>Range</label>
+                        <div class="filter-range-row">
+                            <input type="number" id="filter-num-min" class="form-input" placeholder="Min" style="width:120px">
+                            <span>to</span>
+                            <input type="number" id="filter-num-max" class="form-input" placeholder="Max" style="width:120px">
+                        </div>
+                    </div>
+                    <div id="filter-cat-controls" class="hidden">
+                        <label>Include Values</label>
+                        <div id="filter-cat-checkboxes" class="checkbox-list"></div>
+                    </div>
+                    <div class="filter-actions">
+                        <button id="btn-apply-filter" class="btn btn-primary btn-sm">Apply Filter</button>
+                        <button id="btn-clear-filter" class="btn btn-outline btn-sm">Clear Filter</button>
+                    </div>
+                </div>
+
                 <div class="model-form">
                     <div class="form-row">
                         <div class="form-group">
@@ -138,6 +168,7 @@
                                     <button id="btn-add-interaction" class="btn btn-sm btn-outline">Add Interaction</button>
                                 </div>
                                 <div id="interaction-list" class="interaction-list"></div>
+                                <small class="form-help" style="color:#6b7280;margin-top:0.25rem;display:block">Interactions currently support numeric and binary categorical variables only.</small>
                             </div>
                         </div>
                     </div>

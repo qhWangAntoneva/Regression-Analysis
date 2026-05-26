@@ -35,6 +35,8 @@ const STATE = {
     currentFile: null,         // {name, size} of uploaded file
     modelHistory: [],          // [{name, spec, result}] for multi-model comparison
     scatterCharts: {},         // {varName: chartSpec} cached scatter charts
+    filterEnabled: false,      // Whether a data filter is active
+    filterConditions: null,    // {col, type, min, max, values} filter spec
 };
 
 // =========================================================================
@@ -147,10 +149,10 @@ function initTabs() {
 }
 
 function resizeAllCharts() {
-    const chartIds = ['chart-residual-fitted', 'chart-qq', 'chart-scale-location', 'chart-cooks'];
-    chartIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (el && el._fullLayout) Plotly.Plots.resize(el);
+    // Query all Plotly chart containers in the DOM (avoids hardcoded list going stale)
+    const chartContainers = document.querySelectorAll('.chart-container[id]');
+    chartContainers.forEach(el => {
+        if (el._fullLayout) Plotly.Plots.resize(el);
     });
 }
 
@@ -456,8 +458,11 @@ function populateVariableSelectors() {
         ivList.innerHTML = '<p class="empty-hint">No variables found in data.</p>';
     }
 
-    // Population interaction term dropdowns
+    // Populate interaction term dropdowns
     populateInteractionDropdowns();
+
+    // Populate filter column dropdown
+    populateFilterUI();
 }
 
 // =========================================================================
@@ -488,6 +493,9 @@ function initModelForm() {
     document.getElementById('btn-save-model').addEventListener('click', saveModelForComparison);
     document.getElementById('btn-compare-models').addEventListener('click', compareModels);
     document.getElementById('btn-clear-compare').addEventListener('click', clearModelHistory);
+
+    // Data filter controls
+    initDataFilter();
 }
 
 function onModelTypeChange() {
@@ -524,7 +532,31 @@ function initInteractions() {
 function populateInteractionDropdowns() {
     const columns = STATE.columns || [];
     const numericVars = columns.filter(c => c.col_type === 'numeric');
-    const options = numericVars.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+
+    // Also include binary categorical variables (exactly 2 unique values)
+    // These can be safely multiplied as 0/1 after encoding
+    const binaryCategoricalVars = [];
+    if (STATE.data && STATE.data.length > 1) {
+        const headerRow = STATE.data[0];
+        for (const col of columns) {
+            if (col.col_type === 'categorical' || col.col_type === 'binary') {
+                const colIdx = headerRow.indexOf(col.name);
+                if (colIdx >= 0) {
+                    const values = new Set();
+                    for (let i = 1; i < STATE.data.length; i++) {
+                        const v = STATE.data[i][colIdx];
+                        if (v != null && v !== '') values.add(v);
+                    }
+                    if (values.size === 2) {
+                        binaryCategoricalVars.push(col);
+                    }
+                }
+            }
+        }
+    }
+
+    const allVars = [...numericVars, ...binaryCategoricalVars];
+    const options = allVars.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
 
     const sel1 = document.getElementById('interaction-var1');
     const sel2 = document.getElementById('interaction-var2');
@@ -592,6 +624,109 @@ function getInteractions() {
 }
 
 // =========================================================================
+// Data Filter
+// =========================================================================
+
+function initDataFilter() {
+    const filterSection = document.getElementById('data-filter-section');
+    const filterColSelect = document.getElementById('filter-col-select');
+    const btnApply = document.getElementById('btn-apply-filter');
+    const btnClear = document.getElementById('btn-clear-filter');
+
+    filterColSelect.addEventListener('change', onFilterColumnChange);
+    btnApply.addEventListener('click', applyDataFilter);
+    btnClear.addEventListener('click', clearDataFilter);
+}
+
+function populateFilterUI() {
+    const filterSection = document.getElementById('data-filter-section');
+    if (!STATE.columns || STATE.columns.length === 0) {
+        filterSection.classList.add('hidden');
+        return;
+    }
+    filterSection.classList.remove('hidden');
+
+    const filterColSelect = document.getElementById('filter-col-select');
+    const currentVal = filterColSelect.value;
+    filterColSelect.innerHTML = '<option value="">-- Select column to filter --</option>';
+    STATE.columns.forEach(c => {
+        if (c.col_type !== 'id') {
+            filterColSelect.innerHTML += `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)} (${c.col_type})</option>`;
+        }
+    });
+    if (currentVal && STATE.columns.some(c => c.name === currentVal)) {
+        filterColSelect.value = currentVal;
+    }
+}
+
+function onFilterColumnChange() {
+    const colName = document.getElementById('filter-col-select').value;
+    const numControls = document.getElementById('filter-numeric-controls');
+    const catControls = document.getElementById('filter-cat-controls');
+    numControls.classList.add('hidden');
+    catControls.classList.add('hidden');
+
+    if (!colName || !STATE.columns) return;
+
+    const colMeta = STATE.columns.find(c => c.name === colName);
+    if (!colMeta) return;
+
+    if (colMeta.col_type === 'numeric') {
+        numControls.classList.remove('hidden');
+    } else if (colMeta.col_type === 'categorical') {
+        catControls.classList.remove('hidden');
+        // Populate checkboxes from data
+        const colIdx = STATE.data[0].indexOf(colName);
+        const uniqueVals = [...new Set(STATE.data.slice(1).map(r => r[colIdx]).filter(v => v != null))].sort();
+        const checkboxesDiv = document.getElementById('filter-cat-checkboxes');
+        checkboxesDiv.innerHTML = uniqueVals.map(v => `
+            <label>
+                <input type="checkbox" value="${escapeHtml(String(v))}" checked> ${escapeHtml(String(v))}
+            </label>
+        `).join('');
+    }
+}
+
+function applyDataFilter() {
+    const colName = document.getElementById('filter-col-select').value;
+    if (!colName) {
+        showError('model-error', 'Select a column to filter.');
+        return;
+    }
+    const colMeta = STATE.columns.find(c => c.name === colName);
+    if (!colMeta) return;
+
+    if (colMeta.col_type === 'numeric') {
+        const minVal = parseFloat(document.getElementById('filter-num-min').value);
+        const maxVal = parseFloat(document.getElementById('filter-num-max').value);
+        if (isNaN(minVal) && isNaN(maxVal)) {
+            showError('model-error', 'Enter at least one range value.');
+            return;
+        }
+        STATE.filterEnabled = true;
+        STATE.filterConditions = { col: colName, type: 'numeric', min: isNaN(minVal) ? null : minVal, max: isNaN(maxVal) ? null : maxVal };
+    } else {
+        const checked = document.querySelectorAll('#filter-cat-checkboxes input[type="checkbox"]:checked');
+        STATE.filterEnabled = true;
+        STATE.filterConditions = { col: colName, type: 'categorical', values: Array.from(checked).map(cb => cb.value) };
+    }
+    clearError('model-error');
+    document.getElementById('btn-apply-filter').textContent = 'Filter Applied';
+    setTimeout(() => { document.getElementById('btn-apply-filter').textContent = 'Apply Filter'; }, 1500);
+}
+
+function clearDataFilter() {
+    STATE.filterEnabled = false;
+    STATE.filterConditions = null;
+    document.getElementById('filter-col-select').value = '';
+    document.getElementById('filter-numeric-controls').classList.add('hidden');
+    document.getElementById('filter-cat-controls').classList.add('hidden');
+    document.getElementById('filter-num-min').value = '';
+    document.getElementById('filter-num-max').value = '';
+    clearError('model-error');
+}
+
+// =========================================================================
 // Run Regression
 // =========================================================================
 
@@ -620,6 +755,11 @@ async function runRegression() {
         const interactions = getInteractions();
         if (transforms) spec.transforms = transforms;
         if (interactions) spec.interactions = interactions;
+
+        // Pass data filter conditions
+        if (STATE.filterEnabled && STATE.filterConditions) {
+            spec.filter = STATE.filterConditions;
+        }
 
         // Serialize spec for model history and bridge
         const specJson = JSON.stringify(spec);
@@ -843,8 +983,11 @@ function renderSummaryText(result) {
 
     text += `${isLogit ? 'Logit ' : ''}Coefficients:\n`;
     (result.coefficients || []).forEach(c => {
-        const statVal = isLogit ? (c.z_stat != null ? c.z_stat : c.t_stat || 0) : (c.t_stat || 0);
-        let coefLine = `  ${c.name.padEnd(20)} ${c.coef.toFixed(6).padStart(12)} (SE: ${c.se.toFixed(6)}, ${isLogit ? 'z' : 't'}=${statVal.toFixed(4)}, p=${fmtPvalue(c.pvalue)}) ${c.significance}`;
+        const statVal = isLogit ? (c.z_stat != null ? c.z_stat : c.t_stat) : c.t_stat;
+        const coefStr = c.coef != null ? c.coef.toFixed(6).padStart(12) : '         N/A';
+        const seStr = c.se != null ? c.se.toFixed(6) : 'N/A';
+        const statStr = statVal != null ? statVal.toFixed(4) : 'N/A';
+        let coefLine = `  ${c.name.padEnd(20)} ${coefStr} (SE: ${seStr}, ${isLogit ? 'z' : 't'}=${statStr}, p=${fmtPvalue(c.pvalue)}) ${c.significance}`;
         if (isLogit && c.odds_ratio != null) {
             coefLine += ` OR=${c.odds_ratio.toFixed(4)}`;
         }
@@ -1286,11 +1429,22 @@ function loadGalleryItem(id) {
     STATE.diagnostics = null;
     STATE.charts = null;
     STATE.coefChart = null;
+    STATE.modelHistory = [];
+    STATE.compareChart = null;
+    STATE.scatterCharts = {};
+    STATE.rocChart = null;
+    STATE.orChart = null;
 
     // Hide file info, update upload area
     document.getElementById('file-info').classList.add('hidden');
     document.getElementById('upload-area').classList.add('hidden');
     document.getElementById('data-error').classList.add('hidden');
+
+    // Clear stale model comparison UI and chart sections
+    clearModelHistory();
+    document.getElementById('roc-chart-section').classList.add('hidden');
+    document.getElementById('or-chart-section').classList.add('hidden');
+    document.getElementById('visualizations-section').classList.add('hidden');
 
     // Render data preview
     renderDataPreview();
@@ -1370,11 +1524,79 @@ function computeDiagnosticsFromResult(result, data) {
     // Simple VIF (placeholder - full computation needs Pyodide)
     let vif = null;
 
-    // Residual diagnostics (placeholders)
-    let residual_tests = {
-        shapiro_normal: "N/A (gallery)",
-        dw_autocorrelation: "N/A (gallery)",
-    };
+    // Residual diagnostics
+    let residual_tests = {};
+    if (residuals.length > 0 && STATE.pyodideReady) {
+        // Compute actual Shapiro-Wilk and Durbin-Watson via Pyodide
+        try {
+            const pyodide = STATE.pyodide;
+            const residualListJson = JSON.stringify(residuals);
+            const testsJson = pyodide.runPython(`
+import json
+import numpy as np
+
+residuals = np.array(json.loads('''${residualListJson}'''), dtype=float)
+
+result = {}
+# Shapiro-Wilk
+if len(residuals) >= 3:
+    try:
+        from scipy import stats
+        shapiro_stat, shapiro_p = stats.shapiro(residuals)
+        result["shapiro_stat"] = round(float(shapiro_stat), 6)
+        result["shapiro_pvalue"] = float(shapiro_p)
+        result["shapiro_normal"] = "Yes" if shapiro_p > 0.05 else "No"
+    except Exception:
+        result["shapiro_normal"] = "Error"
+else:
+    result["shapiro_normal"] = "Insufficient data"
+
+# Durbin-Watson
+if len(residuals) >= 2:
+    try:
+        diff_sum = np.sum(np.diff(residuals) ** 2)
+        total_sum = np.sum(residuals ** 2)
+        if total_sum > 0:
+            dw = float(diff_sum / total_sum)
+            result["dw_stat"] = round(dw, 4)
+            if dw < 1.0:
+                result["dw_autocorrelation"] = "Positive (strong)"
+            elif dw > 3.0:
+                result["dw_autocorrelation"] = "Negative (strong)"
+            elif dw < 1.5:
+                result["dw_autocorrelation"] = "Positive (mild)"
+            elif dw > 2.5:
+                result["dw_autocorrelation"] = "Negative (mild)"
+            else:
+                result["dw_autocorrelation"] = "None"
+        else:
+            result["dw_autocorrelation"] = "N/A (zero variance)"
+    except Exception:
+        result["dw_autocorrelation"] = "Error"
+else:
+    result["dw_autocorrelation"] = "Insufficient data"
+
+json.dumps(result)
+            `);
+            residual_tests = JSON.parse(testsJson);
+        } catch (err) {
+            console.error('[Diagnostics] Pyodide computation error:', err);
+            residual_tests = {
+                shapiro_normal: "Error computing diagnostics",
+                dw_autocorrelation: "Error computing diagnostics",
+            };
+        }
+    } else if (residuals.length > 0 && !STATE.pyodideReady) {
+        residual_tests = {
+            shapiro_normal: "N/A (Pyodide not loaded)",
+            dw_autocorrelation: "N/A (Pyodide not loaded)",
+        };
+    } else {
+        residual_tests = {
+            shapiro_normal: "N/A (no residuals)",
+            dw_autocorrelation: "N/A (no residuals)",
+        };
+    }
 
     return {
         success: true,
@@ -1553,7 +1775,22 @@ function exportText() {
 }
 
 function exportCharts() {
-    const chartIds = ['chart-residual-fitted', 'chart-qq', 'chart-scale-location', 'chart-cooks', 'coef-chart'];
+    // Lazy-render any unrendered chart DIVs (user may not have visited Diagnostics tab)
+    if (STATE.charts && !document.getElementById('chart-residual-fitted')._fullLayout) {
+        renderDiagnosticCharts();
+    }
+    if (STATE.coefChart && !document.getElementById('coef-chart')._fullLayout) {
+        renderCoefficientChart();
+    }
+    if (STATE.rocChart && !document.getElementById('roc-chart')._fullLayout) {
+        renderROCChart();
+    }
+    if (STATE.orChart && !document.getElementById('or-chart')._fullLayout) {
+        renderORChart();
+    }
+    // Build list of all chart containers that have been rendered
+    const chartIds = ['chart-residual-fitted', 'chart-qq', 'chart-scale-location', 'chart-cooks',
+                      'coef-chart', 'roc-chart', 'or-chart'];
     let exported = 0;
     chartIds.forEach(id => {
         const el = document.getElementById(id);
@@ -1563,7 +1800,11 @@ function exportCharts() {
         }
     });
     if (exported === 0) {
-        alert('No charts available to export. Run a regression and view diagnostics first.');
+        if (!STATE.charts && !STATE.coefChart) {
+            alert('No charts available to export. Run a regression first to generate charts.');
+        } else {
+            alert('No charts available to export. Please visit the Diagnostics and Results tabs first to render the charts, then try exporting again.');
+        }
     }
 }
 
