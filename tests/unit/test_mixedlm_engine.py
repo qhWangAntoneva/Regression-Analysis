@@ -437,7 +437,13 @@ class TestDataOutput:
         assert "p>|t|" in text
 
     def test_to_latex_row(self) -> None:
-        """to_latex_row() should produce valid LaTeX with 7 fields (OLS-like)."""
+        """to_latex_row() should produce valid LaTeX.
+
+        Non-MLE models produce 8 parts:
+        dep_var & n & r2 & adj_r2 & f & fp & aic & bic.
+        For MixedLM: f_statistic is None (shows "N/A") and AIC/BIC
+        are NaN for REML (shows "nan").
+        """
         df = make_grouped_data()
         spec = ModelSpec(dep_var="y", indep_vars=["x1", "x2"], model_type="mixedlm")
         spec.group_var = "group"
@@ -446,7 +452,10 @@ class TestDataOutput:
         latex = result.to_latex_row()
         assert latex.endswith("\\\\")
         parts = latex.split(" & ")
-        assert len(parts) == 7, f"Expected 7 parts, got {len(parts)}: {parts}"
+        assert len(parts) == 8, f"Expected 8 parts, got {len(parts)}: {parts}"
+        # first three parts should have valid values
+        assert parts[0] == "y"
+        assert parts[1] == str(result.n_obs)
 
 
 # =========================================================================

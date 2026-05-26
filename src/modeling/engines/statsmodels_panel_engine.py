@@ -167,8 +167,8 @@ def extract_panel(
     n_obs = int(fitted_model.nobs)
     has_intercept = "Intercept" in params.index or "const" in params.index
 
-    # Detect FE vs RE
-    is_fe = hasattr(fitted_model, "entity_effects")
+    # Detect FE vs RE: FE results have included_effects, RE does not.
+    is_fe = hasattr(fitted_model, "included_effects")
     panel_method = "Panel FE" if is_fe else "Panel RE"
 
     # For FE: df_model already includes entity dummies, so it is the total
