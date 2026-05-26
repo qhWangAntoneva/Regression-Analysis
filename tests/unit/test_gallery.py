@@ -76,13 +76,13 @@ def _compute_vif(data: pd.DataFrame, target_col: str, other_cols: list[str]) -> 
 
 
 class TestGalleryItemCreation:
-    """Verify all 5 gallery items are created correctly."""
+    """Verify all 7 gallery items are created correctly."""
 
     # ------------------------------------------------------------------
     def test_all_five_items_load(self) -> None:
-        """get_gallery_items() returns 5 items."""
+        """get_gallery_items() returns 7 items."""
         items = get_gallery_items()
-        assert len(items) == 5, f"Expected 5 gallery items, got {len(items)}"
+        assert len(items) == 7, f"Expected 7 gallery items, got {len(items)}"
 
     # ------------------------------------------------------------------
     def test_all_items_have_required_fields(self) -> None:
@@ -481,11 +481,11 @@ class TestGalleryIndex:
     """Gallery metadata API works."""
 
     # ------------------------------------------------------------------
-    def test_get_gallery_index_returns_5(self) -> None:
-        """Returns 5 items."""
+    def test_get_gallery_index_returns_7(self) -> None:
+        """Returns 7 items."""
         index = get_gallery_index()
-        assert len(index) == 5, (
-            f"Expected 5 index entries, got {len(index)}"
+        assert len(index) == 7, (
+            f"Expected 7 index entries, got {len(index)}"
         )
 
     # ------------------------------------------------------------------
@@ -534,9 +534,11 @@ class TestGalleryIndex:
         "ecommerce_sales",
         "customer_satisfaction",
         "policy_effect",
+        "school_performance",
+        "province_growth",
     ])
     def test_get_gallery_item_all_valid_ids(self, item_id: str) -> None:
-        """All 5 known IDs return a GalleryItem."""
+        """All 7 known IDs return a GalleryItem."""
         item = get_gallery_item(item_id)
         assert item is not None, f"get_gallery_item('{item_id}') returned None"
         assert isinstance(item, GalleryItem)

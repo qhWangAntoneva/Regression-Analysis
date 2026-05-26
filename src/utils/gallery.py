@@ -1,9 +1,9 @@
 """Sample Gallery module for the Regression Analysis app.
 
-Provides 5 pre-computed regression analysis scenarios (datasets + OLS results)
-based on 3 user personas.  Pre-adapted for Pyodide (WebAssembly) deployment:
-results are serialized to JSON so the Pyodide runtime does not need to run
-statsmodels OLS.
+Provides 7 pre-computed regression analysis scenarios (datasets + model results)
+based on 4 user personas (OLS, MixedLM, and Panel models).  Pre-adapted for
+Pyodide (WebAssembly) deployment: results are serialized to JSON so the
+Pyodide runtime does not need to run statsmodels.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 
 from src.modeling.engines.statsmodels_engine import run_ols
+from src.modeling.engines.statsmodels_mixedlm_engine import run_and_extract_mixedlm
+from src.modeling.engines.statsmodels_panel_engine import extract_panel, run_panel
 from src.modeling.specification import ModelSpec
 from src.results.table import CoefficientRow, ModelResult
 
@@ -62,6 +64,22 @@ def _model_result_to_json(mr: ModelResult) -> dict:
             list(pair) for pair in mr.interaction_terms_applied
         ],
         "se_type": mr.se_type,
+        "mixedlm_extra": {
+            "group_var": getattr(mr, "group_var", None),
+            "re_var": getattr(mr, "re_var", {}),
+            "group_count": getattr(mr, "group_count", None),
+            "mixedlm_scale": getattr(mr, "mixedlm_scale", None),
+            "mixedlm_converged": getattr(mr, "mixedlm_converged", None),
+        },
+        "panel_extra": {
+            "within_r_squared": getattr(mr, "within_r_squared", None),
+            "between_r_squared": getattr(mr, "between_r_squared", None),
+            "overall_r_squared": getattr(mr, "overall_r_squared", None),
+            "entity_count": getattr(mr, "entity_count", None),
+            "time_count": getattr(mr, "time_count", None),
+            "panel_type": getattr(mr, "panel_type", None),
+            "f_pooled": getattr(mr, "f_pooled", None),
+        },
     }
 
 
@@ -108,6 +126,36 @@ def _json_to_model_result(d: dict) -> ModelResult:
         interaction_terms_applied=interaction_terms,
         se_type=d.get("se_type", "nonrobust"),
     )
+    # Restore dynamically-attached MixedLM fields
+    mixedlm_extra = d.get("mixedlm_extra", {})
+    if mixedlm_extra.get("group_var"):
+        result.group_var = mixedlm_extra["group_var"]
+    if mixedlm_extra.get("re_var"):
+        result.re_var = mixedlm_extra["re_var"]
+    if mixedlm_extra.get("group_count"):
+        result.group_count = mixedlm_extra["group_count"]
+    if "mixedlm_scale" in mixedlm_extra:
+        result.mixedlm_scale = mixedlm_extra["mixedlm_scale"]  # type: ignore[attr-defined]
+    if "mixedlm_converged" in mixedlm_extra:
+        result.mixedlm_converged = mixedlm_extra["mixedlm_converged"]  # type: ignore[attr-defined]
+    # Restore dynamically-attached Panel fields
+    panel_extra = d.get("panel_extra", {})
+    if "within_r_squared" in panel_extra:
+        result.within_r_squared = panel_extra["within_r_squared"]
+    if "between_r_squared" in panel_extra:
+        result.between_r_squared = panel_extra["between_r_squared"]
+    if "overall_r_squared" in panel_extra:
+        result.overall_r_squared = panel_extra["overall_r_squared"]
+    if "entity_count" in panel_extra:
+        result.entity_count = panel_extra["entity_count"]
+    if "time_count" in panel_extra:
+        result.time_count = panel_extra["time_count"]
+    if "panel_type" in panel_extra:
+        result.panel_type = panel_extra["panel_type"]
+    if "f_pooled" in panel_extra and panel_extra["f_pooled"] is not None:
+        fp = panel_extra["f_pooled"]
+        result.f_pooled = tuple(fp) if isinstance(fp, list) else fp  # type: ignore[attr-defined]
+    return result
 
 
 # ======================================================================
@@ -728,13 +776,308 @@ def _make_policy_effect() -> GalleryItem:
 
 
 # ======================================================================
+# DGP 6 -- 学校学业成绩  (Persona: 王磊, n = 1000)
+# ======================================================================
+
+def _make_school_performance() -> GalleryItem:
+    """Generate the school academic performance scenario.
+
+    Students nested in 50 schools (n=1000, ~20 per school).  MixedLM captures
+    between-school variance via random intercepts (ICC ~ 0.2).  Both
+    student-level and school-level predictors are included.
+    """
+    rng = np.random.default_rng(42)
+    n_schools = 50
+    students_per_school = 20
+    n = n_schools * students_per_school  # 1000
+
+    # --- school-level data (50 schools) ---
+    school_ids = [f"S{i+1:03d}" for i in range(n_schools)]
+    school_records: list[dict] = []
+    for sid in school_ids:
+        class_size = rng.uniform(15, 45)
+        teacher_quality = rng.uniform(1, 10)
+        school_re = rng.normal(0, np.sqrt(5))  # random intercept ~N(0,5)
+        for _ in range(students_per_school):
+            school_records.append({
+                "school_id": sid,
+                "class_size": class_size,
+                "teacher_quality": teacher_quality,
+                "_school_re": school_re,
+            })
+    df_school = pd.DataFrame(school_records)
+
+    # --- student-level variables ---
+    # study_hours (10-50, uniform)
+    study_hours = rng.uniform(10, 50, n)
+
+    # parent_education (4-level categorical)
+    edu_categories = ["初中", "高中", "本科", "研究生"]
+    edu_idx = rng.choice(4, size=n, p=[0.20, 0.35, 0.30, 0.15])
+    parent_edu_num = edu_idx.astype(float)  # 0,1,2,3 for DGP
+    parent_education = pd.Categorical(
+        np.array(edu_categories)[edu_idx],
+        categories=edu_categories,
+        ordered=False,
+    )
+
+    # socioeconomic_score (~N(50, 15), individual level)
+    socioeconomic_score = rng.normal(50, 15, n)
+
+    # --- DGP ---
+    exam_score = (
+        40.0
+        + 0.8 * study_hours
+        + 2.0 * parent_edu_num
+        + 1.5 * df_school["teacher_quality"].values
+        - 0.3 * df_school["class_size"].values
+        + 0.2 * socioeconomic_score
+        + df_school["_school_re"].values
+        + rng.normal(0, 8, n)
+    )
+
+    # --- DataFrame ---
+    df = pd.DataFrame({
+        "student_id": range(1, n + 1),
+        "school_id": df_school["school_id"],
+        "study_hours": study_hours,
+        "parent_education": parent_education,
+        "class_size": df_school["class_size"],
+        "teacher_quality": df_school["teacher_quality"],
+        "socioeconomic_score": socioeconomic_score,
+        "exam_score": exam_score,
+    })
+
+    # --- ModelSpec (group_var attached after creation) ---
+    spec = ModelSpec(
+        dep_var="exam_score",
+        indep_vars=[
+            "study_hours",
+            "parent_education",
+            "teacher_quality",
+            "class_size",
+            "socioeconomic_score",
+        ],
+    )
+    spec.group_var = "school_id"
+
+    # --- Fit via run_and_extract_mixedlm ---
+    result = run_and_extract_mixedlm(data=df, spec=spec)
+    result_json = _model_result_to_json(result)
+
+    return GalleryItem(
+        id="school_performance",
+        title="学校学业成绩影响因素分析 — 多层次模型",
+        persona="王磊（教育研究员）",
+        persona_icon="🎓",
+        description=(
+            "50 所学校 1000 名学生分层数据，使用多层次模型（MixedLM）分析"
+            "学习时长、家庭教育背景、教师质量、班级规模和社会经济地位"
+            "对考试成绩的影响，控制学校间随机截距效应。"
+        ),
+        tags=["教育数据", "多层次模型", "嵌套数据"],
+        n_obs=n,
+        data=df,
+        model_spec=spec,
+        model_result=result,
+        result_json=result_json,
+        key_features=[
+            "50 所学校分层嵌套结构，每校约 20 名学生",
+            "学校随机截距捕捉组间异质性（ICC≈0.2）",
+            "教师质量和班级规模为学校层面变量，跨校变异明显",
+            "适合演示混合效应模型中固定效应 vs 随机效应的解释",
+        ],
+        story=(
+            "教育研究员王磊受市教育局委托，研究影响中学生学业成绩的关键因素。"
+            "他从 50 所中学收集了 1000 名学生的数据，涵盖学生学习投入（周学习时长）、"
+            "家庭背景（父母最高教育程度、社会经济地位指数）以及学校特征（班级规模、"
+            "教师质量评分）。由于学生嵌套在学校之中，同一学校的学生共享相同的教师资源"
+            "和教学环境，传统 OLS 回归会因忽视组内相关性而导致标准误低估。\n\n"
+            "王磊选择使用多层次模型（MixedLM），通过随机截距捕捉学校间的异质性。"
+            "初步分析显示学校层面的随机效应方差约为 5，个体残差方差约为 64，"
+            "组内相关系数（ICC）约为 0.2——这意味着约 20% 的成绩变异可归因于"
+            "学校之间的系统性差异，而非学生个体差异。这一发现确认了使用多层次模型的"
+            "必要性。\n\n"
+            "在固定效应部分，学习时长每增加 1 小时/周，考试成绩预计提升约 0.8 分；"
+            "父母教育从\"初中\"到\"研究生\"每提升一个层级，成绩提升约 2 分。"
+            "在学校层面，教师质量每提高 1 分（1-10 量表），成绩提升约 1.5 分，"
+            "而班级规模每增加 1 人，成绩下降约 0.3 分。这一分析为教育政策制定"
+            "提供了量化依据：改善师资和适当控制班额可能是比扩大家庭作业更有效的"
+            "干预路径。"
+        ),
+        dep_var="exam_score",
+    )
+
+
+# ======================================================================
+# DGP 7 -- 省级经济增长  (Persona: 李明远, n = 240)
+# ======================================================================
+
+def _make_province_growth() -> GalleryItem:
+    """Generate the province economic growth panel scenario.
+
+    30 provinces over 8 years (2016-2023, n=240).  A fixed-effects panel
+    model controls for unobserved time-invariant provincial heterogeneity,
+    isolating the within-province effects of investment, education spending,
+    trade openness, urbanisation, fiscal policy, and high-tech industry share
+    on annual GDP growth.
+    """
+    rng = np.random.default_rng(42)
+
+    provinces = [
+        "北京", "天津", "河北", "山西", "内蒙古",
+        "辽宁", "吉林", "黑龙江",
+        "上海", "江苏", "浙江", "安徽", "福建", "江西", "山东",
+        "河南", "湖北", "湖南",
+        "广东", "广西", "海南",
+        "重庆", "四川", "贵州", "云南",
+        "陕西", "甘肃", "青海", "宁夏", "新疆",
+    ]
+    years = list(range(2016, 2024))  # 8 years
+
+    # Province regions for base-effect assignment
+    coastal = {"北京", "天津", "辽宁", "上海", "江苏", "浙江",
+               "福建", "山东", "广东", "海南"}
+    inland = {"河北", "山西", "吉林", "黑龙江", "安徽", "江西",
+              "河南", "湖北", "湖南", "重庆", "四川", "陕西"}
+    western = {"内蒙古", "广西", "贵州", "云南", "甘肃", "青海", "宁夏", "新疆"}
+
+    rows: list[dict] = []
+    for year in years:
+        year_effect = 0.1 * (year - 2016)
+        for prov in provinces:
+            if prov in coastal:
+                base = rng.uniform(3, 5)
+            elif prov in inland:
+                base = rng.uniform(1, 3)
+            else:
+                base = rng.uniform(0, 2)
+
+            investment_rate = rng.uniform(20, 50)
+            education_spending = rng.uniform(2, 8)
+            trade_openness = (
+                rng.uniform(5, 80) if prov in coastal else rng.uniform(2, 30)
+            )
+            urbanization_rate = np.clip(
+                rng.normal(60 if prov in coastal else 50, 10), 40, 90
+            )
+            fiscal_deficit = rng.uniform(1, 10)
+            high_tech_ratio = (
+                rng.uniform(2, 25) if prov in coastal else rng.uniform(1, 15)
+            )
+
+            gdp_growth = (
+                2.0
+                + base
+                + 0.15 * investment_rate
+                + 0.3 * education_spending
+                + 0.08 * trade_openness
+                + 0.05 * urbanization_rate
+                - 0.2 * fiscal_deficit
+                + 0.12 * high_tech_ratio
+                + year_effect
+                + rng.normal(0, 0.8)
+            )
+
+            rows.append({
+                "province": prov,
+                "year": year,
+                "gdp_growth": gdp_growth,
+                "investment_rate": investment_rate,
+                "education_spending": education_spending,
+                "trade_openness": trade_openness,
+                "urbanization_rate": urbanization_rate,
+                "fiscal_deficit": fiscal_deficit,
+                "high_tech_ratio": high_tech_ratio,
+            })
+
+    df = pd.DataFrame(rows)
+
+    # --- ModelSpec (entity/time/panel attached after creation) ---
+    spec = ModelSpec(
+        dep_var="gdp_growth",
+        indep_vars=[
+            "investment_rate",
+            "education_spending",
+            "trade_openness",
+            "urbanization_rate",
+            "fiscal_deficit",
+            "high_tech_ratio",
+        ],
+    )
+    spec.entity_var = "province"
+    spec.time_var = "year"
+    spec.panel_model = "fixed"
+
+    # --- Fit via run_panel then extract_panel ---
+    fitted_model, labels = run_panel(data=df, spec=spec)
+
+    preds_str = " + ".join(spec.all_predictors)
+    spec_str = f"{spec.dep_var} ~ {preds_str}  [entity: province, time: year, model: fixed]"
+
+    result = extract_panel(
+        fitted_model=fitted_model,
+        alpha=0.05,
+        dep_var=spec.dep_var,
+        specification=spec_str,
+        variable_labels=labels,
+    )
+    result_json = _model_result_to_json(result)
+
+    return GalleryItem(
+        id="province_growth",
+        title="省级经济增长驱动因素分析 — 面板数据 FE 模型",
+        persona="李明远（政策分析师）",
+        persona_icon="🏛️",
+        description=(
+            "30 个省份 2016-2023 年平衡面板数据，使用固定效应模型分析"
+            "固定资产投资、教育支出、贸易开放度、城镇化率、财政赤字"
+            "和高技术产业占比对 GDP 增长率的驱动作用。"
+        ),
+        tags=["面板数据", "固定效应", "宏观经济学"],
+        n_obs=len(df),
+        data=df,
+        model_spec=spec,
+        model_result=result,
+        result_json=result_json,
+        key_features=[
+            "30 个省份 × 8 年平衡面板（n=240）",
+            "固定效应模型控制省份不随时间异质性",
+            "涵盖投资、教育、贸易、城镇化、财政、高技术等多维解释变量",
+            "适合演示面板数据 FE vs RE 选择（Hausman 检验）",
+        ],
+        story=(
+            "政策分析师李明远受国家发改委委托，开展省级经济增长驱动因素研究。"
+            "他整理了 30 个省份 2016-2023 年的平衡面板数据，涵盖固定资产投资率、"
+            "教育支出占比、贸易开放度（进出口占 GDP 比重）、城镇化率、财政赤字占比"
+            "和高技术产业增加值占比等六个核心解释变量。面板数据允许同时利用"
+            "省份间差异和时间维度信息，比横截面 OLS 或单时间序列更可靠。\n\n"
+            "李明远选择固定效应（FE）模型，因为各省存在不随时间变化的未观测异质性"
+            "（如地理区位、历史文化、制度质量），这些因素同时影响解释变量和增长"
+            "表现。FE 模型通过组内变换消去了这些固定效应，仅利用各省内部"
+            "随时间的变化来识别系数——本质上回答\"当某省的投资率提高时，"
+            "其增长率如何变化\"的问题。回归后，他还计划运行 Hausman 检验"
+            "来验证 FE 相对于随机效应（RE）模型的适用性。\n\n"
+            "初步结果显示，教育支出和高技术产业占比对经济增长的正向驱动"
+            "最为显著——教育支出每增加 1 个百分点，GDP 增长率提升约 0.3 个"
+            "百分点；高技术产业占比每提高 1 个百分点，增长率提升约 0.12 个"
+            "百分点。财政赤字则呈现显著的负向效应，暗示过度赤字可能抑制"
+            "增长。李明远注意到城镇化率和贸易开放度的系数在沿海省份与内陆"
+            "省份之间可能存在结构性差异，建议后续可以引入分组回归或交互项"
+            "进行异质性分析。"
+        ),
+        dep_var="gdp_growth",
+    )
+
+
+# ======================================================================
 # Module API
 # ======================================================================
 
 def get_gallery_items() -> list[GalleryItem]:
-    """Return the complete list of 5 pre-computed gallery items.
+    """Return the complete list of 7 pre-computed gallery items.
 
-    This function is heavy -- it runs every DGP and fits 5 OLS models.
+    This function is heavy -- it runs every DGP and fits 7 models.
     For a lightweight UI listing, prefer :func:`get_gallery_index`.
     """
     global _gallery_cache
@@ -746,6 +1089,8 @@ def get_gallery_items() -> list[GalleryItem]:
         _make_ecommerce_sales(),
         _make_customer_satisfaction(),
         _make_policy_effect(),
+        _make_school_performance(),
+        _make_province_growth(),
     ]
     return _gallery_cache
 
@@ -778,12 +1123,13 @@ def get_gallery_item(item_id: str) -> GalleryItem | None:
     """Look up a single gallery item by its ID.
 
     If the item is not yet cached, only the requested DGP is executed
-    (the four others are left untouched).
+    (the six others are left untouched).
 
     Args:
         item_id: One of ``"survey_happiness"``, ``"trust_experiment"``,
             ``"ecommerce_sales"``, ``"customer_satisfaction"``,
-            ``"policy_effect"``.
+            ``"policy_effect"``, ``"school_performance"``,
+            ``"province_growth"``.
 
     Returns:
         The matching :class:`GalleryItem`, or ``None`` if *item_id* is
@@ -795,6 +1141,8 @@ def get_gallery_item(item_id: str) -> GalleryItem | None:
         "ecommerce_sales": _make_ecommerce_sales,
         "customer_satisfaction": _make_customer_satisfaction,
         "policy_effect": _make_policy_effect,
+        "school_performance": _make_school_performance,
+        "province_growth": _make_province_growth,
     }
     factory = factory_map.get(item_id)
     if factory is None:
