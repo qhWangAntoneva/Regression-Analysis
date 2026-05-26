@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 导出与报告页面
 
@@ -10,9 +9,7 @@
 from __future__ import annotations
 
 import io
-import os
 import tempfile
-from pathlib import Path
 from typing import Any
 
 import pandas as pd

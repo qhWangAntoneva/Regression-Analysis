@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 散点图模块
 
@@ -26,7 +25,7 @@ def scatter_with_regression(
     y_col: str,
     title: str | None = None,
     color_col: str | None = None,
-) -> "Figure":
+) -> Figure:
     """绘制散点图 + OLS 回归线 + 置信区间带。
 
     使用 plotly express 绘制散点图，并叠加 OLS 回归线（基于 statsmodels 或 numpy polyfit）。

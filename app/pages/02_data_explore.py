@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 数据探索页面
 
@@ -240,7 +239,7 @@ def render() -> None:
                                     str(c): float(df_cleaned[c].isna().mean()) for c in df_cleaned.columns
                                 }
 
-                            st.success(f"缺失值处理完成！")
+                            st.success("缺失值处理完成！")
                             st.info(f"处理前: {before_rows} 行, {before_missing} 个缺失值 → 处理后: {after_rows} 行, {after_missing} 个缺失值")
                             st.rerun()
                         except Exception as e:

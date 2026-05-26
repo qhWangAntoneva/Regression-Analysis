@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Statsmodels Probit regression engine.
 
 Provides an adapter that runs binary probit regression via statsmodels
@@ -13,9 +12,8 @@ Key differences from Logit:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
-import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
@@ -27,7 +25,7 @@ def run_probit(
     data: pd.DataFrame,
     spec: ModelSpec,
     alpha: float = 0.05,
-) -> Tuple[Any, Dict[str, str]]:
+) -> tuple[Any, dict[str, str]]:
     """Fit a binary probit regression model using statsmodels.
 
     Args:
@@ -68,7 +66,7 @@ def extract_probit(
     alpha: float = 0.05,
     dep_var: str = "",
     specification: str = "",
-    variable_labels: Optional[Dict[str, str]] = None,
+    variable_labels: dict[str, str] | None = None,
 ) -> ModelResult:
     """Extract probit regression results into a ModelResult.
 
@@ -127,8 +125,8 @@ def extract_probit(
     pseudo_r_squared = float(1.0 - ll_model / ll_null) if ll_null != 0 else None
 
     # Likelihood ratio test
-    llr: Optional[float] = None
-    llr_pvalue: Optional[float] = None
+    llr: float | None = None
+    llr_pvalue: float | None = None
     if hasattr(fitted_model, "llr"):
         llr = float(fitted_model.llr)
     if hasattr(fitted_model, "llr_pvalue"):

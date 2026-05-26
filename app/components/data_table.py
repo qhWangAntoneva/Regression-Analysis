@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 Streamlit 可复用数据表格组件
 

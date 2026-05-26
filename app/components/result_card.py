@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Result display UI components for regression model output.
 
 Provides Streamlit-based rendering of coefficient tables, model statistics,
@@ -7,12 +6,12 @@ ANOVA tables, comparison tables, and statistical alerts.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from src.results.table import CoefficientRow, ModelResult
+from src.results.table import ModelResult
 
 try:
     import streamlit as st
@@ -43,9 +42,9 @@ def render_coefficient_table(
     df = result.to_dataframe().reset_index()
 
     # Use human-readable variable labels if available
-    variable_labels: Dict[str, str] = getattr(result, "variable_labels", {}) or {}
+    variable_labels: dict[str, str] = getattr(result, "variable_labels", {}) or {}
 
-    rows: List[Dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for _, row in df.iterrows():
         p_val = row["p值"]
         sig = row.get("显著性", "") if use_stars else ""
@@ -263,13 +262,13 @@ def render_model_statistics(result: ModelResult) -> None:
         pr2_warn = summary.get("pseudo_r_squared")
         if pr2_warn is not None and pr2_warn < 0.1:
             st.warning(
-                ":material/warning: 伪 R² = {:.4f}，模型解释力较低。".format(pr2_warn)
+                f":material/warning: 伪 R² = {pr2_warn:.4f}，模型解释力较低。"
             )
     else:
         r2_warn = summary.get("r_squared")
         if r2_warn is not None and r2_warn < 0.1:
             st.warning(
-                ":material/warning: R² = {:.4f}，模型解释力较低。".format(r2_warn)
+                f":material/warning: R² = {r2_warn:.4f}，模型解释力较低。"
             )
 
 
@@ -323,8 +322,8 @@ def render_comparison_table(comparison_df: pd.DataFrame) -> None:
 
 def render_statistical_alerts(
     result: ModelResult,
-    vif_df: Optional[pd.DataFrame] = None,
-    residual_tests: Optional[Dict[str, Any]] = None,
+    vif_df: pd.DataFrame | None = None,
+    residual_tests: dict[str, Any] | None = None,
 ) -> None:
     """Render statistical assumption violation alerts.
 
@@ -341,8 +340,8 @@ def render_statistical_alerts(
     if st is None:
         return
 
-    alerts: List[str] = []
-    warnings_list: List[str] = []
+    alerts: list[str] = []
+    warnings_list: list[str] = []
 
     # --- VIF alerts ---
     if vif_df is not None and not vif_df.empty:

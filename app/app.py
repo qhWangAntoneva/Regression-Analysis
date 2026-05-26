@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Regression Analysis -- Streamlit main entry point."""
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ configure_page()
 # ---------------------------------------------------------------------------
 # Crash Recovery: check for unclosed session
 # ---------------------------------------------------------------------------
-from src.utils.persistence import load_session, session_cache_exists, clear_session
+from src.utils.persistence import clear_session, load_session, session_cache_exists
 
 
 def _check_crash_recovery() -> None:
@@ -210,9 +209,8 @@ st.markdown(
 # ---------------------------------------------------------------------------
 # @st.cache_data decorator for expensive operations
 # ---------------------------------------------------------------------------
-import hashlib
 
-from src.utils.persistence import clear_session, load_session, save_session, session_cache_exists
+from src.utils.persistence import save_session
 
 
 @st.cache_data(ttl=3600, show_spinner="正在计算相关系数矩阵...")

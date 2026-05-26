@@ -1,4 +1,3 @@
-# encoding: utf-8
 """单元测试：数据导出模块。
 
 测试 DataExporter 类的各导出方法。
@@ -10,12 +9,10 @@ import os
 import tempfile
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from src.data_io.exporter import DataExporter, _get_model_summary
-
 
 # =========================================================================
 # Fixtures
@@ -335,7 +332,7 @@ class TestExportResultsPackage:
 
     def test_export_results_package_empty_result(self, temp_dir: str) -> None:
         """导出应处理无效结果而不崩溃。"""
-        from src.results.table import CoefficientRow, ModelResult
+        from src.results.table import ModelResult
 
         result = ModelResult(
             model_type="OLS",
@@ -494,7 +491,7 @@ class TestExportResultsPackageLogit:
 
         # Verify JSON contains model_type
         import json
-        with open(exported["summary_json"], "r", encoding="utf-8") as f:
+        with open(exported["summary_json"], encoding="utf-8") as f:
             summary = json.load(f)
         assert summary["model_type"] == "logit"
         assert summary["pseudo_r_squared"] == 0.15
@@ -620,7 +617,7 @@ class TestModelSummary:
 
     def test_summary_minimal(self) -> None:
         """最小 ModelResult 也应生成摘要。"""
-        from src.results.table import CoefficientRow, ModelResult
+        from src.results.table import ModelResult
 
         result = ModelResult(
             model_type="OLS",

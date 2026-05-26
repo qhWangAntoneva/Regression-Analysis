@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Unit tests for the Count regression engines (Poisson and NegativeBinomial).
 
 Tests cover:
@@ -17,15 +16,13 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-import statsmodels.api as sm
 
 from src.modeling.engines.statsmodels_count_engine import (
     extract_count_model,
     run_count_model,
 )
 from src.modeling.specification import ModelSpec
-from src.results.table import _significance_stars, CoefficientRow, ModelResult
-
+from src.results.table import ModelResult
 
 # =========================================================================
 # Helpers: generate count data

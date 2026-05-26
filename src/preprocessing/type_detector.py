@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 变量类型自动检测模块
 
@@ -8,10 +7,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 

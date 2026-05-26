@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Sample Gallery UI component for the regression analysis app.
 
 Renders a card grid showing pre-computed regression analysis scenarios
@@ -17,8 +16,8 @@ except ImportError:
 
 GALLERY_AVAILABLE = False
 try:
-    from src.utils.gallery import get_gallery_index, get_gallery_item  # type: ignore
     from src.preprocessing.type_detector import VariableTypeDetector
+    from src.utils.gallery import get_gallery_index, get_gallery_item  # type: ignore
 
     GALLERY_AVAILABLE = True
 except ImportError:

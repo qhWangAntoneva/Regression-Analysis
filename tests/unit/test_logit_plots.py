@@ -1,10 +1,6 @@
-# encoding: utf-8
 """Unit tests for logit visualisations: roc_curve_plot and odds_ratio_plot."""
 
 from __future__ import annotations
-
-import sys
-from unittest import mock
 
 import numpy as np
 import pytest

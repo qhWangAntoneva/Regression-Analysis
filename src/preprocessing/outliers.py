@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 异常值检测模块
 
@@ -9,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 
@@ -116,11 +114,11 @@ class OutlierDetector:
 
         for col in columns:
             if col not in df.columns:
-                summary[col] = {"n_outliers": 0, "percentage": 0.0, "error": f"列不存在"}
+                summary[col] = {"n_outliers": 0, "percentage": 0.0, "error": "列不存在"}
                 continue
 
             if not pd.api.types.is_numeric_dtype(df[col]):
-                summary[col] = {"n_outliers": 0, "percentage": 0.0, "error": f"非数值列"}
+                summary[col] = {"n_outliers": 0, "percentage": 0.0, "error": "非数值列"}
                 continue
 
             try:
@@ -129,7 +127,7 @@ class OutlierDetector:
                 else:
                     outlier_mask = self.detect_zscore(df, col, **kwargs)
             except Exception:
-                summary[col] = {"n_outliers": 0, "percentage": 0.0, "error": f"检测失败"}
+                summary[col] = {"n_outliers": 0, "percentage": 0.0, "error": "检测失败"}
                 continue
 
             n_outliers = int(outlier_mask.sum())

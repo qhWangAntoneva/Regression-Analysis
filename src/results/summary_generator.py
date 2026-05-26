@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Automatic generation of human-readable result summary text.
 
 Produces Chinese-language model interpretation text for regression results,
@@ -7,9 +6,7 @@ coefficient interpretations, and assumption check summaries.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-
-import numpy as np
+from typing import Any
 
 from src.results.table import CoefficientRow, ModelResult
 
@@ -128,7 +125,7 @@ def generate_coefficient_interpretation(
 def generate_assumption_check_text(
     result: ModelResult,
     vif_df: Any = None,
-    residual_tests: Optional[Dict[str, Any]] = None,
+    residual_tests: dict[str, Any] | None = None,
 ) -> str:
     """Generate a Chinese-language assumption check summary.
 

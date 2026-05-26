@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Performance benchmark suite for Regression Analysis v1.0.
 
 Times OLS fit and other operations across increasing data sizes.
@@ -13,7 +12,6 @@ import sys
 import time
 import warnings
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
@@ -33,7 +31,7 @@ warnings.filterwarnings("ignore")
 def generate_dataset(n_rows: int, n_vars: int, seed: int = 42) -> pd.DataFrame:
     """Synthetic data: y, x1..xN, cat."""
     rng = np.random.default_rng(seed)
-    data: Dict[str, np.ndarray] = {}
+    data: dict[str, np.ndarray] = {}
     for i in range(1, n_vars + 1):
         data[f"x{i}"] = rng.normal(loc=float(i * 10), scale=5.0, size=n_rows)
     data["cat"] = rng.choice(["A", "B", "C"], size=n_rows, p=[0.4, 0.35, 0.25])
@@ -47,14 +45,15 @@ def generate_dataset(n_rows: int, n_vars: int, seed: int = 42) -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-def time_ols_fit(df: pd.DataFrame, n_vars: int) -> Tuple[float, object]:
+def time_ols_fit(df: pd.DataFrame, n_vars: int) -> tuple[float, object]:
     """Time one OLS fit: design matrix + statsmodels OLS + extract.
 
     Attaches residuals/fitted_values to the returned ModelResult.
     """
-    from src.modeling.specification import ModelSpec, build_design_matrix
-    from src.modeling.engines.statsmodels_engine import extract_statsmodels
     from statsmodels.regression.linear_model import OLS
+
+    from src.modeling.engines.statsmodels_engine import extract_statsmodels
+    from src.modeling.specification import ModelSpec, build_design_matrix
 
     pred_vars = [f"x{i}" for i in range(1, n_vars + 1)]
     spec = ModelSpec(dep_var="y", indep_vars=pred_vars, has_intercept=True)
@@ -71,11 +70,11 @@ def time_ols_fit(df: pd.DataFrame, n_vars: int) -> Tuple[float, object]:
     return time.perf_counter() - t0, result
 
 
-def time_visualization(df: pd.DataFrame, result: object) -> Dict[str, float]:
+def time_visualization(df: pd.DataFrame, result: object) -> dict[str, float]:
     """Time 4 chart types.  Data is capped at ``MAX_VIZ`` points."""
-    from src.visualization.scatter import scatter_with_regression
-    from src.visualization.residual import residual_vs_fitted_plot, qq_plot
     from src.visualization.coefficient import coefficient_plot_single
+    from src.visualization.residual import qq_plot, residual_vs_fitted_plot
+    from src.visualization.scatter import scatter_with_regression
 
     # Cap data for all plots -- residual plot uses result.residuals/fitted_values
     # which are full-length, so we cap those too on a temporary copy.
@@ -93,7 +92,7 @@ def time_visualization(df: pd.DataFrame, result: object) -> Dict[str, float]:
         df_viz = df
         raw_resid = np.asarray(result.residuals).flatten()
 
-    timings: Dict[str, float] = {}
+    timings: dict[str, float] = {}
 
     t0 = time.perf_counter()
     _ = scatter_with_regression(df_viz, x_col="x1", y_col="y")
@@ -119,7 +118,7 @@ def time_visualization(df: pd.DataFrame, result: object) -> Dict[str, float]:
     return timings
 
 
-def format_table(results: List[Tuple[int, int, Dict[str, float]]]) -> str:
+def format_table(results: list[tuple[int, int, dict[str, float]]]) -> str:
     sep = "=" * 105
     header = (f"{'Size':>8}  {'Vars':>4}  {'Generate':>10}  {'OLS Fit':>10}  "
               f"{'Scatter':>10}  {'Resid':>10}  {'QQ':>10}  {'Coef':>10}  {'Total':>10}")
@@ -154,7 +153,7 @@ def main() -> None:
     time_ols_fit(df_w, 5)
     print("done.\n", flush=True)
 
-    all_results: List[Tuple[int, int, Dict[str, float]]] = []
+    all_results: list[tuple[int, int, dict[str, float]]] = []
 
     for n_vars in VAR_COUNTS:
         for n_rows in ROW_SIZES:

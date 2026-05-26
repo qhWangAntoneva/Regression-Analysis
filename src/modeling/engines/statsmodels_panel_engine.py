@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Panel data regression engine using linearmodels.
 
 Provides adapters that run Fixed Effects (FE) and Random Effects (RE)
@@ -8,11 +7,10 @@ unified ModelResult data structure.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
-
 from linearmodels.panel import PanelOLS, RandomEffects
 
 from src.modeling.specification import ModelSpec, build_design_matrix, build_variable_labels
@@ -24,7 +22,7 @@ def run_panel(
     spec: ModelSpec,
     alpha: float = 0.05,
     cov_type: str = "clustered",
-) -> Tuple[Any, Dict[str, str]]:
+) -> tuple[Any, dict[str, str]]:
     """Fit a panel data model using linearmodels.
 
     Args:
@@ -44,8 +42,8 @@ def run_panel(
         ValueError: If entity_var or time_var is missing, if there is
             only one entity, or if the model fails to fit.
     """
-    entity_var: Optional[str] = getattr(spec, "entity_var", None)
-    time_var: Optional[str] = getattr(spec, "time_var", None)
+    entity_var: str | None = getattr(spec, "entity_var", None)
+    time_var: str | None = getattr(spec, "time_var", None)
     panel_model: str = getattr(spec, "panel_model", "fixed")
 
     if not entity_var:
@@ -116,7 +114,7 @@ def extract_panel(
     alpha: float = 0.05,
     dep_var: str = "",
     specification: str = "",
-    variable_labels: Optional[Dict[str, str]] = None,
+    variable_labels: dict[str, str] | None = None,
 ) -> ModelResult:
     """Extract panel regression results into a ModelResult.
 
@@ -182,9 +180,9 @@ def extract_panel(
     df_resid = int(fitted_model.df_resid)
 
     # R-squared variants
-    within_r2: Optional[float] = None
-    between_r2: Optional[float] = None
-    overall_r2: Optional[float] = None
+    within_r2: float | None = None
+    between_r2: float | None = None
+    overall_r2: float | None = None
     if hasattr(fitted_model, "rsquared_within"):
         within_r2 = float(fitted_model.rsquared_within)
     if hasattr(fitted_model, "rsquared_between"):
@@ -196,7 +194,7 @@ def extract_panel(
     r_squared = within_r2 if within_r2 is not None else overall_r2
 
     # F-statistic (overall model significance)
-    f_stat: Optional[Tuple[float, float]] = None
+    f_stat: tuple[float, float] | None = None
     if hasattr(fitted_model, "f_statistic") and fitted_model.f_statistic is not None:
         try:
             fs = fitted_model.f_statistic
@@ -205,7 +203,7 @@ def extract_panel(
             pass
 
     # F-test for poolability (FE vs pooled OLS)
-    f_pooled: Optional[Tuple[float, float]] = None
+    f_pooled: tuple[float, float] | None = None
     if hasattr(fitted_model, "f_pooled") and fitted_model.f_pooled is not None:
         try:
             fp = fitted_model.f_pooled
@@ -214,7 +212,7 @@ def extract_panel(
             pass
 
     # Log-likelihood
-    log_likelihood: Optional[float] = None
+    log_likelihood: float | None = None
     try:
         if hasattr(fitted_model, "loglik") and fitted_model.loglik is not None:
             log_likelihood = float(fitted_model.loglik)
@@ -234,7 +232,7 @@ def extract_panel(
         pass
 
     # RMSE from sum of squared residuals
-    rmse: Optional[float] = None
+    rmse: float | None = None
     if hasattr(fitted_model, "resid_ss") and df_resid > 0:
         rmse = float(np.sqrt(fitted_model.resid_ss / df_resid))
 

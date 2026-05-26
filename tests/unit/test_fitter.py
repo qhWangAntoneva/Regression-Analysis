@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Unit tests for the OLS statistical engine.
 
 Tests cover:

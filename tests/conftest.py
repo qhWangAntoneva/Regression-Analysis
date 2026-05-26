@@ -1,4 +1,3 @@
-# encoding: utf-8
 """pytest 配置和 fixtures。"""
 
 from __future__ import annotations
@@ -6,7 +5,6 @@ from __future__ import annotations
 import csv
 import os
 import tempfile
-from pathlib import Path
 
 import numpy as np
 import pandas as pd

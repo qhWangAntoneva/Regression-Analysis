@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 Publication-quality LaTeX table renderer for regression results.
 
@@ -10,7 +9,7 @@ Jinja2 to avoid conflicts with LaTeX backslash sequences.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, Optional, Sequence
+from collections.abc import Sequence
 
 from src.results.table import ModelResult
 
@@ -57,7 +56,7 @@ class LatexRenderer:
         """
         is_binary = model_result.is_binary_choice
         is_mle = model_result.is_mle_model
-        lines: List[str] = []
+        lines: list[str] = []
 
         has_title = bool(title)
 
@@ -228,8 +227,8 @@ class LatexRenderer:
     @staticmethod
     def render_comparison(
         model_results: Sequence[ModelResult],
-        captions: Optional[List[str]] = None,
-        model_labels: Optional[List[str]] = None,
+        captions: list[str] | None = None,
+        model_labels: list[str] | None = None,
     ) -> str:
         """Render a multi-model side-by-side LaTeX comparison table.
 
@@ -261,7 +260,7 @@ class LatexRenderer:
         has_ols = any(not r.is_mle_model for r in model_results)
         mixed = has_mle and has_ols
 
-        lines: List[str] = []
+        lines: list[str] = []
 
         has_caption = captions and len(captions) > 0 and bool(captions[0])
 
@@ -293,7 +292,7 @@ class LatexRenderer:
             lines.append("\\midrule")
 
         # Collect all variable names across all models
-        all_vars: List[str] = []
+        all_vars: list[str] = []
         for res in model_results:
             for coef in res.coefficients:
                 if coef.name not in all_vars:
@@ -301,7 +300,7 @@ class LatexRenderer:
 
         # Coefficient rows
         for var_name in all_vars:
-            cells: List[str] = []
+            cells: list[str] = []
             for i, res in enumerate(model_results):
                 match = [c for c in res.coefficients if c.name == var_name]
                 if match:

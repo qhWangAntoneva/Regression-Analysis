@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Unit tests for the VariableTransformer.
 
 Tests cover:
@@ -18,7 +17,6 @@ import pandas as pd
 import pytest
 
 from src.modeling.transforms import VariableTransformer
-
 
 # =========================================================================
 # Fixtures

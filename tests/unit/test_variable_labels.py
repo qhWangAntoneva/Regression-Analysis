@@ -1,6 +1,4 @@
-# encoding: utf-8
 """Tests for build_variable_labels function."""
-import pytest
 from src.modeling.specification import ModelSpec, build_variable_labels
 
 

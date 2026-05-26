@@ -1,4 +1,3 @@
-# encoding: utf-8
 """End-to-end integration tests for Logit regression.
 
 Covers the complete pipeline from data preparation through model fitting
@@ -14,15 +13,13 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.modeling.engines.statsmodels_logit_engine import extract_logit, run_logit
 from src.modeling.fitter import ModelFitter
-from src.modeling.specification import ModelSpec, build_variable_labels
+from src.modeling.specification import ModelSpec
 from src.results.table import CoefficientRow, ModelResult, compare_models
 
 # ---------------------------------------------------------------------------
@@ -1168,8 +1165,9 @@ class TestBridgeVsPatsyInteraction:
         self, df: pd.DataFrame, spec: ModelSpec
     ) -> dict:
         """Run a model via the Streamlit (patsy) path and return params."""
-        from src.modeling.specification import build_design_matrix
         import statsmodels.api as sm
+
+        from src.modeling.specification import build_design_matrix
 
         X, y = build_design_matrix(spec, df)
         model_type = spec.model_type.lower()

@@ -1,4 +1,3 @@
-# encoding: utf-8
 """解析器单元测试。"""
 
 from __future__ import annotations
@@ -201,8 +200,9 @@ class TestParseExcel:
     @pytest.fixture
     def sample_excel_path(self):
         """Create an in-memory Excel file with openpyxl and write to temp file."""
-        import openpyxl
         import tempfile
+
+        import openpyxl
 
         wb = openpyxl.Workbook()
         ws = wb.active

@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Unit tests for the Panel data regression engine (FE and RE).
 
 Tests cover:
@@ -17,9 +16,8 @@ import pandas as pd
 import pytest
 
 from src.modeling.engines.statsmodels_panel_engine import extract_panel, run_panel
-from src.modeling.specification import ModelSpec, build_variable_labels
+from src.modeling.specification import ModelSpec
 from src.results.table import ModelResult
-
 
 # =========================================================================
 # Helper: generate balanced panel data with entity fixed effects

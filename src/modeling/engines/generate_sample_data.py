@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Generate sample_ols.csv with known coefficients for testing.
 
 Generates 200 rows with:
@@ -80,7 +79,7 @@ df.to_csv(output_path, index=False, encoding="utf-8")
 print(f"Sample data saved to {output_path}")
 print(f"Shape: {df.shape}")
 print(f"Missing in x4: {df['x4'].isna().sum()} / {N}")
-print(f"\nTrue coefficients for verification:")
+print("\nTrue coefficients for verification:")
 print(f"  Intercept = {TRUE_INTERCEPT}")
 print(f"  x1        = {TRUE_X1}")
 print(f"  x2        = {TRUE_X2}")

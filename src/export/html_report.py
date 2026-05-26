@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 Self-contained HTML report generator for regression analysis.
 
@@ -11,7 +10,7 @@ from __future__ import annotations
 import base64
 import io
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 from jinja2 import Template
@@ -204,9 +203,9 @@ class HtmlReportGenerator:
 
     @staticmethod
     def generate_full_report(
-        data_summary: Optional[pd.DataFrame],
+        data_summary: pd.DataFrame | None,
         model_result: ModelResult,
-        charts_dict: Optional[Dict[str, Any]] = None,
+        charts_dict: dict[str, Any] | None = None,
         model_spec: str = "",
     ) -> str:
         """Generate a complete self-contained HTML report.
@@ -232,14 +231,14 @@ class HtmlReportGenerator:
         model_type_label = "Logit" if is_mle else "OLS"
 
         # Coefficient table
-        coef_table: Optional[pd.DataFrame] = None
+        coef_table: pd.DataFrame | None = None
         try:
             coef_table = model_result.to_dataframe().reset_index()
         except Exception:
             pass
 
         # Model fit statistics (conditional on model type)
-        fit_stats: Dict[str, str] = {}
+        fit_stats: dict[str, str] = {}
         if is_mle:
             # Logit-specific fit statistics
             if model_result.pseudo_r_squared is not None:
@@ -270,7 +269,7 @@ class HtmlReportGenerator:
         fit_stats["参数数"] = str(model_result.n_params)
 
         # Encode charts as base64
-        charts: List[tuple] = []
+        charts: list[tuple] = []
         if charts_dict:
             for label, fig in charts_dict.items():
                 b64 = HtmlReportGenerator._figure_to_base64(fig)
@@ -297,7 +296,7 @@ class HtmlReportGenerator:
     # ==================================================================
 
     @staticmethod
-    def _figure_to_base64(fig: Any) -> Optional[str]:
+    def _figure_to_base64(fig: Any) -> str | None:
         """Convert a plotly or matplotlib figure to a base64 PNG string.
 
         Returns:

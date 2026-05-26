@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 Logit visualization module.
 

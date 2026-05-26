@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Tests for sample data generators in src/utils/sample_data.py."""
 
 from __future__ import annotations

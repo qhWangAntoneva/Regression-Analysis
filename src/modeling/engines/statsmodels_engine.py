@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Statsmodels OLS regression engine.
 
 Provides an adapter that runs OLS via statsmodels and converts the results
@@ -7,11 +6,8 @@ into the unified ModelResult data structure.
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple
-
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 from statsmodels.regression.linear_model import OLS, RegressionResultsWrapper
 
 from src.modeling.specification import ModelSpec, build_design_matrix, build_variable_labels
@@ -24,7 +20,7 @@ def extract_statsmodels(
     alpha: float = 0.05,
     dep_var: str = "",
     specification: str = "",
-    variable_labels: Optional[Dict[str, str]] = None,
+    variable_labels: dict[str, str] | None = None,
 ) -> ModelResult:
     """Extract results from a statsmodels OLS Results object.
 
@@ -73,17 +69,17 @@ def extract_statsmodels(
     n_params = int(model.df_model) + (1 if "Intercept" in params.index else 0)
     df_resid = int(model.df_resid)
 
-    r_squared: Optional[float] = float(model.rsquared)
-    adj_r_squared: Optional[float] = float(model.rsquared_adj)
+    r_squared: float | None = float(model.rsquared)
+    adj_r_squared: float | None = float(model.rsquared_adj)
 
-    f_stat: Optional[Tuple[float, float]] = None
+    f_stat: tuple[float, float] | None = None
     if hasattr(model, "fvalue") and hasattr(model, "f_pvalue"):
         fv = float(model.fvalue)
         fp = float(model.f_pvalue)
         if not (np.isnan(fv) or np.isnan(fp)):
             f_stat = (fv, fp)
 
-    log_likelihood: Optional[float] = None
+    log_likelihood: float | None = None
     if hasattr(model, "llf") and model.llf is not None:
         log_likelihood = float(model.llf)
 

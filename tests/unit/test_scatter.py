@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Tests for scatter_with_regression visualization in src/visualization/scatter.py."""
 
 from __future__ import annotations

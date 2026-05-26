@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Custom exception hierarchy for the regression analysis tool."""
 
 

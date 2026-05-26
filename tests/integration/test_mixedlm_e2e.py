@@ -1,4 +1,3 @@
-# encoding: utf-8
 """End-to-end integration tests for MixedLM (multilevel) regression.
 
 Covers the complete pipeline from data preparation through model fitting
@@ -17,7 +16,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -29,7 +27,6 @@ from src.modeling.engines.statsmodels_mixedlm_engine import (
     run_and_extract_mixedlm,
     run_mixedlm,
 )
-from src.modeling.fitter import ModelFitter
 from src.modeling.specification import ModelSpec
 from src.results.table import ModelResult, compare_models
 

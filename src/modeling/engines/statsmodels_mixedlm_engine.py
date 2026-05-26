@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Statsmodels Mixed Linear Model (MixedLM) regression engine.
 
 Provides an adapter that fits multilevel / mixed-effects models via
@@ -12,8 +11,6 @@ and the output includes R-squared-like measures and RMSE.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
-
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
@@ -21,7 +18,6 @@ from statsmodels.regression.mixed_linear_model import MixedLMResultsWrapper
 
 from src.modeling.specification import ModelSpec, build_design_matrix, build_variable_labels
 from src.results.table import CoefficientRow, ModelResult
-
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -32,7 +28,7 @@ def run_mixedlm(
     data: pd.DataFrame,
     spec: ModelSpec,
     alpha: float = 0.05,
-) -> Tuple[MixedLMResultsWrapper, Dict[str, str]]:
+) -> tuple[MixedLMResultsWrapper, dict[str, str]]:
     """Fit a Mixed Linear Model.
 
     Args:
@@ -104,7 +100,7 @@ def extract_mixedlm(
     alpha: float = 0.05,
     dep_var: str = "",
     specification: str = "",
-    variable_labels: Optional[Dict[str, str]] = None,
+    variable_labels: dict[str, str] | None = None,
 ) -> ModelResult:
     """Extract MixedLM results into a ``ModelResult``.
 
@@ -130,7 +126,7 @@ def extract_mixedlm(
     conf_int_full = fitted_model.conf_int(alpha=alpha)
     conf_int = conf_int_full.loc[fe_names]
 
-    coefficients: List[CoefficientRow] = []
+    coefficients: list[CoefficientRow] = []
     for var_name in fe_names:
         coefficients.append(
             CoefficientRow(
@@ -153,15 +149,15 @@ def extract_mixedlm(
     y_endog = fitted_model.model.endog
     ss_resid = float(np.sum(fitted_model.resid ** 2))  # type: ignore[arg-type]
     ss_total = float(np.sum((y_endog - y_endog.mean()) ** 2))
-    r_squared: Optional[float] = None
-    adj_r_squared: Optional[float] = None
+    r_squared: float | None = None
+    adj_r_squared: float | None = None
     if ss_total > 0:
         r_squared = 1.0 - ss_resid / ss_total
         if df_resid > 0:
             adj_r_squared = 1.0 - (1.0 - r_squared) * (n_obs - 1) / df_resid
 
     # log-likelihood
-    log_likelihood: Optional[float] = None
+    log_likelihood: float | None = None
     if fitted_model.llf is not None and not np.isnan(fitted_model.llf):
         log_likelihood = float(fitted_model.llf)
 
@@ -172,24 +168,24 @@ def extract_mixedlm(
     bic: float = float(_bic) if not (np.isnan(_bic) if isinstance(_bic, float) else False) else float("nan")
 
     # RMSE
-    rmse: Optional[float] = (
+    rmse: float | None = (
         float(np.sqrt(ss_resid / df_resid)) if df_resid > 0 else None
     )
 
     # random effects variance components
-    re_var: Dict[str, float] = {}
+    re_var: dict[str, float] = {}
     if fitted_model.cov_re is not None and fitted_model.cov_re.size > 0:
         for i, name in enumerate(fitted_model.cov_re.index):
             re_var[str(name)] = float(fitted_model.cov_re.iloc[i, i])
 
     # residual scale
-    scale: Optional[float] = None
+    scale: float | None = None
     if hasattr(fitted_model, "scale") and fitted_model.scale is not None:
         scale = float(fitted_model.scale)
 
     # group metadata (stashed by run_mixedlm)
-    group_var: Optional[str] = getattr(fitted_model, "_mixedlm_group_var", None)
-    group_count: Optional[int] = getattr(fitted_model, "_mixedlm_group_count", None)
+    group_var: str | None = getattr(fitted_model, "_mixedlm_group_var", None)
+    group_count: int | None = getattr(fitted_model, "_mixedlm_group_count", None)
     if group_count is None and hasattr(fitted_model, "random_effects"):
         group_count = len(fitted_model.random_effects)
 

@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Model fitting dispatcher.
 
 Provides a unified interface for fitting regression models, dispatching
@@ -6,8 +5,6 @@ to the appropriate engine based on the model type.
 """
 
 from __future__ import annotations
-
-from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -36,7 +33,7 @@ class ModelFitter:
 
     def __init__(self) -> None:
         """Initialize the fitter."""
-        self._results: List[ModelResult] = []
+        self._results: list[ModelResult] = []
 
     def fit(
         self,
@@ -72,7 +69,7 @@ class ModelFitter:
         # so that patsy can find the new columns in the working data.
         transformer = VariableTransformer()
         working_data = data.copy()
-        name_map: Dict[str, str] = {}  # original_name -> new_column_name
+        name_map: dict[str, str] = {}  # original_name -> new_column_name
 
         if spec.transforms:
             working_data, meta = transformer.transform(
@@ -188,12 +185,12 @@ class ModelFitter:
 
     def fit_multiple(
         self,
-        specs: List[ModelSpec],
+        specs: list[ModelSpec],
         data: pd.DataFrame,
         alpha: float = 0.05,
         cov_type: str = "nonrobust",
         **kwargs: object,
-    ) -> List[ModelResult]:
+    ) -> list[ModelResult]:
         """Fit multiple model specifications to the same data.
 
         This is useful for model comparison tables, e.g. adding control
@@ -209,7 +206,7 @@ class ModelFitter:
         Returns:
             A list of ModelResult objects, one per input specification.
         """
-        results: List[ModelResult] = []
+        results: list[ModelResult] = []
         for spec in specs:
             result = self.fit(
                 spec, data, alpha=alpha, cov_type=cov_type, **kwargs
@@ -218,7 +215,7 @@ class ModelFitter:
         return results
 
     @property
-    def fitted_results(self) -> List[ModelResult]:
+    def fitted_results(self) -> list[ModelResult]:
         """Return all results fitted by this instance."""
         return list(self._results)
 

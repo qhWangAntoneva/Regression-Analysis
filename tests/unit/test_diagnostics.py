@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Tests for model diagnostics in src/modeling/diagnostics.py.
 
 Covers: vif(), residual_tests(), influence_stats(), model_summary().
@@ -19,7 +18,6 @@ from src.modeling.diagnostics import (
 )
 from src.modeling.specification import ModelSpec
 from src.results.table import CoefficientRow, ModelResult
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

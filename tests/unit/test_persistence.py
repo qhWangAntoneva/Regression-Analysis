@@ -1,10 +1,8 @@
-# encoding: utf-8
 """Test the session persistence utility: save / load / clear."""
 
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 from pathlib import Path
 
@@ -42,7 +40,7 @@ class TestSessionPersistence:
         state = {"key1": "value1", "key2": 42}
         save_session(state, temp_cache_path)
 
-        with open(temp_cache_path, "r", encoding="utf-8") as f:
+        with open(temp_cache_path, encoding="utf-8") as f:
             data = json.load(f)
 
         assert data["_version"] == "1.0"

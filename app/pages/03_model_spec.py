@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 模型设定页面
 
@@ -7,7 +6,7 @@ Streamlit 页面：变量选择、模型规格、运行回归，支持多模型�
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -20,14 +19,14 @@ except ImportError:
 # Lazy imports — avoid top-level crashes when modules not installed
 MODELING_AVAILABLE = False
 try:
+    from app.components.model_control import (
+        render_model_comparison_controls,
+        render_model_controls,
+    )
     from app.components.variable_selector import (
         render_interaction_ui,
         render_transforms_ui,
         render_variable_selector,
-    )
-    from app.components.model_control import (
-        render_model_comparison_controls,
-        render_model_controls,
     )
     from src.modeling.fitter import ModelFitter
     from src.modeling.specification import ModelSpec, build_formula
@@ -231,8 +230,8 @@ def render() -> None:
     # ------------------------------------------------------------------
     # Phase 3.1: 变量转换 UI
     # ------------------------------------------------------------------
-    transforms: Dict[str, str] = {}
-    interaction_terms: List[Tuple[str, str]] = []
+    transforms: dict[str, str] = {}
+    interaction_terms: list[tuple[str, str]] = []
     if dep_var and indep_vars:
         with st.expander("变量转换", expanded=False):
             transforms = render_transforms_ui(
@@ -379,10 +378,10 @@ def render() -> None:
 def _run_regression(
     df: Any,
     dep_var: str,
-    indep_vars: List[str],
-    model_config: Dict[str, Any],
-    transforms: Dict[str, str],
-    interaction_terms: List[Tuple[str, str]],
+    indep_vars: list[str],
+    model_config: dict[str, Any],
+    transforms: dict[str, str],
+    interaction_terms: list[tuple[str, str]],
 ) -> None:
     """运行单个回归模型并保存结果到 session state。
 
@@ -442,11 +441,11 @@ def _run_regression(
 def _run_all_models(
     df: Any,
     dep_var: str,
-    indep_vars: List[str],
-    model_config: Dict[str, Any],
-    comparison_specs: List[ModelSpec],
-    transforms: Dict[str, str],
-    interaction_terms: List[Tuple[str, str]],
+    indep_vars: list[str],
+    model_config: dict[str, Any],
+    comparison_specs: list[ModelSpec],
+    transforms: dict[str, str],
+    interaction_terms: list[tuple[str, str]],
 ) -> None:
     """运行主模型及所有对比模型，结果存入 session_state。
 
@@ -459,7 +458,7 @@ def _run_all_models(
         try:
             cov_type = model_config.get("se_type", "nonrobust")
             fitter = ModelFitter()
-            results: List[ModelResult] = []
+            results: list[ModelResult] = []
 
             # 主模型
             main_spec = ModelSpec(

@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Phase 2 unit tests for enhanced results functionality.
 
 Tests cover:
@@ -13,14 +12,13 @@ Tests cover:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from src.modeling.fitter import ModelFitter
-from src.modeling.specification import ModelSpec, build_formula
+from src.modeling.specification import ModelSpec
 from src.results.statistics import anova_oneway, freq_table
 from src.results.summary_generator import (
     generate_assumption_check_text,
@@ -1121,8 +1119,9 @@ class TestLatexRendererLogit:
 
     def test_render_single_logit_odds_ratios(self, logit_result: ModelResult) -> None:
         """Logit render_single should show exponentiated coefficients."""
-        from src.export.latex_renderer import LatexRenderer
         import math
+
+        from src.export.latex_renderer import LatexRenderer
 
         latex = LatexRenderer.render_single(logit_result)
         # OR for Intercept: exp(-0.5) ≈ 0.6065

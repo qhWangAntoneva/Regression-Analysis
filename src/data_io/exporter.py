@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 数据/结果导出模块
 
@@ -13,9 +12,8 @@ import json
 import os
 import zipfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-import numpy as np
 import pandas as pd
 
 try:
@@ -54,7 +52,7 @@ class DataExporter:
         try:
             data.to_csv(filepath, index=False, encoding="utf-8-sig")
         except OSError as e:
-            raise IOError(f"CSV 文件写入失败: {e}") from e
+            raise OSError(f"CSV 文件写入失败: {e}") from e
 
         return os.path.abspath(filepath)
 
@@ -90,7 +88,7 @@ class DataExporter:
                 "导出 Excel 需要安装 openpyxl: pip install openpyxl"
             ) from e
         except OSError as e:
-            raise IOError(f"Excel 文件写入失败: {e}") from e
+            raise OSError(f"Excel 文件写入失败: {e}") from e
 
         return os.path.abspath(filepath)
 
@@ -162,7 +160,7 @@ class DataExporter:
                 f"图表导出失败。可能需要安装 kaleido: pip install kaleido\n原始错误: {e}"
             ) from e
         except OSError as e:
-            raise IOError(f"图表文件写入失败: {e}") from e
+            raise OSError(f"图表文件写入失败: {e}") from e
 
         return os.path.abspath(filepath)
 
@@ -343,7 +341,7 @@ class DataExporter:
                 zf.writestr("results_summary.txt", summary.encode("utf-8"))
 
         except OSError as e:
-            raise IOError(f"复现包写入失败: {e}") from e
+            raise OSError(f"复现包写入失败: {e}") from e
 
         return str(zip_path.resolve())
 
@@ -380,45 +378,45 @@ class DataExporter:
             "import statsmodels.api as sm",
             "import statsmodels.formula.api as smf",
             "",
-            f'# Load data (place this script next to data.csv)',
-            f'df = pd.read_csv("data.csv", encoding="utf-8-sig")',
+            '# Load data (place this script next to data.csv)',
+            'df = pd.read_csv("data.csv", encoding="utf-8-sig")',
             "",
-            f'# Fit model',
+            '# Fit model',
             f'result = smf.{smf_method}(',
             f'    formula=r"""{formula}""",',
-            f"    data=df,",
-            f").fit(cov_type='nonrobust')",
+            "    data=df,",
+            ").fit(cov_type='nonrobust')",
             "",
-            f'# Print detailed summary',
-            f'print(result.summary())',
+            '# Print detailed summary',
+            'print(result.summary())',
             "",
         ]
 
         if is_mle:
             lines += [
-                f'# Key statistics (logit)',
-                f'print(f"Pseudo R-squared: {{result.prsquared:.4f}}")',
-                f'print(f"Log-Likelihood: {{result.llf:.4f}}")',
-                f'print(f"LLR p-value: {{result.llr_pvalue:.4f}}")',
-                f'print(f"N: {{int(result.nobs)}}")',
-                f'print(f"AIC: {{result.aic:.2f}}")',
-                f'print(f"BIC: {{result.bic:.2f}}")',
+                '# Key statistics (logit)',
+                'print(f"Pseudo R-squared: {result.prsquared:.4f}")',
+                'print(f"Log-Likelihood: {result.llf:.4f}")',
+                'print(f"LLR p-value: {result.llr_pvalue:.4f}")',
+                'print(f"N: {int(result.nobs)}")',
+                'print(f"AIC: {result.aic:.2f}")',
+                'print(f"BIC: {result.bic:.2f}")',
                 "",
-                f'# Odds ratios',
-                f'import numpy as np',
-                f'print("\\nOdds Ratios:")',
-                f'for name, coef in zip(result.params.index, result.params.values):',
-                f'    print(f"  {{name}}: {{np.exp(coef):.4f}}")',
+                '# Odds ratios',
+                'import numpy as np',
+                'print("\\nOdds Ratios:")',
+                'for name, coef in zip(result.params.index, result.params.values):',
+                '    print(f"  {name}: {np.exp(coef):.4f}")',
                 "",
             ]
         else:
             lines += [
-                f'# Key statistics (OLS)',
-                f'print(f"R-squared: {{result.rsquared:.4f}}")',
-                f'print(f"Adj. R-squared: {{result.rsquared_adj:.4f}}")',
-                f'print(f"N: {{int(result.nobs)}}")',
-                f'print(f"AIC: {{result.aic:.2f}}")',
-                f'print(f"BIC: {{result.bic:.2f}}")',
+                '# Key statistics (OLS)',
+                'print(f"R-squared: {result.rsquared:.4f}")',
+                'print(f"Adj. R-squared: {result.rsquared_adj:.4f}")',
+                'print(f"N: {int(result.nobs)}")',
+                'print(f"AIC: {result.aic:.2f}")',
+                'print(f"BIC: {result.bic:.2f}")',
                 "",
             ]
 

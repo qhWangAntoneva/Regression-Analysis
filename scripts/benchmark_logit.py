@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Logit regression cross-validation benchmark for Regression Analysis v1.1.
 
 Validates statsmodels Logit engine output against:
@@ -16,7 +15,7 @@ import sys
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
@@ -55,14 +54,14 @@ except ImportError:
 class EngineResult:
     """Coefficient-level results from one fitting engine."""
 
-    param_names: List[str]
+    param_names: list[str]
     coefs: np.ndarray
     ses: np.ndarray
     ci_lower: np.ndarray
     ci_upper: np.ndarray
     converged: bool
-    pseudo_r2: Optional[float]
-    llf: Optional[float]
+    pseudo_r2: float | None
+    llf: float | None
 
 
 @dataclass
@@ -76,17 +75,17 @@ class DatasetResult:
 
     logit_result: EngineResult
     glm_result: EngineResult
-    sklearn_result: Optional[EngineResult]
+    sklearn_result: EngineResult | None
 
     max_coef_diff_glm: float
     max_or_diff_glm: float
-    pseudo_r2_diff: Optional[float]
+    pseudo_r2_diff: float | None
     ci_overlap_fraction: float  # fraction of coefs with overlapping CIs
 
-    sklearn_sign_match: Optional[bool]
-    sklearn_max_coef_ratio: Optional[float]  # max |sklearn_coef / logit_coef|
+    sklearn_sign_match: bool | None
+    sklearn_max_coef_ratio: float | None  # max |sklearn_coef / logit_coef|
 
-    dgp_max_coef_diff: Optional[float]
+    dgp_max_coef_diff: float | None
 
     @property
     def passed(self) -> bool:
@@ -108,7 +107,7 @@ class DatasetResult:
 # ---------------------------------------------------------------------------
 
 
-def _generate_dgp(seed: int = SEED) -> Tuple[pd.DataFrame, ModelSpec, Dict[str, float]]:
+def _generate_dgp(seed: int = SEED) -> tuple[pd.DataFrame, ModelSpec, dict[str, float]]:
     """Dataset 1: Synthetic DGP with known true coefficients.
 
     y* = 0.5 + 1.0*x1 - 0.8*x2 + Logistic(0, 1) noise.
@@ -125,7 +124,7 @@ def _generate_dgp(seed: int = SEED) -> Tuple[pd.DataFrame, ModelSpec, Dict[str, 
     return df, spec, true_coefs
 
 
-def _generate_clinical(seed: int = SEED) -> Tuple[pd.DataFrame, ModelSpec, Dict[str, float]]:
+def _generate_clinical(seed: int = SEED) -> tuple[pd.DataFrame, ModelSpec, dict[str, float]]:
     """Dataset 2: Simulated clinical trial.
 
     y* = -2.0 + 0.8*treatment + 0.05*age + 0.3*sex + Logistic(0, 1) noise.
@@ -143,7 +142,7 @@ def _generate_clinical(seed: int = SEED) -> Tuple[pd.DataFrame, ModelSpec, Dict[
     return df, spec, true_coefs
 
 
-def _generate_mtcars(seed: int = SEED) -> Tuple[pd.DataFrame, ModelSpec, Dict[str, float]]:
+def _generate_mtcars(seed: int = SEED) -> tuple[pd.DataFrame, ModelSpec, dict[str, float]]:
     """Dataset 3: mtcars-style binary outcome from continuous predictors.
 
     Binary outcome (high_mpg) ~ mpg + disp + hp + wt.
@@ -163,13 +162,13 @@ def _generate_mtcars(seed: int = SEED) -> Tuple[pd.DataFrame, ModelSpec, Dict[st
     return df, spec, true_coefs
 
 
-def _generate_large(seed: int = SEED) -> Tuple[pd.DataFrame, ModelSpec, Dict[str, float]]:
+def _generate_large(seed: int = SEED) -> tuple[pd.DataFrame, ModelSpec, dict[str, float]]:
     """Dataset 4: Large sample stress test (5000 rows, 10 predictors)."""
     rng = np.random.default_rng(seed)
     n = 5000
     n_pred = 10
-    data: Dict[str, np.ndarray] = {}
-    coef_vals: Dict[str, float] = {"Intercept": 0.2}
+    data: dict[str, np.ndarray] = {}
+    coef_vals: dict[str, float] = {"Intercept": 0.2}
     y_star = np.full(n, 0.2, dtype=float)
     true_coeffs = [0.3, -0.5, 0.2, -0.1, 0.4, -0.3, 0.15, -0.25, 0.35, -0.15]
     for i in range(1, n_pred + 1):
@@ -187,7 +186,7 @@ def _generate_large(seed: int = SEED) -> Tuple[pd.DataFrame, ModelSpec, Dict[str
     return df, spec, coef_vals
 
 
-def _generate_sparse(seed: int = SEED) -> Tuple[pd.DataFrame, ModelSpec, Dict[str, float]]:
+def _generate_sparse(seed: int = SEED) -> tuple[pd.DataFrame, ModelSpec, dict[str, float]]:
     """Dataset 5: Sparse / unbalanced edge case (~20% positive class)."""
     rng = np.random.default_rng(seed)
     n = 300
@@ -308,7 +307,7 @@ def _fit_glm_binomial(
     )
 
 
-def _fit_sklearn(X: pd.DataFrame, y: pd.Series) -> Optional[EngineResult]:
+def _fit_sklearn(X: pd.DataFrame, y: pd.Series) -> EngineResult | None:
     """Fit using sklearn LogisticRegression (no effective regularization)."""
     if not _HAS_SKLEARN:
         return None
@@ -385,7 +384,7 @@ def _fit_sklearn(X: pd.DataFrame, y: pd.Series) -> Optional[EngineResult]:
 
 def _align_coefs(
     ref: EngineResult, other: EngineResult
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """Align coefficients from two engines to the same variable order.
 
     Both engines should use the same design matrix column order, so direct
@@ -399,7 +398,7 @@ def _align_coefs(
     return ref.coefs, other_coefs
 
 
-def _check_ci_overlap(ref: EngineResult, other: EngineResult) -> Tuple[int, int]:
+def _check_ci_overlap(ref: EngineResult, other: EngineResult) -> tuple[int, int]:
     """Count how many coefficients have overlapping CIs between two engines."""
     overlap = 0
     total = 0
@@ -423,7 +422,7 @@ def _check_ci_overlap(ref: EngineResult, other: EngineResult) -> Tuple[int, int]
 
 
 def _check_dgp_agreement(
-    result: EngineResult, true_coefs: Dict[str, float]
+    result: EngineResult, true_coefs: dict[str, float]
 ) -> float:
     """Max absolute difference between estimated and true DGP coefficients."""
     max_diff = 0.0
@@ -447,7 +446,7 @@ def benchmark_dataset(
     name: str,
     data: pd.DataFrame,
     spec: ModelSpec,
-    true_coefs: Optional[Dict[str, float]] = None,
+    true_coefs: dict[str, float] | None = None,
 ) -> DatasetResult:
     """Run all three engines on one dataset and compute agreement metrics."""
     # Build a common design matrix for fair comparison
@@ -488,8 +487,8 @@ def benchmark_dataset(
     ci_overlap_fraction = ci_overlap / ci_total if ci_total > 0 else 1.0
 
     # --- Logit-vs-sklearn comparisons ---
-    sklearn_sign_match: Optional[bool] = None
-    sklearn_max_coef_ratio: Optional[float] = None
+    sklearn_sign_match: bool | None = None
+    sklearn_max_coef_ratio: float | None = None
 
     if sklearn_res is not None and sklearn_res.converged:
         coefs_l, coefs_s = _align_coefs(logit_res, sklearn_res)
@@ -510,7 +509,7 @@ def benchmark_dataset(
                 sklearn_max_coef_ratio = float("nan")
 
     # --- DGP check (Dataset 1) ---
-    dgp_max_coef_diff: Optional[float] = None
+    dgp_max_coef_diff: float | None = None
     if true_coefs is not None:
         dgp_max_coef_diff = _check_dgp_agreement(logit_res, true_coefs)
 
@@ -537,7 +536,7 @@ def benchmark_dataset(
 # ---------------------------------------------------------------------------
 
 
-def format_table(results: List[DatasetResult]) -> str:
+def format_table(results: list[DatasetResult]) -> str:
     """Format benchmark results as a human-readable table."""
     sep = "=" * 126
     header_parts = [
@@ -642,7 +641,7 @@ def main() -> None:
     if not _HAS_SKLEARN:
         print("sklearn not available, skipping sklearn comparison.\n")
 
-    datasets: List[Tuple[str, pd.DataFrame, ModelSpec, Optional[Dict[str, float]]]] = []
+    datasets: list[tuple[str, pd.DataFrame, ModelSpec, dict[str, float] | None]] = []
 
     print("Generating datasets...", end=" ", flush=True)
     try:
@@ -678,7 +677,7 @@ def main() -> None:
     print(f"done ({len(datasets)} datasets).\n", flush=True)
 
     # Benchmark each dataset
-    all_results: List[DatasetResult] = []
+    all_results: list[DatasetResult] = []
     for name, df, spec, true_coefs in datasets:
         print(f"Benchmarking {name}...", end=" ", flush=True)
         try:

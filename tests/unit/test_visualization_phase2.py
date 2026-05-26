@@ -1,4 +1,3 @@
-# encoding: utf-8
 """单元测试：Phase 2 可视化模块。
 
 测试新增的诊断图和系数图功能。
@@ -137,10 +136,9 @@ class TestScaleLocationPlot:
         if not PLOTLY_AVAILABLE:
             pytest.skip("plotly 未安装")
 
-        from src.visualization.residual import scale_location_plot
-
         # 创建只有 3 个观测的模型结果
         from src.results.table import ModelResult
+        from src.visualization.residual import scale_location_plot
 
         minimal = ModelResult(
             model_type="OLS",

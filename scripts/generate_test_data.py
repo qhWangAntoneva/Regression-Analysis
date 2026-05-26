@@ -1,4 +1,3 @@
-# encoding: utf-8
 """CLI script to generate a synthetic regression test dataset."""
 
 from __future__ import annotations

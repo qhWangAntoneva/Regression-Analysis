@@ -1,4 +1,3 @@
-# encoding: utf-8
 """单元测试：分析复现包导出。
 
 测试 DataExporter.export_reproducibility_package() 方法。
@@ -10,15 +9,14 @@ import json
 import os
 import tempfile
 import zipfile
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 from src.data_io.exporter import DataExporter
 from src.results.table import CoefficientRow, ModelResult
-
 
 # =========================================================================
 # Helper: minimal model spec

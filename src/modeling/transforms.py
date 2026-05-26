@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Variable transformation engine.
 
 Provides the ``VariableTransformer`` class that applies common data
@@ -14,8 +13,6 @@ human-readable form for UI display.
 """
 
 from __future__ import annotations
-
-from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -49,7 +46,7 @@ class VariableTransformer:
         # transformer.display_name("price_log") -> "log(price)"
     """
 
-    SUPPORTED_TRANSFORMS: Tuple[str, ...] = (
+    SUPPORTED_TRANSFORMS: tuple[str, ...] = (
         "log",
         "standardize",
         "center",
@@ -96,8 +93,8 @@ class VariableTransformer:
     def transform(
         self,
         data: pd.DataFrame,
-        transforms: Dict[str, str],
-    ) -> Tuple[pd.DataFrame, Dict[str, Dict[str, str]]]:
+        transforms: dict[str, str],
+    ) -> tuple[pd.DataFrame, dict[str, dict[str, str]]]:
         """Apply transformations to the specified variables.
 
         Args:
@@ -138,7 +135,7 @@ class VariableTransformer:
                 )
 
         df = data.copy()
-        metadata: Dict[str, Dict[str, str]] = {}
+        metadata: dict[str, dict[str, str]] = {}
 
         for var in transforms:
             ttype = transforms[var]
@@ -194,8 +191,8 @@ class VariableTransformer:
     @staticmethod
     def add_interactions(
         data: pd.DataFrame,
-        interaction_pairs: List[Tuple[str, str]],
-    ) -> Tuple[pd.DataFrame, List[str]]:
+        interaction_pairs: list[tuple[str, str]],
+    ) -> tuple[pd.DataFrame, list[str]]:
         """Add interaction (product) columns for the given variable pairs.
 
         .. note::
@@ -217,7 +214,7 @@ class VariableTransformer:
             ValueError: If any variable in a pair is not a column.
         """
         df = data.copy()
-        col_names: List[str] = []
+        col_names: list[str] = []
 
         for v1, v2 in interaction_pairs:
             if v1 not in df.columns:

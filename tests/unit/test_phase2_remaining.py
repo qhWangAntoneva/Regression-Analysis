@@ -1,12 +1,7 @@
-# encoding: utf-8
 """Tests for Phase 2 remaining features: file size limits, type override, data filtering."""
 
-import numpy as np
-import pandas as pd
-import pytest
 
-from src.preprocessing.type_detector import VariableInfo, VariableTypeDetector
-
+from src.preprocessing.type_detector import VariableTypeDetector
 
 # =========================================================================
 # File size limit constants

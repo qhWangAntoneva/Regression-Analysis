@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 数据上传与预览页面
 
@@ -7,11 +6,9 @@ Streamlit 页面：文件上传、数据解析、预览和摘要。
 
 from __future__ import annotations
 
-import io
 import os
 import tempfile
 from pathlib import Path
-from typing import Tuple
 
 try:
     import streamlit as st
@@ -23,13 +20,13 @@ except ImportError:
 # ---------------------------------------------------------------------------
 PARSER_AVAILABLE = False
 try:
-    from src.data_io.parser import FileParser, get_data_summary, preview_dataframe
-    from src.preprocessing.type_detector import VariableTypeDetector
     from app.components.data_table import (
         render_data_preview,
         render_type_override_ui,
         render_variable_info,
     )
+    from src.data_io.parser import FileParser, get_data_summary, preview_dataframe
+    from src.preprocessing.type_detector import VariableTypeDetector
 
     PARSER_AVAILABLE = True
 except ImportError:
@@ -106,7 +103,7 @@ def render() -> None:
             st.info("请上传一个 CSV 或 Excel 文件，或点击「加载示例数据集」开始探索。")
 
 
-def _check_file_size(file_size_bytes: int) -> Tuple[bool, str]:
+def _check_file_size(file_size_bytes: int) -> tuple[bool, str]:
     """Check file size against warning/blocking thresholds.
 
     Args:

@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Unit tests for the Probit regression engine.
 
 Tests cover:
@@ -24,12 +23,10 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.modeling.engines.statsmodels_probit_engine import extract_probit, run_probit
 from src.modeling.fitter import ModelFitter
 from src.modeling.specification import ModelSpec
-from src.results.table import ModelResult, _significance_stars
 
 
 # =========================================================================

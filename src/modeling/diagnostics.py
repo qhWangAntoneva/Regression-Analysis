@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Model diagnostic functions.
 
 Provides tools for assessing regression model assumptions and quality:
@@ -8,13 +7,9 @@ influence statistics (Cook's distance, leverage), and a summary dictionary.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Union
-
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
 from scipy import stats
-from statsmodels.regression.linear_model import OLS
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tools.tools import add_constant
 
@@ -61,9 +56,9 @@ def vif(
     if X.shape[1] < 2:
         raise ValueError("Need at least 2 columns (including constant) for VIF.")
 
-    vif_values: List[float] = []
-    variable_names: List[str] = []
-    diagnosis: List[str] = []
+    vif_values: list[float] = []
+    variable_names: list[str] = []
+    diagnosis: list[str] = []
 
     for i in range(X.shape[1]):
         col_name = str(X.columns[i])
@@ -92,7 +87,7 @@ def vif(
     return result_df
 
 
-def residual_tests(residuals: np.ndarray) -> Dict[str, Union[float, str]]:
+def residual_tests(residuals: np.ndarray) -> dict[str, float | str]:
     """Run standard residual diagnostic tests.
 
     Tests performed:
@@ -107,7 +102,7 @@ def residual_tests(residuals: np.ndarray) -> Dict[str, Union[float, str]]:
             - ``'shapiro_stat'``, ``'shapiro_pvalue'``, ``'shapiro_normal'``
             - ``'dw_stat'``, ``'dw_autocorrelation'``
     """
-    results: Dict[str, Union[float, str]] = {}
+    results: dict[str, float | str] = {}
 
     # Shapiro-Wilk normality test
     if len(residuals) >= 3:
@@ -179,7 +174,7 @@ def influence_stats(
     return df
 
 
-def model_summary(result: ModelResult) -> Dict[str, object]:
+def model_summary(result: ModelResult) -> dict[str, object]:
     """Return a comprehensive dictionary of model statistics.
 
     This is useful for programmatic access to all model quality metrics
@@ -192,7 +187,7 @@ def model_summary(result: ModelResult) -> Dict[str, object]:
         A dictionary containing all available model-level statistics
         and coefficient details.
     """
-    summary: Dict[str, object] = {
+    summary: dict[str, object] = {
         "model_type": result.model_type,
         "method": result.method,
         "dep_var": result.dep_var,

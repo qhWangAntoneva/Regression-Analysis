@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 变量选择器 UI 组件
 
@@ -8,8 +7,6 @@
 """
 
 from __future__ import annotations
-
-from typing import Any, Dict, List, Optional, Tuple
 
 from src.preprocessing.type_detector import VariableInfo
 

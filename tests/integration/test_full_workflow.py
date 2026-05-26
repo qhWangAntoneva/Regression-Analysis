@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Integration tests for the full OLS regression workflow.
 
 Tests the complete pipeline from data loading through model fitting

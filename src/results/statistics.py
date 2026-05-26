@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Descriptive statistics and correlation matrix functions.
 
 Provides utilities for generating summary statistics and correlation
@@ -7,7 +6,7 @@ matrices from pandas DataFrames.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -16,7 +15,7 @@ from scipy import stats as scipy_stats
 
 def descriptive_stats(
     data: pd.DataFrame,
-    variables: List[str],
+    variables: list[str],
 ) -> pd.DataFrame:
     """Compute descriptive statistics for selected variables.
 
@@ -101,7 +100,7 @@ def descriptive_stats(
 
 def correlation_matrix(
     data: pd.DataFrame,
-    variables: List[str],
+    variables: list[str],
     method: str = "pearson",
 ) -> pd.DataFrame:
     """Compute the correlation matrix for selected variables.
@@ -134,7 +133,7 @@ def correlation_matrix(
         raise ValueError(f"Variables not found in data: {missing_vars}")
 
     # Select only numeric columns
-    numeric_vars: List[str] = []
+    numeric_vars: list[str] = []
     for v in variables:
         if pd.api.types.is_numeric_dtype(data[v]):
             numeric_vars.append(v)
@@ -166,7 +165,7 @@ def anova_oneway(
     data: pd.DataFrame,
     dv: str,
     group: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Perform a one-way ANOVA (analysis of variance) for group comparisons.
 
     Tests whether the means of ``dv`` differ significantly across groups
@@ -206,9 +205,9 @@ def anova_oneway(
         )
 
     groups = valid.groupby(group)[dv]
-    group_means: Dict[str, float] = {}
-    group_counts: Dict[str, int] = {}
-    group_stds: Dict[str, float] = {}
+    group_means: dict[str, float] = {}
+    group_counts: dict[str, int] = {}
+    group_stds: dict[str, float] = {}
 
     for name, grp in groups:
         key = str(name)
@@ -281,7 +280,7 @@ def freq_table(
     pcts = (freq / n_total * 100).round(2)
     cum_pcts = np.cumsum(pcts)
 
-    rows: List[Dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for i, label in enumerate(labels):
         rows.append(
             {

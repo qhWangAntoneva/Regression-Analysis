@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Generate pre-computed gallery data as JSON for the web app.
 
 This script runs the 5 DGP functions from src/utils/gallery.py,

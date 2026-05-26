@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 残差图模块
 
@@ -34,15 +33,14 @@ except ImportError:
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
 
-    from src.results.table import ModelResult
+    pass
 
 
 def residual_vs_fitted_plot(
     result: Any,
     data: pd.DataFrame,
-) -> "Figure":
+) -> Figure:
     """残差 vs 拟合值散点图。
 
     Args:
@@ -127,7 +125,7 @@ def residual_vs_fitted_plot(
     return fig
 
 
-def qq_plot(residuals: np.ndarray) -> "Figure":
+def qq_plot(residuals: np.ndarray) -> Figure:
     """正态 Q-Q 图。
 
     Args:

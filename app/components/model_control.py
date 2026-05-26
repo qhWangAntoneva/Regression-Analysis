@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Model control panel UI components.
 
 Provides Streamlit widgets for configuring model parameters and
@@ -7,7 +6,7 @@ managing multi-model comparisons.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     import streamlit as st
@@ -17,7 +16,7 @@ except ImportError:
 from src.modeling.specification import ModelSpec
 
 
-def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
+def render_model_controls(key_prefix: str = "model") -> dict[str, Any]:
     """Render a model parameter configuration panel inside an expander.
 
     Wraps advanced model options in ``st.expander``.
@@ -125,10 +124,10 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
         )
 
     # --- MixedLM: group variable selector ---
-    group_var: Optional[str] = None
-    entity_var: Optional[str] = None
-    time_var: Optional[str] = None
-    panel_model: Optional[str] = None
+    group_var: str | None = None
+    entity_var: str | None = None
+    time_var: str | None = None
+    panel_model: str | None = None
 
     if is_mixedlm:
         available_vars = st.session_state.get("available_vars", [])
@@ -185,7 +184,7 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
         "HC2": "HC2",
         "HC3": "HC3",
     }
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "model_type": _mt_map.get(model_type_label, "ols"),
         "add_constant": add_constant,
         "ci_level": ci_level,
@@ -206,7 +205,7 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
 
 def render_model_comparison_controls(
     key_prefix: str = "compare",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Render multi-model comparison controls.
 
     Allows the user to add comparison models with different independent

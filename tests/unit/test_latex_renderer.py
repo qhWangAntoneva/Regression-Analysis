@@ -1,4 +1,3 @@
-# encoding: utf-8
 """单元测试：LaTeX 表格渲染器。
 
 测试 LatexRenderer 的单模型表和多模型对比表生成功能。
@@ -10,7 +9,6 @@ import pytest
 
 from src.export.latex_renderer import LatexRenderer
 from src.results.table import CoefficientRow, ModelResult
-
 
 # =========================================================================
 # Fixtures

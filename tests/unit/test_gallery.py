@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Tests for the Sample Gallery module (src.utils.gallery).
 
 Covers gallery item creation, DGP reproducibility, scenario imperfections,
@@ -8,7 +7,6 @@ JSON serialization roundtrip, and gallery index/metadata API.
 from __future__ import annotations
 
 import hashlib
-from typing import List
 
 import numpy as np
 import pandas as pd
@@ -21,7 +19,10 @@ import pytest
 _json_to_model_result = None
 _model_result_to_json = None
 try:
-    from src.utils.gallery import _json_to_model_result, _model_result_to_json  # type: ignore[import]
+    from src.utils.gallery import (  # type: ignore[import]
+        _json_to_model_result,
+        _model_result_to_json,
+    )
 except ImportError:
     pass
 
@@ -31,7 +32,6 @@ from src.utils.gallery import (
     get_gallery_item,
     get_gallery_items,
 )
-
 
 # =========================================================================
 # Helpers
@@ -44,7 +44,7 @@ def _df_hash(df: pd.DataFrame) -> str:
     return hashlib.sha256(buf).hexdigest()
 
 
-def _compute_vif(data: pd.DataFrame, target_col: str, other_cols: List[str]) -> float:
+def _compute_vif(data: pd.DataFrame, target_col: str, other_cols: list[str]) -> float:
     """Compute VIF for *target_col* by regressing it on *other_cols* via OLS.
 
     VIF = 1 / (1 - R^2) of the auxiliary regression.

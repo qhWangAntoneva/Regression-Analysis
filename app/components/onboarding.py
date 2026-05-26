@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 用户引导组件
 
@@ -6,8 +5,6 @@
 """
 
 from __future__ import annotations
-
-from typing import Any
 
 try:
     import streamlit as st

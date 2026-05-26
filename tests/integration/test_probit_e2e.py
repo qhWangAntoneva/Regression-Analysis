@@ -1,4 +1,3 @@
-# encoding: utf-8
 """End-to-end integration tests for Probit regression.
 
 Covers the complete pipeline from data preparation through model fitting
@@ -14,15 +13,13 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.modeling.engines.statsmodels_probit_engine import extract_probit, run_probit
 from src.modeling.fitter import ModelFitter
-from src.modeling.specification import ModelSpec, build_variable_labels
+from src.modeling.specification import ModelSpec
 from src.results.table import CoefficientRow, ModelResult, compare_models
 
 # ---------------------------------------------------------------------------

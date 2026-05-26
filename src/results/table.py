@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Unified result data structures for regression model output.
 
 Provides dataclasses for storing coefficient-level and model-level results,
@@ -7,8 +6,9 @@ along with utilities for formatting and converting to pandas DataFrames.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -110,66 +110,66 @@ class ModelResult:
     """
 
     model_type: str
-    coefficients: List[CoefficientRow]
+    coefficients: list[CoefficientRow]
     n_obs: int
     n_params: int
     df_resid: int
-    r_squared: Optional[float] = None
-    adj_r_squared: Optional[float] = None
-    f_statistic: Optional[Tuple[float, float]] = None
-    log_likelihood: Optional[float] = None
+    r_squared: float | None = None
+    adj_r_squared: float | None = None
+    f_statistic: tuple[float, float] | None = None
+    log_likelihood: float | None = None
     aic: float = 0.0
     bic: float = 0.0
-    rmse: Optional[float] = 0.0
+    rmse: float | None = 0.0
     dep_var: str = ""
     specification: str = ""
     method: str = "OLS"
 
     # Logit-specific fields
-    pseudo_r_squared: Optional[float] = None
+    pseudo_r_squared: float | None = None
     """McFadden's pseudo R-squared (for logit / MLE models)."""
-    llr: Optional[float] = None
+    llr: float | None = None
     """Likelihood ratio test chi-squared statistic."""
-    llr_pvalue: Optional[float] = None
+    llr_pvalue: float | None = None
     """p-value for the likelihood ratio test."""
 
     # Phase 3.1 — advanced modeling metadata
-    transforms_applied: Dict[str, str] = field(default_factory=dict)
+    transforms_applied: dict[str, str] = field(default_factory=dict)
     """Mapping of ``{original_var: transform_type}`` for display."""
-    interaction_terms_applied: List[Tuple[str, str]] = field(default_factory=list)
+    interaction_terms_applied: list[tuple[str, str]] = field(default_factory=list)
     """List of ``(var1, var2)`` pairs whose interaction was included."""
     se_type: str = "nonrobust"
     """Standard error type used (``'nonrobust'``, ``'HC0'``, etc.)."""
 
-    variable_labels: Dict[str, str] = field(default_factory=dict)
+    variable_labels: dict[str, str] = field(default_factory=dict)
     """Mapping from raw coefficient names to human-readable display labels.
     For categorical dummies like ``C(education)[T.本科]`` the label would
     be ``education: 本科``.  Non-categorical columns map to themselves."""
 
     # MixedLM-specific fields
-    group_var: Optional[str] = None
+    group_var: str | None = None
     """Grouping variable name for MixedLM models."""
-    group_count: Optional[int] = None
+    group_count: int | None = None
     """Number of groups/clusters for MixedLM models."""
-    re_var: Optional[Dict[str, float]] = None
+    re_var: dict[str, float] | None = None
     """Random-effects variance components for MixedLM models."""
 
     # Panel-specific fields
-    entity_count: Optional[int] = None
+    entity_count: int | None = None
     """Number of entities (cross-sections) in panel data."""
-    time_count: Optional[int] = None
+    time_count: int | None = None
     """Number of time periods in panel data."""
-    panel_type: Optional[str] = None
+    panel_type: str | None = None
     """Panel estimator type ('Panel FE' or 'Panel RE')."""
-    within_r_squared: Optional[float] = None
+    within_r_squared: float | None = None
     """Within-group R-squared for panel models."""
-    between_r_squared: Optional[float] = None
+    between_r_squared: float | None = None
     """Between-group R-squared for panel models."""
-    overall_r_squared: Optional[float] = None
+    overall_r_squared: float | None = None
     """Overall R-squared for panel models."""
 
     # Count model-specific fields
-    dispersion: Optional[float] = None
+    dispersion: float | None = None
     """Dispersion parameter (scale) for NegativeBinomial models."""
 
     # ------------------------------------------------------------------
@@ -210,9 +210,9 @@ class ModelResult:
         """
         stat_col = "z值" if self.is_mle_model else "t值"
 
-        rows: List[Dict[str, object]] = []
+        rows: list[dict[str, object]] = []
         for coef_row in self.coefficients:
-            row: Dict[str, object] = {
+            row: dict[str, object] = {
                 "变量": coef_row.name,
                 "系数": round(coef_row.coef, 6),
                 "标准误": round(coef_row.se, 6),
@@ -249,7 +249,7 @@ class ModelResult:
         stat_header = "z" if is_mle else "t"
         stat_p_label = "p>|z|" if is_mle else "p>|t|"
 
-        lines: List[str] = []
+        lines: list[str] = []
         lines.append(f"{'=' * 60}")
         lines.append(f"  {self.method} Regression Results")
         lines.append(f"{'=' * 60}")
@@ -316,7 +316,7 @@ class ModelResult:
                 f"{c.t_stat:>8.4f} {c.pvalue:>8.4f} {c.significance}"
             )
         lines.append(f"{'=' * 60}")
-        lines.append(f"  Significance: *** p<0.01, ** p<0.05, * p<0.1")
+        lines.append("  Significance: *** p<0.01, ** p<0.05, * p<0.1")
         lines.append(f"{'=' * 60}")
         return "\n".join(lines)
 
@@ -324,7 +324,7 @@ class ModelResult:
     # Phase 2 enhancements
     # ------------------------------------------------------------------
 
-    def to_summary_dict(self) -> Dict[str, Any]:
+    def to_summary_dict(self) -> dict[str, Any]:
         """Return a dictionary of all model statistics for UI display.
 
         Returns:
@@ -335,7 +335,7 @@ class ModelResult:
 
             For logit models includes: pseudo_r_squared, llr, llr_pvalue.
         """
-        d: Dict[str, Any] = {
+        d: dict[str, Any] = {
             "dep_var": self.dep_var,
             "n_obs": self.n_obs,
             "n_params": self.n_params,
@@ -430,7 +430,7 @@ class ModelResult:
             f_val = self.f_statistic[0]
             f_p = self.f_statistic[1]
 
-        rows: List[Dict[str, object]] = [
+        rows: list[dict[str, object]] = [
             {
                 "来源": "回归(Explained)",
                 "SS": round(ss_explained, 6) if not np.isnan(ss_explained) else float("nan"),
@@ -538,15 +538,15 @@ def compare_models(results: Sequence[ModelResult]) -> pd.DataFrame:
         return pd.DataFrame()
 
     # Collect all variable names across all models
-    all_vars: List[str] = []
+    all_vars: list[str] = []
     for res in results:
         for c in res.coefficients:
             if c.name not in all_vars:
                 all_vars.append(c.name)
 
     # Build the comparison table
-    model_names: List[str] = []
-    model_data: Dict[str, List[Optional[str]]] = {}
+    model_names: list[str] = []
+    model_data: dict[str, list[str | None]] = {}
     for var_name in all_vars:
         model_data[var_name] = []
 
@@ -566,9 +566,9 @@ def compare_models(results: Sequence[ModelResult]) -> pd.DataFrame:
             model_data[var_name].append(cell)
 
     # Create coefficient rows
-    rows: List[Dict[str, object]] = []
+    rows: list[dict[str, object]] = []
     for var_name in all_vars:
-        row: Dict[str, object] = {"变量": var_name}
+        row: dict[str, object] = {"变量": var_name}
         for i, label in enumerate(model_names):
             row[label] = model_data[var_name][i]
         rows.append(row)
@@ -615,7 +615,7 @@ def compare_models(results: Sequence[ModelResult]) -> pd.DataFrame:
         ]
 
     for stat_label, getter in zip(stat_labels, stat_getters):
-        row: Dict[str, object] = {"变量": stat_label}
+        row: dict[str, object] = {"变量": stat_label}
         for i, label in enumerate(model_names):
             row[label] = getter(results[i])
         rows.append(row)

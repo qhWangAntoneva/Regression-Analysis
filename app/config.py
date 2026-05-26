@@ -1,9 +1,6 @@
-# encoding: utf-8
 """Streamlit page configuration and color scheme management."""
 
 from __future__ import annotations
-
-from typing import Dict
 
 import streamlit as st
 
@@ -26,7 +23,7 @@ def configure_page() -> None:
     )
 
 
-def get_color_scheme() -> Dict[str, str]:
+def get_color_scheme() -> dict[str, str]:
     """Return the active color scheme based on accessibility settings.
 
     When ``st.session_state.colorblind_mode`` is ``True``, returns a

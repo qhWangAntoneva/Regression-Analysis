@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Test the OutlierDetector: IQR, zscore, flag_outliers."""
 
 from __future__ import annotations

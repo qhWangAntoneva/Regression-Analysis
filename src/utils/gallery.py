@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Sample Gallery module for the Regression Analysis app.
 
 Provides 5 pre-computed regression analysis scenarios (datasets + OLS results)
@@ -9,8 +8,7 @@ statsmodels OLS.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -18,7 +16,6 @@ import pandas as pd
 from src.modeling.engines.statsmodels_engine import run_ols
 from src.modeling.specification import ModelSpec
 from src.results.table import CoefficientRow, ModelResult
-
 
 # ======================================================================
 # JSON Serialization helpers
@@ -131,13 +128,13 @@ class GalleryItem:
     persona: str                 # Persona name
     persona_icon: str            # single emoji / icon char
     description: str             # 1-2 sentences
-    tags: List[str]              # e.g. ["问卷数据", "多重共线性"]
+    tags: list[str]              # e.g. ["问卷数据", "多重共线性"]
     n_obs: int
     data: pd.DataFrame
     model_spec: ModelSpec
     model_result: ModelResult    # pre-computed via run_ols()
     result_json: dict            # JSON-serializable dict of model_result
-    key_features: List[str]      # What makes this scenario interesting
+    key_features: list[str]      # What makes this scenario interesting
     story: str                   # Analysis narrative (2-3 paragraphs)
     dep_var: str                 # Convenience field
 
@@ -146,7 +143,7 @@ class GalleryItem:
 # Module-level cache
 # ======================================================================
 
-_gallery_cache: Optional[List[GalleryItem]] = None
+_gallery_cache: list[GalleryItem] | None = None
 
 
 # ======================================================================
@@ -734,7 +731,7 @@ def _make_policy_effect() -> GalleryItem:
 # Module API
 # ======================================================================
 
-def get_gallery_items() -> List[GalleryItem]:
+def get_gallery_items() -> list[GalleryItem]:
     """Return the complete list of 5 pre-computed gallery items.
 
     This function is heavy -- it runs every DGP and fits 5 OLS models.
@@ -753,7 +750,7 @@ def get_gallery_items() -> List[GalleryItem]:
     return _gallery_cache
 
 
-def get_gallery_index() -> List[dict]:
+def get_gallery_index() -> list[dict]:
     """Return lightweight metadata for all gallery items.
 
     Each entry contains only display-oriented fields (no DataFrames,
@@ -777,7 +774,7 @@ def get_gallery_index() -> List[dict]:
     ]
 
 
-def get_gallery_item(item_id: str) -> Optional[GalleryItem]:
+def get_gallery_item(item_id: str) -> GalleryItem | None:
     """Look up a single gallery item by its ID.
 
     If the item is not yet cached, only the requested DGP is executed

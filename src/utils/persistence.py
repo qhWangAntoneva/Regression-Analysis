@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 会话状态持久化模块
 
@@ -9,7 +8,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -88,7 +86,7 @@ def load_session(save_path: str = DEFAULT_SAVE_PATH) -> dict[str, Any]:
         return {}
 
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             data = json.load(f)
         return data.get("state", {})
     except (json.JSONDecodeError, OSError):

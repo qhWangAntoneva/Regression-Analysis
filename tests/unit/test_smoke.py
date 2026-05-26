@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Smoke tests verifying that core modules import correctly."""
 
 import os

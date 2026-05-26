@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Statsmodels Count regression engine (Poisson and NegativeBinomial).
 
 Provides adapters that run Poisson and NegativeBinomial regression via
@@ -8,7 +7,7 @@ data structure.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -46,7 +45,7 @@ def run_count_model(
     data: pd.DataFrame,
     spec: ModelSpec,
     alpha: float = 0.05,
-) -> Tuple[Any, Dict[str, str]]:
+) -> tuple[Any, dict[str, str]]:
     """Fit a Poisson or NegativeBinomial regression model using statsmodels GLM.
 
     Args:
@@ -106,7 +105,7 @@ def extract_count_model(
     alpha: float = 0.05,
     dep_var: str = "",
     specification: str = "",
-    variable_labels: Optional[Dict[str, str]] = None,
+    variable_labels: dict[str, str] | None = None,
 ) -> ModelResult:
     """Extract count regression results into a ModelResult.
 
@@ -187,7 +186,7 @@ def extract_count_model(
         ll_null = 0.0
 
     # McFadden's pseudo R-squared
-    pseudo_r_squared: Optional[float] = None
+    pseudo_r_squared: float | None = None
     if ll_null != 0 and not np.isnan(ll_null):
         pseudo_r_squared_val = float(1.0 - ll_model / ll_null)
         # Clamp to [0, 1] to handle edge cases
@@ -195,8 +194,8 @@ def extract_count_model(
 
     # Likelihood ratio test: compute from deviance
     # LLR = null_deviance - deviance
-    llr: Optional[float] = None
-    llr_pvalue: Optional[float] = None
+    llr: float | None = None
+    llr_pvalue: float | None = None
 
     # Try the built-in llr first (unlikely to be set for GLM, but check)
     if hasattr(fitted_model, "llr"):
@@ -244,7 +243,7 @@ def extract_count_model(
     # as a needed shared-file change).  The dispersion value is extracted
     # here for forward compatibility; clients can access it directly from
     # the fitted model via ``fitted_model.scale``.
-    dispersion: Optional[float] = None
+    dispersion: float | None = None
     if model_type == "negbin":
         try:
             dispersion = float(fitted_model.scale)

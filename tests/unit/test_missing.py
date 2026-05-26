@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Test the MissingValueHandler: analyze + handle for all strategies."""
 
 from __future__ import annotations

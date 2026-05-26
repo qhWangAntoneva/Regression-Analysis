@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Unit tests for src.results.statistics module.
 
 Covers descriptive_stats() edge cases and correlation_matrix() completely.

@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 系数图模块
 
@@ -9,8 +8,6 @@
 from __future__ import annotations
 
 from typing import Any
-
-import numpy as np
 
 try:
     import plotly.graph_objects as go
@@ -25,7 +22,7 @@ except ImportError:
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.results.table import ModelResult
+    pass
 
 
 def coefficient_plot(results: list[Any], model_labels: list[str] | None = None) -> Figure:

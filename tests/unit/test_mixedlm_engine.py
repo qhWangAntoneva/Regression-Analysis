@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Unit tests for the MixedLM (multilevel) regression engine.
 
 Tests cover:
@@ -37,8 +36,6 @@ from src.modeling.engines.statsmodels_mixedlm_engine import (
     run_mixedlm,
 )
 from src.modeling.specification import ModelSpec
-from src.results.table import ModelResult
-
 
 # =========================================================================
 # Helpers

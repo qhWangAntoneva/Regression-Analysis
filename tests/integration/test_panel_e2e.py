@@ -1,4 +1,3 @@
-# encoding: utf-8
 """End-to-end integration tests for Panel data regression.
 
 Covers the complete pipeline from data preparation through panel model
@@ -9,12 +8,10 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.modeling.engines.statsmodels_panel_engine import extract_panel, run_panel
-from src.modeling.specification import ModelSpec, build_variable_labels
-from src.results.table import CoefficientRow, ModelResult, compare_models
-
+from src.modeling.specification import ModelSpec
+from src.results.table import ModelResult, compare_models
 
 # =========================================================================
 # Helpers

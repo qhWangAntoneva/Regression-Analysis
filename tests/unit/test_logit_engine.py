@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Unit tests for the Logit regression engine.
 
 Tests cover:
@@ -23,7 +22,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.modeling.engines.statsmodels_logit_engine import extract_logit, run_logit
 from src.modeling.fitter import ModelFitter

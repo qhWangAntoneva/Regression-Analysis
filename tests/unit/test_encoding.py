@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Tests for encoding detection in src/data_io/encoding.py.
 
 Covers paths beyond what test_parser.py already tests:
@@ -92,7 +91,7 @@ class TestCanDecode:
     """Tests for the internal _can_decode helper."""
 
     def test_utf8_valid(self):
-        assert _can_decode("hello".encode("utf-8"), "utf-8") is True
+        assert _can_decode(b"hello", "utf-8") is True
 
     def test_utf8_invalid(self):
         # GBK bytes are not valid UTF-8

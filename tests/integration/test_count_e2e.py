@@ -1,4 +1,3 @@
-# encoding: utf-8
 """End-to-end integration tests for count regression (Poisson and NegBin).
 
 Covers the complete pipeline from data preparation through model fitting
@@ -17,19 +16,17 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
 import pytest
-import statsmodels.api as sm
 
 from src.modeling.engines.statsmodels_count_engine import (
+    _validate_count_dv,
     extract_count_model,
     run_count_model,
-    _validate_count_dv,
 )
-from src.modeling.specification import ModelSpec, build_variable_labels
+from src.modeling.specification import ModelSpec
 from src.results.table import CoefficientRow, ModelResult, compare_models
 
 # ---------------------------------------------------------------------------

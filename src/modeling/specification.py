@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Model specification building module.
 
 Provides dataclasses and utilities for constructing model specifications,
@@ -8,9 +7,7 @@ generating patsy formulas, and building design matrices.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 import pandas as pd
 import patsy
 
@@ -32,28 +29,28 @@ class ModelSpec:
     """
 
     dep_var: str
-    indep_vars: List[str]
-    control_vars: List[str] = field(default_factory=list)
+    indep_vars: list[str]
+    control_vars: list[str] = field(default_factory=list)
     has_intercept: bool = True
-    transforms: Dict[str, str] = field(default_factory=dict)
-    interaction_terms: List[Tuple[str, str]] = field(default_factory=list)
+    transforms: dict[str, str] = field(default_factory=dict)
+    interaction_terms: list[tuple[str, str]] = field(default_factory=list)
     missing_strategy: str = "drop"
     model_type: str = "ols"
 
     # MixedLM-specific
-    group_var: Optional[str] = None
+    group_var: str | None = None
     """Grouping variable for MixedLM (multilevel) models."""
 
     # Panel-specific
-    entity_var: Optional[str] = None
+    entity_var: str | None = None
     """Entity (cross-section) identifier for panel data models."""
-    time_var: Optional[str] = None
+    time_var: str | None = None
     """Time identifier for panel data models."""
-    panel_model: Optional[str] = None
+    panel_model: str | None = None
     """Panel estimator type: ``'fixed'`` or ``'random'``."""
 
     @property
-    def all_predictors(self) -> List[str]:
+    def all_predictors(self) -> list[str]:
         """Return the combined list of all predictor variables."""
         return self.indep_vars + self.control_vars
 
@@ -105,7 +102,7 @@ def _term_name(term: patsy.Term) -> str:
 def build_formula(
     spec: ModelSpec,
     use_transformed_names: bool = False,
-    name_map: Optional[Dict[str, str]] = None,
+    name_map: dict[str, str] | None = None,
 ) -> str:
     """Generate a patsy formula string from a ModelSpec.
 
@@ -136,7 +133,7 @@ def build_formula(
 
     # Substitute with transformed names if requested
     if use_transformed_names and name_map:
-        resolved: List[str] = []
+        resolved: list[str] = []
         for p in predictors:
             if p in name_map:
                 resolved.append(name_map[p])
@@ -165,7 +162,7 @@ def build_formula(
 def build_design_matrix(
     spec: ModelSpec,
     data: pd.DataFrame,
-) -> Tuple[pd.DataFrame, pd.Series]:
+) -> tuple[pd.DataFrame, pd.Series]:
     """Build the design matrix and dependent variable vector from data.
 
     Constructs the model matrix (X) and response vector (y) using patsy.
@@ -247,8 +244,8 @@ def build_design_matrix(
 
 def build_variable_labels(
     spec: ModelSpec,
-    X_columns: List[str],
-) -> Dict[str, str]:
+    X_columns: list[str],
+) -> dict[str, str]:
     """Generate human-readable labels for design matrix columns.
 
     Parses patsy-generated column names (e.g. ``cat[T.b]``) into
@@ -268,7 +265,7 @@ def build_variable_labels(
     # interaction-only categoricals (cat[level], no "T." prefix).
     _CAT_PART = re.compile(r"^(\w+)\[T?\.?([^\]]+)\]$")
 
-    labels: Dict[str, str] = {}
+    labels: dict[str, str] = {}
     for col in X_columns:
         if col == "Intercept":
             labels[col] = "Intercept"

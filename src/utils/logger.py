@@ -1,4 +1,3 @@
-# encoding: utf-8
 """Logging configuration using loguru."""
 
 import sys

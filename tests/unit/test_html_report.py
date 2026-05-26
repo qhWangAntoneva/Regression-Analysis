@@ -1,4 +1,3 @@
-# encoding: utf-8
 """单元测试：HTML 报告生成器。
 
 测试 HtmlReportGenerator 的自包含 HTML 报告生成功能。
@@ -11,7 +10,6 @@ import pytest
 
 from src.export.html_report import HtmlReportGenerator
 from src.results.table import CoefficientRow, ModelResult
-
 
 # =========================================================================
 # Fixtures

@@ -1,4 +1,3 @@
-# encoding: utf-8
 """
 回归结果展示页面
 
@@ -7,10 +6,9 @@ Streamlit 页面：系数表、模型统计量、多模型对比、诊断图、�
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
-import pandas as pd
 
 try:
     import streamlit as st
@@ -20,8 +18,8 @@ except ImportError:
 # Lazy imports
 PLOTLY_AVAILABLE = False
 try:
-    import plotly.graph_objects as go
     import plotly.express as px
+    import plotly.graph_objects as go
 
     PLOTLY_AVAILABLE = True
 except ImportError:
@@ -30,7 +28,6 @@ except ImportError:
 
 VIS_AVAILABLE = False
 try:
-    from src.visualization.scatter import scatter_with_regression
     from src.visualization.residual import (
         cooks_distance_plot,
         diagnostic_dashboard,
@@ -38,6 +35,7 @@ try:
         residual_vs_fitted_plot,
         scale_location_plot,
     )
+    from src.visualization.scatter import scatter_with_regression
 
     VIS_AVAILABLE = True
 except ImportError:
@@ -131,7 +129,7 @@ def render() -> None:
     model_config = st.session_state.get("model_config", {})
 
     # --- Phase 2: 多模型选择 ---
-    results_list: List[Any] = st.session_state.get("model_results_list", [])
+    results_list: list[Any] = st.session_state.get("model_results_list", [])
     selected_result: Any = model_result
 
     if len(results_list) > 1:
@@ -371,7 +369,7 @@ def render() -> None:
 # =========================================================================
 
 
-def _render_model_selector(results_list: List[Any]) -> Any:
+def _render_model_selector(results_list: list[Any]) -> Any:
     """Model selection dropdown for multi-model results.
 
     Args:
