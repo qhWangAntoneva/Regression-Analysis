@@ -2646,9 +2646,6 @@ def export_excel(result_json: str) -> str:
         ws.title = "Regression Results"
 
         is_logit = result.get("model_type", "") == "logit"
-        is_probit = result.get("model_type", "") == "probit"
-        is_count = result.get("model_type", "") in ("poisson", "negbin")
-        is_mle = is_logit or is_probit or is_count  # noqa: F841
 
         # Title
         title_text = "Logit Regression Results" if is_logit else "OLS Regression Results"

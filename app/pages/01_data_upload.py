@@ -25,7 +25,7 @@ try:
         render_type_override_ui,
         render_variable_info,
     )
-    from src.data_io.parser import FileParser, get_data_summary, preview_dataframe  # noqa: F401
+    from src.data_io.parser import FileParser, get_data_summary
     from src.preprocessing.type_detector import VariableTypeDetector
 
     PARSER_AVAILABLE = True

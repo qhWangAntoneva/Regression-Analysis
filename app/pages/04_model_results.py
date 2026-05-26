@@ -68,7 +68,6 @@ SUMMARY_GEN_AVAILABLE = False
 try:
     from src.results.summary_generator import (
         generate_assumption_check_text,
-        generate_coefficient_interpretation,  # noqa: F401
         generate_summary_text,
     )
 
@@ -124,9 +123,7 @@ def render() -> None:
         return
 
     df = st.session_state.get("data")
-    variables = st.session_state.get("variables")  # noqa: F841
     model_spec = st.session_state.get("model_spec")
-    model_config = st.session_state.get("model_config", {})  # noqa: F841
 
     # --- Phase 2: 多模型选择 ---
     results_list: list[Any] = st.session_state.get("model_results_list", [])

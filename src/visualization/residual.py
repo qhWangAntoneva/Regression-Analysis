@@ -435,7 +435,6 @@ def cooks_distance_plot(
     # 分离正常点和异常点
     is_influential = cooks_d > threshold
     colors = np.where(is_influential, "red", "steelblue")
-    sizes = np.where(is_influential, 8, 4)  # noqa: F841
 
     fig.add_trace(
         go.Bar(
