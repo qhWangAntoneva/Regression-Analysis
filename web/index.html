@@ -221,6 +221,44 @@
                         </div>
                     </div>
 
+                    <div id="mixedlm-controls" class="hidden">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="opt-group-var">Grouping Variable (MixedLM)</label>
+                                <select id="opt-group-var" class="form-select form-select-sm">
+                                    <option value="">-- Select grouping variable --</option>
+                                </select>
+                                <small class="form-help" style="color:#6b7280;margin-top:0.25rem;display:block">Column defining groups/clusters (e.g., school, hospital, country).</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="panel-controls" class="hidden">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="opt-entity-var">Entity Variable (Panel)</label>
+                                <select id="opt-entity-var" class="form-select form-select-sm">
+                                    <option value="">-- Select entity variable --</option>
+                                </select>
+                                <small class="form-help" style="color:#6b7280;margin-top:0.25rem;display:block">Column identifying cross-sectional units (e.g., firm, city, country).</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="opt-time-var">Time Variable (Panel)</label>
+                                <select id="opt-time-var" class="form-select form-select-sm">
+                                    <option value="">-- Select time variable --</option>
+                                </select>
+                                <small class="form-help" style="color:#6b7280;margin-top:0.25rem;display:block">Column identifying time periods (e.g., year, quarter, month).</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="opt-panel-model">Panel Model</label>
+                                <select id="opt-panel-model" class="form-select form-select-sm">
+                                    <option value="fixed">Fixed Effects (FE)</option>
+                                    <option value="random">Random Effects (RE)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
                     <button id="btn-run-regression" class="btn btn-primary btn-lg" disabled>
                         Run Regression
                     </button>

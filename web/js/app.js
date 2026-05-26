@@ -461,6 +461,19 @@ function populateVariableSelectors() {
     // Populate interaction term dropdowns
     populateInteractionDropdowns();
 
+    // Populate MixedLM group variable and Panel entity/time selectors
+    // All columns are eligible (including categorical and ID columns)
+    const allColsOptions = columns.map(c =>
+        `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)} (${c.col_type})</option>`
+    ).join('');
+    const dropdownsToPopulate = [
+        'opt-group-var', 'opt-entity-var', 'opt-time-var',
+    ];
+    dropdownsToPopulate.forEach(id => {
+        const sel = document.getElementById(id);
+        if (sel) sel.innerHTML = '<option value="">-- Select --</option>' + allColsOptions;
+    });
+
     // Populate filter column dropdown
     populateFilterUI();
 }
@@ -486,6 +499,14 @@ function initModelForm() {
 
     runBtn.addEventListener('click', runRegression);
 
+    // MixedLM / Panel selector listeners
+    const groupVarSelect = document.getElementById('opt-group-var');
+    const entityVarSelect = document.getElementById('opt-entity-var');
+    const timeVarSelect = document.getElementById('opt-time-var');
+    if (groupVarSelect) groupVarSelect.addEventListener('change', checkRunButton);
+    if (entityVarSelect) entityVarSelect.addEventListener('change', checkRunButton);
+    if (timeVarSelect) timeVarSelect.addEventListener('change', checkRunButton);
+
     // Interaction term controls
     initInteractions();
 
@@ -501,19 +522,54 @@ function initModelForm() {
 function onModelTypeChange() {
     const modelType = document.getElementById('opt-model-type').value;
     const isMLE = ['logit', 'probit', 'poisson', 'negbin'].includes(modelType);
-    const isPanelML = ['mixedlm', 'panel'].includes(modelType);
-    const covSelect = document.getElementById('opt-cov');
+    const isMixedLM = modelType === 'mixedlm';
+    const isPanel = modelType === 'panel';
+    const isPanelML = isMixedLM || isPanel;
+
     // MLE models use MLE, no HC covariance types. Also hide for MixedLM / Panel.
+    const covSelect = document.getElementById('opt-cov');
     if (covSelect) {
         covSelect.disabled = isMLE || isPanelML;
         if (isMLE || isPanelML) covSelect.value = 'nonrobust';
     }
+
+    // Show/hide MixedLM group variable selector
+    const mixedlmControls = document.getElementById('mixedlm-controls');
+    if (mixedlmControls) {
+        mixedlmControls.classList.toggle('hidden', !isMixedLM);
+    }
+
+    // Show/hide Panel entity / time / model selectors
+    const panelControls = document.getElementById('panel-controls');
+    if (panelControls) {
+        panelControls.classList.toggle('hidden', !isPanel);
+    }
+
+    // Re-validate run button (extra required fields for mixedlm/panel)
+    checkRunButton();
 }
 
 function checkRunButton() {
     const dv = document.getElementById('dep-var-select').value;
     const checked = document.querySelectorAll('#indep-var-list input[type="checkbox"]:checked');
-    document.getElementById('btn-run-regression').disabled = !dv || checked.length === 0;
+    const modelType = document.getElementById('opt-model-type').value;
+
+    let canRun = dv && checked.length > 0;
+
+    // MixedLM: require group_var
+    if (modelType === 'mixedlm') {
+        const groupVar = document.getElementById('opt-group-var').value;
+        if (!groupVar) canRun = false;
+    }
+
+    // Panel: require entity_var and time_var
+    if (modelType === 'panel') {
+        const entityVar = document.getElementById('opt-entity-var').value;
+        const timeVar = document.getElementById('opt-time-var').value;
+        if (!entityVar || !timeVar) canRun = false;
+    }
+
+    document.getElementById('btn-run-regression').disabled = !canRun;
 }
 
 function getSelectedIVs() {
@@ -740,6 +796,7 @@ async function runRegression() {
     try {
         const pyodide = STATE.pyodide;
         const dataJson = JSON.stringify({ data: STATE.data, columns: STATE.columns });
+        const modelType = document.getElementById('opt-model-type').value;
         const spec = {
             dep_var: document.getElementById('dep-var-select').value,
             indep_vars: getSelectedIVs(),
@@ -747,8 +804,20 @@ async function runRegression() {
             alpha: parseFloat(document.getElementById('opt-alpha').value),
             cov_type: document.getElementById('opt-cov').value,
             missing_strategy: document.getElementById('opt-missing').value,
-            model_type: document.getElementById('opt-model-type').value,
+            model_type: modelType,
         };
+
+        // MixedLM: pass group variable
+        if (modelType === 'mixedlm') {
+            spec.group_var = document.getElementById('opt-group-var').value;
+        }
+
+        // Panel: pass entity, time, and panel model type
+        if (modelType === 'panel') {
+            spec.entity_var = document.getElementById('opt-entity-var').value;
+            spec.time_var = document.getElementById('opt-time-var').value;
+            spec.panel_model = document.getElementById('opt-panel-model').value;
+        }
 
         // Collect transforms and interactions from UI
         const transforms = getTransforms();
