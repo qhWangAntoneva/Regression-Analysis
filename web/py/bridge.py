@@ -452,11 +452,11 @@ def run_regression(data_json: str, spec_json: str) -> str:
     except Exception as e:
         return json.dumps({"success": False, "error": f"Design matrix error: {e}"})
 
-    # Fit model (OLS or Logit)
+    # Fit model — dispatch to appropriate statsmodels class
     try:
         import statsmodels.api as sm
-        if model_type in ("logit", "probit", "poisson", "negbin"):
-            # Logit requires binary response (0/1)
+
+        if model_type == "logit":
             y_unique = np.unique(y)
             if len(y_unique) != 2:
                 return json.dumps({
@@ -464,22 +464,110 @@ def run_regression(data_json: str, spec_json: str) -> str:
                     "error": f"Logit requires a binary dependent variable. "
                              f"Found {len(y_unique)} unique values in '{dep_var}': {list(y_unique)[:10]}."
                 })
-            logit_model = sm.Logit(y, X)
-            fitted = logit_model.fit(disp=False)
-        else:
-            ols_model = sm.OLS(y, X)
-            if cov_type and cov_type != "nonrobust":
-                fitted = ols_model.fit(cov_type=cov_type)
+            fitted = sm.Logit(y, X).fit(disp=False)
+
+        elif model_type == "probit":
+            y_unique = np.unique(y)
+            if len(y_unique) != 2:
+                return json.dumps({
+                    "success": False,
+                    "error": f"Probit requires a binary dependent variable. "
+                             f"Found {len(y_unique)} unique values in '{dep_var}': {list(y_unique)[:10]}."
+                })
+            fitted = sm.Probit(y, X).fit(disp=False)
+
+        elif model_type == "poisson":
+            fitted = sm.GLM(y, X, family=sm.families.Poisson()).fit()
+
+        elif model_type == "negbin":
+            fitted = sm.GLM(y, X, family=sm.families.NegativeBinomial()).fit()
+
+        elif model_type == "mixedlm":
+            # Need groups from spec
+            group_col = spec_dict.get("group_var", "")
+            if not group_col or group_col not in df.columns:
+                return json.dumps({
+                    "success": False,
+                    "error": "MixedLM requires a valid 'group_var' in the spec."
+                })
+            # Align groups with rows that survived cleaning
+            groups = df.loc[df_clean.index, group_col].values
+            fitted = sm.MixedLM(y, X, groups=groups).fit(reml=True, disp=False)
+
+        elif model_type == "panel":
+            try:
+                from linearmodels.panel import PanelOLS, RandomEffects
+            except ImportError:
+                return json.dumps({
+                    "success": False,
+                    "error": "Panel models require linearmodels package. "
+                             "Not available in this Pyodide environment."
+                })
+            entity_col = spec_dict.get("entity_var", "")
+            time_col = spec_dict.get("time_var", "")
+            if not entity_col or entity_col not in df.columns:
+                return json.dumps({
+                    "success": False,
+                    "error": "Panel model requires a valid 'entity_var' in the spec."
+                })
+            if not time_col or time_col not in df.columns:
+                return json.dumps({
+                    "success": False,
+                    "error": "Panel model requires a valid 'time_var' in the spec."
+                })
+            # Build panel index
+            valid_rows = df_clean.index
+            entity_vals = df.loc[valid_rows, entity_col].values
+            time_vals = df.loc[valid_rows, time_col].values
+            panel_idx = pd.MultiIndex.from_arrays(
+                [entity_vals, time_vals], names=[entity_col, time_col]
+            )
+            X_panel = pd.DataFrame(X, index=panel_idx)
+            y_panel = pd.Series(y, index=panel_idx)
+            panel_model_type = spec_dict.get("panel_model", "fixed")
+            if panel_model_type == "random":
+                model = RandomEffects(y_panel, X_panel)
             else:
-                fitted = ols_model.fit()
+                model = PanelOLS(y_panel, X_panel, entity_effects=True)
+            cov_type_spec = cov_type if cov_type and cov_type != "nonrobust" else None
+            if cov_type == "clustered" or cov_type_spec is None:
+                fitted = model.fit(cov_type="clustered", cluster_entity=True)
+            else:
+                fitted = model.fit(cov_type=cov_type_spec)
+
+        else:
+            # OLS (default)
+            if cov_type and cov_type != "nonrobust":
+                fitted = sm.OLS(y, X).fit(cov_type=cov_type)
+            else:
+                fitted = sm.OLS(y, X).fit()
+
     except Exception as e:
         return json.dumps({"success": False, "error": f"Fit error: {e}"})
 
-    # Extract results
-    if model_type in ("logit", "probit", "poisson", "negbin"):
+    # Extract results — dispatch to appropriate extractor
+    if model_type == "logit":
         return _extract_logit_result(fitted, dep_var, indep_vars,
                                      coef_names, has_intercept, alpha,
                                      transform_map, df_clean)
+    elif model_type == "probit":
+        return _extract_probit_result(fitted, dep_var, indep_vars,
+                                      coef_names, has_intercept, alpha,
+                                      transform_map, df_clean)
+    elif model_type in ("poisson", "negbin"):
+        return _extract_count_result(fitted, dep_var, indep_vars,
+                                     coef_names, has_intercept, alpha,
+                                     transform_map, df_clean)
+    elif model_type == "mixedlm":
+        return _extract_mixedlm_result(fitted, dep_var, indep_vars,
+                                       coef_names, has_intercept, alpha,
+                                       transform_map, df_clean,
+                                       spec_dict)
+    elif model_type == "panel":
+        return _extract_panel_result(fitted, dep_var, indep_vars,
+                                     coef_names, has_intercept, alpha,
+                                     transform_map, df_clean,
+                                     spec_dict)
     else:
         return _extract_model_result(fitted, df_clean, dep_var, indep_vars,
                                      coef_names, has_intercept, alpha, cov_type,
@@ -760,6 +848,471 @@ def _extract_logit_result(
         "residuals": residuals,
         "fitted_values": fitted_values,
         "y_actual": y_actual,
+        "indep_vars": indep_vars,
+        "variable_labels": variable_labels,
+    }
+
+    return json.dumps(result)
+
+
+def _extract_probit_result(
+    fitted,
+    dep_var: str,
+    indep_vars: List[str],
+    coef_names: List[str],
+    has_intercept: bool,
+    alpha: float,
+    transform_map: Dict[str, List[str]],
+    df_clean: pd.DataFrame,
+) -> str:
+    """Extract probit regression results into JSON (no odds ratios)."""
+    variable_labels = _build_variable_labels_for_web(coef_names, transform_map)
+
+    params = np.asarray(fitted.params)
+    bse = np.asarray(fitted.bse)
+    zvalues = np.asarray(fitted.tvalues)
+    pvalues = np.asarray(fitted.pvalues)
+    conf_int = np.asarray(fitted.conf_int(alpha=alpha))
+
+    coefficients = []
+    for i, name in enumerate(coef_names):
+        pv = float(pvalues[i])
+        coefficients.append({
+            "name": name,
+            "coef": float(params[i]) if not np.isnan(params[i]) else None,
+            "se": float(bse[i]) if not np.isnan(bse[i]) else None,
+            "z_stat": float(zvalues[i]) if not np.isnan(zvalues[i]) else None,
+            "pvalue": pv if not np.isnan(pv) else None,
+            "ci_lower": float(conf_int[i, 0]) if not np.isnan(conf_int[i, 0]) else None,
+            "ci_upper": float(conf_int[i, 1]) if not np.isnan(conf_int[i, 1]) else None,
+            "significance": _significance_stars(pv),
+        })
+
+    n_obs = int(fitted.nobs)
+    n_params = int(fitted.df_model) + (1 if has_intercept else 0)
+    df_resid = int(fitted.df_resid)
+
+    ll_model = float(fitted.llf) if hasattr(fitted, "llf") and fitted.llf is not None else 0.0
+    ll_null = float(fitted.llnull) if hasattr(fitted, "llnull") else 0.0
+    pseudo_r_squared = float(1.0 - ll_model / ll_null) if ll_null != 0 else None
+
+    llr = float(fitted.llr) if hasattr(fitted, "llr") else None
+    llr_pvalue = float(fitted.llr_pvalue) if hasattr(fitted, "llr_pvalue") else None
+
+    log_likelihood = ll_model
+    aic = float(fitted.aic) if hasattr(fitted, "aic") else 0.0
+    bic = float(fitted.bic) if hasattr(fitted, "bic") else 0.0
+
+    residuals = fitted.resid_dev.tolist() if hasattr(fitted, "resid_dev") else []
+    fitted_values = fitted.fittedvalues.tolist() if hasattr(fitted, "fittedvalues") else []
+    y_actual = fitted.model.endog.tolist() if hasattr(fitted, "model") else []
+
+    preds_str = " + ".join(indep_vars)
+    spec_str = f"{dep_var} ~ {preds_str}"
+    if not has_intercept:
+        spec_str += " - 1"
+
+    result = {
+        "success": True,
+        "model_type": "probit",
+        "coefficients": coefficients,
+        "n_obs": n_obs,
+        "n_params": n_params,
+        "df_resid": df_resid,
+        "r_squared": None,
+        "adj_r_squared": None,
+        "pseudo_r_squared": pseudo_r_squared,
+        "llr": llr,
+        "llr_pvalue": llr_pvalue,
+        "log_likelihood": log_likelihood,
+        "aic": aic,
+        "bic": bic,
+        "rmse": None,
+        "dep_var": dep_var,
+        "specification": spec_str,
+        "method": "Probit",
+        "se_type": "MLE",
+        "residuals": residuals,
+        "fitted_values": fitted_values,
+        "y_actual": y_actual,
+        "indep_vars": indep_vars,
+        "variable_labels": variable_labels,
+    }
+
+    return json.dumps(result)
+
+
+def _extract_count_result(
+    fitted,
+    dep_var: str,
+    indep_vars: List[str],
+    coef_names: List[str],
+    has_intercept: bool,
+    alpha: float,
+    transform_map: Dict[str, List[str]],
+    df_clean: pd.DataFrame,
+) -> str:
+    """Extract Poisson/NegBin regression results into JSON (with IRR)."""
+    variable_labels = _build_variable_labels_for_web(coef_names, transform_map)
+
+    # Detect model subtype from GLM family
+    family_name = getattr(fitted.family, "family", "")
+    if "poisson" in family_name.lower():
+        model_subtype = "poisson"
+        method = "Poisson"
+    else:
+        model_subtype = "negbin"
+        method = "NegativeBinomial"
+
+    params = np.asarray(fitted.params)
+    bse = np.asarray(fitted.bse)
+    zvalues = np.asarray(fitted.tvalues)
+    pvalues = np.asarray(fitted.pvalues)
+    conf_int = np.asarray(fitted.conf_int(alpha=alpha))
+
+    coefficients = []
+    for i, name in enumerate(coef_names):
+        pv = float(pvalues[i])
+        coef_val = float(params[i]) if not np.isnan(params[i]) else None
+        coefficients.append({
+            "name": name,
+            "coef": coef_val,
+            "se": float(bse[i]) if not np.isnan(bse[i]) else None,
+            "z_stat": float(zvalues[i]) if not np.isnan(zvalues[i]) else None,
+            "pvalue": pv if not np.isnan(pv) else None,
+            "ci_lower": float(conf_int[i, 0]) if not np.isnan(conf_int[i, 0]) else None,
+            "ci_upper": float(conf_int[i, 1]) if not np.isnan(conf_int[i, 1]) else None,
+            "irr": float(np.exp(coef_val)) if coef_val is not None else None,
+            "significance": _significance_stars(pv),
+        })
+
+    n_obs = int(fitted.nobs)
+    n_params = int(fitted.df_model) + (1 if has_intercept else 0)
+    df_resid = int(fitted.df_resid)
+
+    ll_model = float(fitted.llf) if hasattr(fitted, "llf") and fitted.llf is not None else 0.0
+    try:
+        ll_null = float(fitted.llnull)
+    except (AttributeError, Exception):
+        ll_null = 0.0
+    pseudo_r_squared = float(1.0 - ll_model / ll_null) if ll_null != 0 else None
+
+    # LLR from deviance
+    llr = None
+    llr_pvalue = None
+    try:
+        deviance = float(fitted.deviance)
+        null_deviance = float(fitted.null_deviance) if hasattr(fitted, "null_deviance") else deviance
+        if null_deviance > deviance:
+            llr = float(null_deviance - deviance)
+            df_llr = int(fitted.df_model)
+            if llr > 0 and df_llr > 0:
+                from scipy import stats as scipy_stats
+                llr_pvalue = float(1.0 - scipy_stats.chi2.cdf(llr, df_llr))
+    except Exception:
+        pass
+
+    log_likelihood = ll_model
+    aic = float(fitted.aic) if hasattr(fitted, "aic") else 0.0
+    # BIC: prefer llf-based
+    bic = 0.0
+    if hasattr(fitted, "bic_llf"):
+        bic = float(fitted.bic_llf)
+    elif hasattr(fitted, "bic"):
+        bic = float(fitted.bic)
+
+    # Dispersion for NegBin
+    dispersion = None
+    if model_subtype == "negbin":
+        try:
+            dispersion = float(fitted.scale)
+        except Exception:
+            pass
+
+    residuals = fitted.resid_response.tolist() if hasattr(fitted, "resid_response") else []
+    fitted_values = fitted.fittedvalues.tolist() if hasattr(fitted, "fittedvalues") else []
+
+    preds_str = " + ".join(indep_vars)
+    spec_str = f"{dep_var} ~ {preds_str}"
+    if not has_intercept:
+        spec_str += " - 1"
+
+    result = {
+        "success": True,
+        "model_type": model_subtype,
+        "coefficients": coefficients,
+        "n_obs": n_obs,
+        "n_params": n_params,
+        "df_resid": df_resid,
+        "r_squared": None,
+        "adj_r_squared": None,
+        "pseudo_r_squared": pseudo_r_squared,
+        "llr": llr,
+        "llr_pvalue": llr_pvalue,
+        "log_likelihood": log_likelihood,
+        "aic": aic,
+        "bic": bic,
+        "rmse": None,
+        "dep_var": dep_var,
+        "specification": spec_str,
+        "method": method,
+        "se_type": "MLE",
+        "dispersion": dispersion,
+        "residuals": residuals,
+        "fitted_values": fitted_values,
+        "indep_vars": indep_vars,
+        "variable_labels": variable_labels,
+    }
+
+    return json.dumps(result)
+
+
+def _extract_mixedlm_result(
+    fitted,
+    dep_var: str,
+    indep_vars: List[str],
+    coef_names: List[str],
+    has_intercept: bool,
+    alpha: float,
+    transform_map: Dict[str, List[str]],
+    df_clean: pd.DataFrame,
+    spec_dict: dict,
+) -> str:
+    """Extract MixedLM regression results into JSON."""
+    variable_labels = _build_variable_labels_for_web(coef_names, transform_map)
+
+    fe_names = fitted.fe_params.index
+    params = fitted.fe_params
+    bse = fitted.bse_fe
+    tvalues = fitted.tvalues.loc[fe_names] if hasattr(fitted.tvalues, "loc") else fitted.tvalues
+    pvalues = fitted.pvalues.loc[fe_names] if hasattr(fitted.pvalues, "loc") else fitted.pvalues
+    conf_int = fitted.conf_int(alpha=alpha)
+
+    coefficients = []
+    for name in fe_names:
+        pv = float(pvalues[name])
+        conf_row = conf_int.loc[name] if hasattr(conf_int, "loc") else conf_int
+        ci_low_val = float(conf_row[0])
+        ci_high_val = float(conf_row[1])
+        coefficients.append({
+            "name": str(name),
+            "coef": float(params[name]),
+            "se": float(bse[name]),
+            "t_stat": float(tvalues[name]),
+            "pvalue": pv if not np.isnan(pv) else None,
+            "ci_lower": ci_low_val if not np.isnan(ci_low_val) else None,
+            "ci_upper": ci_high_val if not np.isnan(ci_high_val) else None,
+            "significance": _significance_stars(pv),
+        })
+
+    n_obs = int(fitted.nobs)
+    n_params = fitted.k_fe
+    df_resid = int(fitted.df_resid)
+
+    # R-squared from residuals
+    y_endog = fitted.model.endog
+    ss_resid = float(np.sum(fitted.resid ** 2))
+    ss_total = float(np.sum((y_endog - y_endog.mean()) ** 2))
+    r_squared = 1.0 - ss_resid / ss_total if ss_total > 0 else None
+    adj_r_squared = (1.0 - (1.0 - r_squared) * (n_obs - 1) / df_resid) if r_squared is not None and df_resid > 0 else None
+
+    log_likelihood = float(fitted.llf) if fitted.llf is not None and not np.isnan(fitted.llf) else None
+
+    aic = 0.0
+    bic = 0.0
+    if hasattr(fitted, "aic") and not np.isnan(fitted.aic):
+        aic = float(fitted.aic)
+    if hasattr(fitted, "bic") and not np.isnan(fitted.bic):
+        bic = float(fitted.bic)
+
+    rmse = float(np.sqrt(ss_resid / df_resid)) if df_resid > 0 else None
+
+    # Random effects variance components
+    re_var = {}
+    if fitted.cov_re is not None and fitted.cov_re.size > 0:
+        for i, name in enumerate(fitted.cov_re.index):
+            re_var[str(name)] = float(fitted.cov_re.iloc[i, i])
+
+    residuals = fitted.resid.tolist() if hasattr(fitted, "resid") else []
+    fitted_values = fitted.fittedvalues.tolist() if hasattr(fitted, "fittedvalues") else []
+
+    group_col = spec_dict.get("group_var", "unknown")
+    group_count = 0
+    if hasattr(fitted, "random_effects"):
+        group_count = len(fitted.random_effects)
+
+    preds_str = " + ".join(indep_vars)
+    spec_str = f"{dep_var} ~ {preds_str}"
+    if not has_intercept:
+        spec_str += " - 1"
+    spec_str += f"  [groups: {group_col} ({group_count})]"
+
+    result = {
+        "success": True,
+        "model_type": "mixedlm",
+        "coefficients": coefficients,
+        "n_obs": n_obs,
+        "n_params": n_params,
+        "df_resid": df_resid,
+        "r_squared": r_squared,
+        "adj_r_squared": adj_r_squared,
+        "pseudo_r_squared": None,
+        "llr": None,
+        "llr_pvalue": None,
+        "log_likelihood": log_likelihood,
+        "aic": aic,
+        "bic": bic,
+        "rmse": rmse,
+        "dep_var": dep_var,
+        "specification": spec_str,
+        "method": "MixedLM (REML)",
+        "se_type": "MixedLM",
+        "group_var": group_col,
+        "group_count": group_count,
+        "re_var": re_var,
+        "residuals": residuals,
+        "fitted_values": fitted_values,
+        "indep_vars": indep_vars,
+        "variable_labels": variable_labels,
+    }
+
+    return json.dumps(result)
+
+
+def _extract_panel_result(
+    fitted,
+    dep_var: str,
+    indep_vars: List[str],
+    coef_names: List[str],
+    has_intercept: bool,
+    alpha: float,
+    transform_map: Dict[str, List[str]],
+    df_clean: pd.DataFrame,
+    spec_dict: dict,
+) -> str:
+    """Extract panel regression results into JSON."""
+    variable_labels = _build_variable_labels_for_web(coef_names, transform_map)
+
+    is_fe = hasattr(fitted, "included_effects")
+    panel_method = "Panel FE" if is_fe else "Panel RE"
+
+    params = fitted.params
+    std_errors = fitted.std_errors
+    t_stat_vals = fitted.tstats
+    p_vals = fitted.pvalues
+
+    # CI
+    try:
+        conf_int = fitted.conf_int(alpha=alpha)
+    except TypeError:
+        conf_int = fitted.conf_int()
+    ci_lower_col = "lower"
+    ci_upper_col = "upper"
+
+    coefficients = []
+    for var_name in params.index:
+        pv = float(p_vals[var_name])
+        coefficients.append({
+            "name": str(var_name),
+            "coef": float(params[var_name]),
+            "se": float(std_errors[var_name]),
+            "t_stat": float(t_stat_vals[var_name]),
+            "pvalue": pv if not np.isnan(pv) else None,
+            "ci_lower": float(conf_int.loc[var_name, ci_lower_col]),
+            "ci_upper": float(conf_int.loc[var_name, ci_upper_col]),
+            "significance": _significance_stars(pv),
+        })
+
+    n_obs = int(fitted.nobs)
+    n_params = int(fitted.df_model)
+    df_resid = int(fitted.df_resid)
+
+    # R-squared variants
+    within_r2 = float(fitted.rsquared_within) if hasattr(fitted, "rsquared_within") else None
+    between_r2 = float(fitted.rsquared_between) if hasattr(fitted, "rsquared_between") else None
+    overall_r2 = float(fitted.rsquared_overall) if hasattr(fitted, "rsquared_overall") else None
+    r_squared = within_r2 if within_r2 is not None else overall_r2
+
+    # F-statistic
+    f_stat = None
+    if hasattr(fitted, "f_statistic") and fitted.f_statistic is not None:
+        try:
+            fs = fitted.f_statistic
+            f_stat = [float(fs.stat), float(fs.pval)]
+        except Exception:
+            pass
+
+    log_likelihood = None
+    try:
+        if hasattr(fitted, "loglik") and fitted.loglik is not None:
+            log_likelihood = float(fitted.loglik)
+    except Exception:
+        pass
+
+    aic = float(fitted.aic) if hasattr(fitted, "aic") else 0.0
+    bic = float(fitted.bic) if hasattr(fitted, "bic") else 0.0
+
+    rmse = None
+    if hasattr(fitted, "resid_ss") and df_resid > 0:
+        rmse = float(np.sqrt(fitted.resid_ss / df_resid))
+
+    # Entity / time counts
+    n_entities = 0
+    n_periods = 0
+    try:
+        n_entities = int(float(fitted.entity_info["total"]))
+    except Exception:
+        pass
+    try:
+        n_periods = int(float(fitted.time_info["total"]))
+    except Exception:
+        pass
+
+    residuals = []
+    fitted_values = []
+    try:
+        residuals = fitted.resids.values.flatten().tolist() if hasattr(fitted, "resids") else []
+    except Exception:
+        pass
+    try:
+        fitted_values = fitted.fitted_values.values.flatten().tolist() if hasattr(fitted, "fitted_values") else []
+    except Exception:
+        pass
+
+    preds_str = " + ".join(indep_vars)
+    spec_str = f"{dep_var} ~ {preds_str}"
+    if not has_intercept:
+        spec_str += " - 1"
+    spec_str += f"  [{panel_method}]"
+
+    result = {
+        "success": True,
+        "model_type": "panel",
+        "coefficients": coefficients,
+        "n_obs": n_obs,
+        "n_params": n_params,
+        "df_resid": df_resid,
+        "r_squared": r_squared,
+        "adj_r_squared": None,
+        "pseudo_r_squared": None,
+        "llr": None,
+        "llr_pvalue": None,
+        "log_likelihood": log_likelihood,
+        "aic": aic,
+        "bic": bic,
+        "rmse": rmse,
+        "dep_var": dep_var,
+        "specification": spec_str,
+        "method": panel_method,
+        "se_type": "clustered",
+        "within_r_squared": within_r2,
+        "between_r_squared": between_r2,
+        "overall_r_squared": overall_r2,
+        "entity_count": n_entities,
+        "time_count": n_periods,
+        "panel_type": panel_method,
+        "residuals": residuals,
+        "fitted_values": fitted_values,
         "indep_vars": indep_vars,
         "variable_labels": variable_labels,
     }
