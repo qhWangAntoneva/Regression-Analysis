@@ -506,6 +506,9 @@ def _fallback_model_statistics(result: Any) -> None:
         return
 
     is_mle = getattr(result, "is_mle_model", False)
+    is_panel = getattr(result, "model_type", "") == "panel"
+    is_mixedlm = getattr(result, "model_type", "") == "mixedlm"
+    is_negbin = getattr(result, "model_type", "") == "negbin"
 
     # Row 1: Model fit metrics (differs by model type)
     col1, col2, col3, col4 = st.columns(4)
@@ -513,6 +516,9 @@ def _fallback_model_statistics(result: Any) -> None:
         if is_mle:
             pr2 = getattr(result, "pseudo_r_squared", None)
             st.metric("伪 R² (McFadden)", f"{pr2:.4f}" if pr2 is not None else "N/A")
+        elif is_panel:
+            wr2 = getattr(result, "within_r_squared", None)
+            st.metric("Within R²", f"{wr2:.4f}" if wr2 is not None else "N/A")
         else:
             r2 = getattr(result, "r_squared", None)
             st.metric("R²", f"{r2:.4f}" if r2 is not None else "N/A")
@@ -520,6 +526,15 @@ def _fallback_model_statistics(result: Any) -> None:
         if is_mle:
             llr_val = getattr(result, "llr", None)
             st.metric("似然比检验 (LR χ²)", f"{llr_val:.4f}" if llr_val is not None else "N/A")
+        elif is_panel:
+            br2 = getattr(result, "between_r_squared", None)
+            st.metric("Between R²", f"{br2:.4f}" if br2 is not None else "N/A")
+        elif is_mixedlm:
+            gc = getattr(result, "group_count", None)
+            st.metric("Groups", gc if gc else "N/A")
+        elif is_negbin:
+            disp = getattr(result, "dispersion", None)
+            st.metric("Dispersion", f"{disp:.4f}" if disp is not None else "N/A")
         else:
             adj = getattr(result, "adj_r_squared", None)
             st.metric("Adj. R²", f"{adj:.4f}" if adj is not None else "N/A")
@@ -527,6 +542,16 @@ def _fallback_model_statistics(result: Any) -> None:
         if is_mle:
             llr_p = getattr(result, "llr_pvalue", None)
             st.metric("LR p值", f"{llr_p:.6f}" if llr_p is not None else "N/A")
+        elif is_panel:
+            or2 = getattr(result, "overall_r_squared", None)
+            st.metric("Overall R²", f"{or2:.4f}" if or2 is not None else "N/A")
+        elif is_mixedlm:
+            re_var = getattr(result, "re_var", None)
+            if re_var:
+                re_str = ", ".join(f"{k}={v:.4f}" for k, v in re_var.items())
+                st.metric("RE Var", re_str)
+            else:
+                st.metric("RE Var", "N/A")
         else:
             f_val = None
             f_stat = getattr(result, "f_statistic", None)
@@ -534,8 +559,16 @@ def _fallback_model_statistics(result: Any) -> None:
                 f_val = f_stat[0]
             st.metric("F 统计量", f"{f_val:.4f}" if f_val is not None else "N/A")
     with col4:
-        n = getattr(result, "n_obs", None)
-        st.metric("N", n if n else "N/A")
+        if is_panel:
+            ec = getattr(result, "entity_count", None)
+            tc = getattr(result, "time_count", None)
+            st.metric("Entities x Time", f"{ec} x {tc}" if ec and tc else "N/A")
+        elif is_mixedlm:
+            n = getattr(result, "n_obs", None)
+            st.metric("N", n if n else "N/A")
+        else:
+            n = getattr(result, "n_obs", None)
+            st.metric("N", n if n else "N/A")
 
     # Row 2: Information criteria and LL (same for both model types)
     col1, col2, col3, col4 = st.columns(4)
@@ -549,7 +582,13 @@ def _fallback_model_statistics(result: Any) -> None:
         ll = getattr(result, "log_likelihood", None)
         st.metric("Log-Likelihood", f"{ll:.4f}" if ll is not None else "N/A")
     with col4:
-        if not is_mle:
+        if is_panel:
+            pt = getattr(result, "panel_type", None)
+            st.metric("Estimator", pt if pt else "Panel")
+        elif is_mixedlm:
+            rmse = getattr(result, "rmse", None)
+            st.metric("RMSE", f"{rmse:.4f}" if rmse else "N/A")
+        elif not is_mle:
             rmse = getattr(result, "rmse", None)
             st.metric("RMSE", f"{rmse:.4f}" if rmse else "N/A")
         else:
@@ -575,7 +614,9 @@ def _fallback_coefficient_table(result: Any) -> None:
         return
 
     is_mle = getattr(result, "is_mle_model", False)
-    is_binary = getattr(result, "is_binary_choice", False)
+    model_type = getattr(result, "model_type", "")
+    is_logit = model_type == "logit"
+    is_count = getattr(result, "is_count_model", False)
     stat_label = "z 值" if is_mle else "t 值"
 
     table_data = []
@@ -610,11 +651,16 @@ def _fallback_coefficient_table(result: Any) -> None:
                 else "-"
             ),
         }
-        # Add OR column for binary choice models
-        if is_binary and est is not None:
+        # Only logit (not probit) gets odds ratio — probit is on probit scale
+        if is_logit and est is not None:
             import math
             or_val = math.exp(est)
             row["OR (几率比)"] = f"{or_val:.4f}"
+        # Count models get Incidence Rate Ratio
+        if is_count and est is not None:
+            import math
+            irr_val = math.exp(est)
+            row["IRR (exp(B))"] = f"{irr_val:.4f}"
         table_data.append(row)
 
     if table_data:

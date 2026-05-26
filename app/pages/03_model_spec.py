@@ -468,6 +468,10 @@ def _run_all_models(
                 interaction_terms=interaction_terms,
                 missing_strategy=model_config.get("missing_handling", "drop"),
                 model_type=model_config.get("model_type", "ols"),
+                group_var=model_config.get("group_var"),
+                entity_var=model_config.get("entity_var"),
+                time_var=model_config.get("time_var"),
+                panel_model=model_config.get("panel_model"),
             )
             main_result = fitter.fit(
                 main_spec, df, cov_type=cov_type,
