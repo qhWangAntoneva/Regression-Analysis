@@ -56,57 +56,132 @@ document.addEventListener('DOMContentLoaded', () => {
 // Pyodide Loading
 // =========================================================================
 
-async function initPyodide() {
-    const progressContainer = document.getElementById('pyodide-progress-container');
-    const statusEl = document.getElementById('pyodide-status');
+// Ordered CDN URLs for Pyodide v0.27.5 fallback
+const PYODIDE_CDN_URLS = [
+    'https://cdn.jsdelivr.net/pyodide/v0.27.5/full/',
+    'https://unpkg.com/pyodide@0.27.5/full/',
+    'https://registry.npmmirror.com/pyodide/0.27.5/files/full/',
+];
 
-    // Helper to update progress bar and text
+const PYODIDE_PACKAGES = ['numpy', 'pandas', 'statsmodels', 'scipy', 'openpyxl'];
+
+/**
+ * Dynamically load a script and return a Promise that resolves on load.
+ */
+function loadScript(url) {
+    return new Promise(function (resolve, reject) {
+        var script = document.createElement('script');
+        script.src = url;
+        script.onload = resolve;
+        script.onerror = function () {
+            reject(new Error('Failed to load script: ' + url));
+        };
+        document.head.appendChild(script);
+    });
+}
+
+async function initPyodide() {
+    var progressContainer = document.getElementById('pyodide-progress-container');
+    var statusEl = document.getElementById('pyodide-status');
+
     function updatePyodideProgress(percent, statusText) {
-        const fill = document.getElementById('pyodide-progress-fill');
-        const text = document.getElementById('pyodide-progress-text');
+        var fill = document.getElementById('pyodide-progress-fill');
+        var text = document.getElementById('pyodide-progress-text');
         if (fill) fill.style.width = percent + '%';
         if (text) text.textContent = statusText;
     }
 
-    try {
-        // Stage 1: Downloading Pyodide core (0-40%)
-        updatePyodideProgress(5, 'Downloading Pyodide core...');
+    var lastError = null;
 
-        const pyodide = await loadPyodide({
-            indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.5/full/',
-        });
+    for (var cdnIdx = 0; cdnIdx < PYODIDE_CDN_URLS.length; cdnIdx++) {
+        var cdnUrl = PYODIDE_CDN_URLS[cdnIdx];
 
-        updatePyodideProgress(40, 'Pyodide core loaded. Installing packages...');
+        for (var attempt = 0; attempt < 3; attempt++) {
+            var label = 'CDN ' + (cdnIdx + 1) + '/' + PYODIDE_CDN_URLS.length + ' attempt ' + (attempt + 1) + '/3';
 
-        // Stage 2: Installing packages (40-70%)
-        await pyodide.loadPackage(['numpy', 'pandas', 'statsmodels', 'scipy', 'openpyxl']);
+            try {
+                // --- Step 1: Show progress ---
+                updatePyodideProgress(5, 'Downloading Pyodide core (' + label + ')...');
 
-        updatePyodideProgress(70, 'Packages installed. Importing modules...');
+                // --- Step 2: Clean up previous loadPyodide ---
+                delete window.loadPyodide;
 
-        // Stage 3: Loading bridge module (70-95%)
-        const bridgeCode = await fetch('py/bridge.py').then(r => r.text());
-        pyodide.runPython(bridgeCode);
+                // --- Step 3: Load pyodide.js script dynamically ---
+                await loadScript(cdnUrl + 'pyodide.js');
 
-        updatePyodideProgress(95, 'Bridge loaded. Finalizing...');
+                // --- Step 4: Ensure loadPyodide is defined ---
+                if (typeof window.loadPyodide !== 'function') {
+                    await new Promise(function (r) { return setTimeout(r, 50); });
+                }
+                if (typeof window.loadPyodide !== 'function') {
+                    throw new Error('loadPyodide not defined from ' + cdnUrl);
+                }
 
-        // Stage 4: Ready (95-100%)
-        STATE.pyodide = pyodide;
-        STATE.pyodideReady = true;
+                updatePyodideProgress(10, 'Initializing Pyodide runtime...');
 
-        updatePyodideProgress(100, 'Ready');
-        progressContainer.classList.add('ready');
-        statusEl.classList.remove('hidden');
+                // --- Step 5: Initialize Pyodide from same CDN ---
+                var pyodide = await window.loadPyodide({
+                    indexURL: cdnUrl,
+                });
 
-        console.log('[Pyodide] Ready with numpy, pandas, statsmodels, scipy, openpyxl');
-    } catch (err) {
-        console.error('[Pyodide] Failed to initialize:', err);
-        updatePyodideProgress(0, 'Error loading Pyodide');
-        statusEl.textContent = 'Pyodide: Error';
-        statusEl.className = 'status-badge error';
-        statusEl.classList.remove('hidden');
-        progressContainer.classList.add('hidden');
-        showError('data-error', 'Failed to load Python runtime (Pyodide). Please check your internet connection and reload the page.');
+                updatePyodideProgress(40, 'Pyodide core loaded. Installing packages...');
+
+                // --- Step 6: Install packages ---
+                await pyodide.loadPackage(PYODIDE_PACKAGES);
+
+                updatePyodideProgress(70, 'Packages installed. Importing modules...');
+
+                // --- Step 7: Load bridge module ---
+                var bridgeResp = await fetch('py/bridge.py');
+                if (!bridgeResp.ok) throw new Error('Failed to fetch bridge.py');
+                var bridgeCode = await bridgeResp.text();
+                pyodide.runPython(bridgeCode);
+
+                updatePyodideProgress(95, 'Bridge loaded. Finalizing...');
+
+                // --- Step 8: Store state and mark ready ---
+                STATE.pyodide = pyodide;
+                STATE.pyodideReady = true;
+
+                updatePyodideProgress(100, 'Ready');
+                progressContainer.classList.add('ready');
+                statusEl.classList.remove('hidden');
+
+                console.log('[Pyodide] Ready from', cdnUrl);
+                return;  // SUCCESS
+
+            } catch (err) {
+                lastError = err;
+                console.error('[Pyodide] ' + label + ' failed:', err.message);
+
+                // Clean up failed script elements
+                var failedScripts = document.querySelectorAll('script[src*="pyodide"]');
+                for (var i = 0; i < failedScripts.length; i++) {
+                    failedScripts[i].remove();
+                }
+
+                if (attempt < 2) {
+                    // Exponential backoff: 1s, 3s
+                    var delay = (attempt + 1) * (attempt + 1) * 1000;
+                    updatePyodideProgress(3, 'Retrying in ' + (delay / 1000) + 's (' + label + ')...');
+                    await new Promise(function (r) { return setTimeout(r, delay); });
+                }
+            }
+        }
     }
+
+    // All CDNs exhausted
+    console.error('[Pyodide] All CDN attempts exhausted:', lastError);
+    updatePyodideProgress(0, 'Error loading Pyodide');
+    statusEl.textContent = 'Pyodide: Error';
+    statusEl.className = 'status-badge error';
+    statusEl.classList.remove('hidden');
+    progressContainer.classList.add('hidden');
+    showError('data-error',
+        'Failed to load Python runtime (Pyodide). ' +
+        'Please check your internet connection and reload the page. ' +
+        'If the problem persists, try using a different network or browser.'
+    );
 }
 
 // =========================================================================
