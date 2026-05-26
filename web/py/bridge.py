@@ -98,7 +98,9 @@ def parse_file(filename: str, content_b64: str) -> str:
     name_lower = filename.lower()
 
     try:
-        if name_lower.endswith(".csv") or name_lower.endswith(".tsv") or name_lower.endswith(".txt"):
+        if (name_lower.endswith(".csv")
+                or name_lower.endswith(".tsv")
+                or name_lower.endswith(".txt")):
             # Detect encoding and separator
             if name_lower.endswith(".tsv"):
                 sep = "\t"
@@ -315,10 +317,16 @@ def run_regression(data_json: str, spec_json: str) -> str:
             # Convert numeric columns back from object dtype (JSON round-trip)
             if _validate_columns_metadata(data_dict.get("columns"), df):
                 for col_info in data_dict["columns"]:
-                    if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
+                    if (col_info.get("col_type") == "numeric"
+                            and isinstance(col_info.get("name"), str)
+                            and col_info["name"] in df.columns):
                         df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
             else:
-                print("[bridge] columns metadata missing or invalid, using dtype inference fallback", file=sys.stderr)
+                print(
+                    "[bridge] columns metadata missing or invalid, "
+                    "using dtype inference fallback",
+                    file=sys.stderr,
+                )
                 df = _infer_numeric_columns(df)
         elif "columns" in data_dict and "rows" in data_dict:
             df = pd.DataFrame(data_dict["rows"], columns=data_dict["columns"])
@@ -362,7 +370,11 @@ def run_regression(data_json: str, spec_json: str) -> str:
         for col in indep_vars:
             if df_clean[col].isna().any():
                 try:
-                    fill_val = df_clean[col].mean() if missing_strategy == "mean" else df_clean[col].median()
+                    fill_val = (
+                        df_clean[col].mean()
+                        if missing_strategy == "mean"
+                        else df_clean[col].median()
+                    )
                     df_clean[col] = df_clean[col].fillna(fill_val)
                 except Exception:
                     # Non-numeric column: fall back to mode
@@ -384,13 +396,20 @@ def run_regression(data_json: str, spec_json: str) -> str:
                         df_clean = df_clean.dropna(subset=[dep_var])
                 else:
                     try:
-                        fill_val = df_clean[dep_var].mean() if missing_strategy == "mean" else df_clean[dep_var].median()
+                        fill_val = (
+                            df_clean[dep_var].mean()
+                            if missing_strategy == "mean"
+                            else df_clean[dep_var].median()
+                        )
                         df_clean[dep_var] = df_clean[dep_var].fillna(fill_val)
                     except Exception:
                         df_clean = df_clean.dropna(subset=[dep_var])
 
     if len(df_clean) < 2:
-        return json.dumps({"success": False, "error": "Not enough valid observations after handling missing values."})
+        return json.dumps({
+            "success": False,
+            "error": "Not enough valid observations after handling missing values.",
+        })
 
     # --- Apply variable transformations ---
     transforms = spec_dict.get("transforms", {})
@@ -398,7 +417,10 @@ def run_regression(data_json: str, spec_json: str) -> str:
     if transforms:
         for var, ttype in transforms.items():
             if var not in df_clean.columns:
-                return json.dumps({"success": False, "error": f"Transform variable '{var}' not in data."})
+                return json.dumps({
+                    "success": False,
+                    "error": f"Transform variable '{var}' not in data.",
+                })
             serie = pd.to_numeric(df_clean[var], errors="coerce")
             if ttype == "log":
                 new_col = f"{var}_log"
@@ -417,7 +439,10 @@ def run_regression(data_json: str, spec_json: str) -> str:
                 new_col = f"{var}_sq"
                 df_clean[new_col] = serie ** 2
             else:
-                return json.dumps({"success": False, "error": f"Unsupported transform type: {ttype}"})
+                return json.dumps({
+                    "success": False,
+                    "error": f"Unsupported transform type: {ttype}",
+                })
             var_name_map[var] = new_col
             # Replace var with transformed column in indep_vars list
             try:
@@ -435,9 +460,21 @@ def run_regression(data_json: str, spec_json: str) -> str:
             actual_v1 = var_name_map.get(v1, v1)
             actual_v2 = var_name_map.get(v2, v2)
             if actual_v1 not in df_clean.columns:
-                return json.dumps({"success": False, "error": f"Interaction variable '{v1}' not in data after transforms."})
+                return json.dumps({
+                    "success": False,
+                    "error": (
+                        f"Interaction variable '{v1}' "
+                        "not in data after transforms."
+                    ),
+                })
             if actual_v2 not in df_clean.columns:
-                return json.dumps({"success": False, "error": f"Interaction variable '{v2}' not in data after transforms."})
+                return json.dumps({
+                    "success": False,
+                    "error": (
+                        f"Interaction variable '{v2}' "
+                        "not in data after transforms."
+                    ),
+                })
 
     # Build design matrix (interactions handled inside, matching patsy structure)
     try:
@@ -457,8 +494,11 @@ def run_regression(data_json: str, spec_json: str) -> str:
             if len(y_unique) != 2:
                 return json.dumps({
                     "success": False,
-                    "error": f"Logit requires a binary dependent variable. "
-                             f"Found {len(y_unique)} unique values in '{dep_var}': {list(y_unique)[:10]}."
+                    "error": (
+                        f"Logit requires a binary dependent variable. "
+                        f"Found {len(y_unique)} unique values "
+                        f"in '{dep_var}': {list(y_unique)[:10]}."
+                    ),
                 })
             fitted = sm.Logit(y, X).fit(disp=False)
 
@@ -467,8 +507,11 @@ def run_regression(data_json: str, spec_json: str) -> str:
             if len(y_unique) != 2:
                 return json.dumps({
                     "success": False,
-                    "error": f"Probit requires a binary dependent variable. "
-                             f"Found {len(y_unique)} unique values in '{dep_var}': {list(y_unique)[:10]}."
+                    "error": (
+                        f"Probit requires a binary dependent variable. "
+                        f"Found {len(y_unique)} unique values "
+                        f"in '{dep_var}': {list(y_unique)[:10]}."
+                    ),
                 })
             fitted = sm.Probit(y, X).fit(disp=False)
 
@@ -802,7 +845,11 @@ def _extract_model_result(
         if not (np.isnan(fv) or np.isnan(fp)):
             f_stat = [fv, fp]
 
-    log_likelihood = float(fitted.llf) if hasattr(fitted, "llf") and fitted.llf is not None else None
+    log_likelihood = (
+        float(fitted.llf)
+        if hasattr(fitted, "llf") and fitted.llf is not None
+        else None
+    )
     aic = float(fitted.aic) if hasattr(fitted, "aic") else 0.0
     bic = float(fitted.bic) if hasattr(fitted, "bic") else 0.0
     ssr = float(fitted.ssr)
@@ -1092,7 +1139,11 @@ def _extract_count_result(
     llr_pvalue = None
     try:
         deviance = float(fitted.deviance)
-        null_deviance = float(fitted.null_deviance) if hasattr(fitted, "null_deviance") else deviance
+        null_deviance = (
+            float(fitted.null_deviance)
+            if hasattr(fitted, "null_deviance")
+            else deviance
+        )
         if null_deviance > deviance:
             llr = float(null_deviance - deviance)
             df_llr = int(fitted.df_model)
@@ -1204,9 +1255,17 @@ def _extract_mixedlm_result(
     ss_resid = float(np.sum(fitted.resid ** 2))
     ss_total = float(np.sum((y_endog - y_endog.mean()) ** 2))
     r_squared = 1.0 - ss_resid / ss_total if ss_total > 0 else None
-    adj_r_squared = (1.0 - (1.0 - r_squared) * (n_obs - 1) / df_resid) if r_squared is not None and df_resid > 0 else None
+    adj_r_squared = (
+        (1.0 - (1.0 - r_squared) * (n_obs - 1) / df_resid)
+        if r_squared is not None and df_resid > 0
+        else None
+    )
 
-    log_likelihood = float(fitted.llf) if fitted.llf is not None and not np.isnan(fitted.llf) else None
+    log_likelihood = (
+        float(fitted.llf)
+        if fitted.llf is not None and not np.isnan(fitted.llf)
+        else None
+    )
 
     aic = 0.0
     bic = 0.0
@@ -1356,7 +1415,11 @@ def _extract_panel_result(
     except Exception:
         pass
     try:
-        fitted_values = fitted.fitted_values.values.flatten().tolist() if hasattr(fitted, "fitted_values") else []
+        fitted_values = (
+            fitted.fitted_values.values.flatten().tolist()
+            if hasattr(fitted, "fitted_values")
+            else []
+        )
     except Exception:
         pass
 
@@ -1472,10 +1535,16 @@ def _compute_vif(data_json: str, result: dict) -> list[dict] | None:
             # Convert numeric columns back from object dtype (JSON round-trip)
             if _validate_columns_metadata(data_dict.get("columns"), df):
                 for col_info in data_dict["columns"]:
-                    if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
+                    if (col_info.get("col_type") == "numeric"
+                            and isinstance(col_info.get("name"), str)
+                            and col_info["name"] in df.columns):
                         df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
             else:
-                print("[bridge] columns metadata missing or invalid, using dtype inference fallback", file=sys.stderr)
+                print(
+                    "[bridge] columns metadata missing or invalid, "
+                    "using dtype inference fallback",
+                    file=sys.stderr,
+                )
                 df = _infer_numeric_columns(df)
         else:
             return None
@@ -1735,7 +1804,12 @@ def generate_coefficient_chart(result_json: str) -> str:
 
     layout = {
         "title": {"text": "Coefficient Estimates (Dot-Whisker)", "x": 0.5},
-        "xaxis": {"title": "Coefficient Estimate", "zeroline": True, "zerolinecolor": "gray", "zerolinewidth": 1},
+        "xaxis": {
+            "title": "Coefficient Estimate",
+            "zeroline": True,
+            "zerolinecolor": "gray",
+            "zerolinewidth": 1,
+        },
         "yaxis": {
             "tickvals": list(range(n)),
             "ticktext": list(reversed(names)),
@@ -2050,7 +2124,12 @@ def compare_models(model_results_json: str) -> str:
 
     layout = {
         "title": {"text": "Model Comparison: Coefficient Estimates", "x": 0.5},
-        "xaxis": {"title": "Coefficient Estimate", "zeroline": True, "zerolinecolor": "gray", "zerolinewidth": 1},
+        "xaxis": {
+            "title": "Coefficient Estimate",
+            "zeroline": True,
+            "zerolinecolor": "gray",
+            "zerolinewidth": 1,
+        },
         "yaxis": {
             "tickvals": tick_vals,
             "ticktext": tick_texts,
@@ -2096,10 +2175,16 @@ def generate_scatter_chart(data_json: str, x_var: str, y_var: str) -> str:
             df = pd.DataFrame(rows[1:], columns=headers)
             if _validate_columns_metadata(data_dict.get("columns"), df):
                 for col_info in data_dict["columns"]:
-                    if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
+                    if (col_info.get("col_type") == "numeric"
+                            and isinstance(col_info.get("name"), str)
+                            and col_info["name"] in df.columns):
                         df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
             else:
-                print("[bridge] columns metadata missing or invalid, using dtype inference fallback", file=sys.stderr)
+                print(
+                    "[bridge] columns metadata missing or invalid, "
+                    "using dtype inference fallback",
+                    file=sys.stderr,
+                )
                 df = _infer_numeric_columns(df)
         else:
             return json.dumps({"success": False, "error": "Invalid data format."})

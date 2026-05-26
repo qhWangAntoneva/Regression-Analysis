@@ -324,14 +324,14 @@ def render() -> None:
                 else:
                     with st.spinner("正在检测异常值..."):
                         try:
-                            detector = OutlierDetector()
+                            outlier_detector = OutlierDetector()
                             kwargs: dict = {}
                             if out_method == "iqr":
                                 kwargs["multiplier"] = out_param
                             else:
                                 kwargs["threshold"] = out_param
 
-                            df_result, out_summary = detector.flag_outliers(
+                            df_result, out_summary = outlier_detector.flag_outliers(
                                 df, out_cols, method=out_method, **kwargs
                             )
 
@@ -346,10 +346,10 @@ def render() -> None:
                             st.error(f"异常值检测失败: {e}")
 
             # 显示检测结果
-            out_summary = st.session_state.get("_outlier_summary")
-            if out_summary:
+            out_summary_ss = st.session_state.get("_outlier_summary")
+            if out_summary_ss:
                 result_rows = []
-                for col_name, info in out_summary.items():
+                for col_name, info in out_summary_ss.items():
                     if "error" in info:
                         result_rows.append({
                             "变量名": col_name,

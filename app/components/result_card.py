@@ -77,7 +77,7 @@ def render_coefficient_table(
     display_df = pd.DataFrame(rows)
 
     # Load color scheme for accessibility support
-    colors = get_color_scheme() if get_color_scheme else {
+    colors = get_color_scheme() if get_color_scheme is not None else {
         "sig_high_bg": "#c8e6c9",
         "sig_med_bg": "#e8f5e9",
     }
@@ -119,7 +119,7 @@ def render_coefficient_table(
     if is_binary:
         st.caption("OR (几率比) = exp(系数)，表示自变量每增加一个单位，因变量发生概率的倍率变化。")
     # Annotation uses correct color description based on active palette
-    if get_color_scheme and st.session_state.get("colorblind_mode", False):
+    if get_color_scheme is not None and st.session_state.get("colorblind_mode", False):
         st.caption("蓝色背景行表示 p<0.05；深蓝色背景行表示 p<0.01（色盲友好）")
     else:
         st.caption("绿色背景行表示 p<0.05；深绿色背景行表示 p<0.01")

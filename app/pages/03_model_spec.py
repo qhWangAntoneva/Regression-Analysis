@@ -77,7 +77,7 @@ def _render_data_filter(df: pd.DataFrame, variables: list) -> pd.DataFrame:
         numeric_vars = [v for v in variables if v.inferred_type in ("continuous",)]
         cat_vars = [v for v in variables if v.inferred_type in ("categorical", "binary", "ordinal")]
 
-        filters_applied = []
+        filters_applied: list[tuple[str, Any]] = []
         col_left, col_right = st.columns(2)
 
         # 数值列滑块
@@ -159,7 +159,7 @@ def _render_data_filter(df: pd.DataFrame, variables: list) -> pd.DataFrame:
                 if "filtered_data" in st.session_state:
                     del st.session_state.filtered_data
                 for key in list(st.session_state.keys()):
-                    if key.startswith("filter_min_") or key.startswith("filter_max_") or key.startswith("filter_cat_"):
+                    if isinstance(key, str) and (key.startswith("filter_min_") or key.startswith("filter_max_") or key.startswith("filter_cat_")):
                         del st.session_state[key]
                 st.rerun()
 
@@ -355,6 +355,7 @@ def render() -> None:
             use_container_width=True,
             disabled=run_disabled,
         ):
+            assert dep_var is not None
             _run_regression(
                 df, dep_var, indep_vars, model_config,
                 transforms, interaction_terms,
@@ -368,6 +369,7 @@ def render() -> None:
             use_container_width=True,
             disabled=compare_disabled,
         ):
+            assert dep_var is not None
             _run_all_models(
                 df, dep_var, indep_vars, model_config,
                 comparison_specs, transforms, interaction_terms,

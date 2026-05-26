@@ -84,7 +84,7 @@ def render_variable_selector(
             key=f"{key_prefix}_indep",
             help="选择一个或多个自变量（解释变量）",
         )
-        indep_vars = [var_options.get(d) for d in indep_vars_display if d in var_options]
+        indep_vars = [var_options[d] for d in indep_vars_display if d in var_options]
 
     # 显示被排除的变量
     if id_vars:
