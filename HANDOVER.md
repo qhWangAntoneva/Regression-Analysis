@@ -1,6 +1,6 @@
 # Regression Analysis — 交接文档
 
-> 最后更新: 2026-05-27 (Session 7 — deploy key 修复，V1.2 文档同步)
+> 最后更新: 2026-05-27 (Session 9 — deploy workflow 修复，if:secrets bug + docker 权限)
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 部署: https://qhwangantoneva.github.io/regression-analysis/
 
@@ -98,7 +98,7 @@ Regression Analysis/
 | mypy app/ | 0 errors |
 | pytest | 849 passed (852 collected), 3 skipped |
 
-CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KEY` secret，仅限 `qhWangAntoneva.github.io` 仓库写权限)。
+CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KEY` secret，仅限 `qhWangAntoneva.github.io` 仓库写权限)。注意: job 级 `if: secrets.*` 会导致 GitHub Actions 解析失败 ("workflow file issue")，已移除该守卫条件。
 
 ---
 
@@ -143,6 +143,15 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KE
 - [x] **发布 v1.2 tag**: `git tag v1.2.0 && git push --tags`
 - [x] **v1.2 发布说明**: 基于 CHANGELOG 生成 GitHub Release → https://github.com/qhWangAntoneva/Regression-Analysis/releases/tag/v1.2.0
 - [ ] **Docker 构建验证**: `docker build -t regression-analysis . && docker compose up`（需 Docker 环境）
+
+### Session 9 — Deploy Workflow 修复 (已完成 — 2026-05-27)
+
+- [x] **GitHub Actions "workflow file issue" 根因定位**: job 级 `if: secrets.DEPLOY_KEY != ''` 导致 YAML 解析失败。`${{ }}` 包裹与否均触发，`if: true` 无此问题。GitHub 文档称 secrets 可在 `if` 中使用，但实际行为不一致
+- [x] **移除有问题的 `if` 守卫**: deploy-pages 不再使用 `if: secrets.*`，改为无条件运行（workflow 仅 push-to-master，secret 必然存在）
+- [x] **修复 Docker 权限**: docker job 的 `permissions: packages: write` 覆盖了默认含 `contents: read` 的权限集，导致 `actions/checkout@v4` 失败。添加 `contents: read` 后恢复
+- [x] **清理 debug commit 历史**: `git reset --soft` 将 6 个 debug commit 压缩为 1 个干净 commit
+- [x] **Git remote SSH 迁移**: 从 HTTPS (需 PAT) 切换至 SSH（`id_ed25519` 密钥已注册 GitHub 账户）
+- [x] **验证通过**: CI ✅ + Deploy ✅ (deploy-pages + docker 双 job 成功)
 
 ### v1.3+ 候选 (来自 TODO.md)
 
