@@ -20,8 +20,8 @@ if _root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 
 # ---------------------------------------------------------------------------
 # 1. Synthetic binary data
@@ -49,7 +49,7 @@ print("  Synthetic Binary Data")
 print("=" * 60)
 print(f"  N = {len(data)}")
 print(f"  y=1: {y.sum()} ({y.mean()*100:.1f}%)")
-print(f"  Predictors: x1 (continuous), x2 (continuous), x3 (binary)")
+print("  Predictors: x1 (continuous), x2 (continuous), x3 (binary)")
 print()
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ for c in res_hc1.coefficients:
         continue
     or_val = np.exp(c.coef)
     se = c.se
-    print(f"  {c.name:<15} coef={c.coef:.4f}  SE={se:.4f}  OR={or_val:.4f}  p={c.pvalue:.4f} {c.significance}")
+    print(f"  {c.name:8} {c.coef:7.4f} {se:7.4f} {or_val:7.4f} {c.pvalue:7.4f} {c.significance}")
 print()
 
 print("Done.")

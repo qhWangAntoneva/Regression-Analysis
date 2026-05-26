@@ -22,9 +22,9 @@ if _project_root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
 from src.modeling.hausman import run_hausman_from_results
+from src.modeling.specification import ModelSpec
 
 # ── Generate panel data with entity FE in the DGP ────────────────────────
 # Because the DGP includes entity fixed effects correlated with regressors,

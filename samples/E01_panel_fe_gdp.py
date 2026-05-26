@@ -22,8 +22,8 @@ if _project_root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 
 # ── Generate panel data ──────────────────────────────────────────────────
 rng = np.random.default_rng(20241111)
@@ -98,7 +98,8 @@ if between_r2 is not None:
     print(f"  Between R-squared: {between_r2:.4f}")
 if overall_r2 is not None:
     print(f"  Overall R-squared: {overall_r2:.4f}")
-print(f"  Log-Likelihood:    {result.log_likelihood:.4f}" if result.log_likelihood is not None else "")
+if result.log_likelihood is not None:
+    print(f"  Log-Likelihood:    {result.log_likelihood:.4f}")
 print(f"  AIC:               {result.aic:.4f}")
 print(f"  BIC:               {result.bic:.4f}")
 

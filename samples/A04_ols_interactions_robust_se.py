@@ -11,9 +11,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.stdout.reconfigure(encoding='utf-8')
 
-from src.utils.sample_data import load_housing_data
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
+from src.utils.sample_data import load_housing_data
 
 print("=" * 60)
 print("  A04: OLS — Interactions + HC1 Robust SE")

@@ -17,13 +17,13 @@ _project_root = str(Path(__file__).resolve().parent.parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
-import tempfile
 import os
+import tempfile
 
 import numpy as np
 import pandas as pd
 
-from src.data_io.parser import FileParser, preview_dataframe, get_data_summary
+from src.data_io.parser import FileParser, get_data_summary, preview_dataframe
 
 # ── Create a temporary CSV file ──────────────────────────────────────────
 rng = np.random.default_rng(20241121)

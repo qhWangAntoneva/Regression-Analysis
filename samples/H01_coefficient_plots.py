@@ -21,10 +21,10 @@ if _root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
-from src.visualization.coefficient import coefficient_plot_single, coefficient_plot
+from src.modeling.specification import ModelSpec
 from src.utils.sample_data import load_housing_data, load_wages_data
+from src.visualization.coefficient import coefficient_plot, coefficient_plot_single
 
 # ===========================================================================
 # Part 1: Single-model coefficient plot (housing data)

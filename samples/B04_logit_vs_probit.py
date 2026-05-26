@@ -15,8 +15,8 @@ import numpy as np
 import pandas as pd
 from scipy.stats import norm
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 from src.results.table import compare_models
 
 print("=" * 60)

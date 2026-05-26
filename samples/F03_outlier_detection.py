@@ -11,8 +11,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.stdout.reconfigure(encoding='utf-8')
 
-from src.utils.sample_data import load_housing_data
 from src.preprocessing.outliers import OutlierDetector
+from src.utils.sample_data import load_housing_data
 
 print("=" * 60)
 print("  F03: Outlier Detection")

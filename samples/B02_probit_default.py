@@ -16,8 +16,8 @@ sys.stdout.reconfigure(encoding='utf-8')
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 
 print("=" * 60)
 print("  B02: Probit Default Prediction Model")
@@ -77,7 +77,8 @@ print("\n" + "=" * 60)
 print("  Key Statistics & Interpretation")
 print("=" * 60)
 
-print(f"\n  Pseudo R-squared:  {result.pseudo_r_squared:.4f}" if result.pseudo_r_squared is not None else "  Pseudo R-squared:  N/A")
+pr2 = f"{result.pseudo_r_squared:.4f}" if result.pseudo_r_squared is not None else "N/A"
+print(f"\n  Pseudo R-squared:  {pr2}")
 print(f"  Log-Likelihood:    {result.log_likelihood:.4f}")
 print(f"  AIC:               {result.aic:.4f}")
 print(f"  BIC:               {result.bic:.4f}")
@@ -91,7 +92,7 @@ for var_name in df_coef.index:
     zval = df_coef.loc[var_name, "z值"]
     pv = df_coef.loc[var_name, "p值"]
     stars = df_coef.loc[var_name, "显著性"]
-    print(f"  {var_name:<25s}  coef={coef:>9.4f}  se={se:>7.4f}  z={zval:>7.4f}  p={pv:>7.4f}  {stars}")
+    print(f"  {var_name:<12s} {coef:>9.4f}  {se:>7.4f}  {zval:>7.4f}  {pv:>7.4f}  {stars}")
 
 # ---------------------------------------------------------------------------
 # 5. Plain-language interpretation

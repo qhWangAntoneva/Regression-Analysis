@@ -15,8 +15,8 @@ sys.stdout.reconfigure(encoding='utf-8')
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 
 print("=" * 60)
 print("  D01: MixedLM — Random Intercept (Schools)")
@@ -82,7 +82,7 @@ print("=" * 60)
 print(f"  Group variable:          {result.group_var}")
 print(f"  Number of groups:        {result.group_count}")
 if result.re_var:
-    print(f"  Random effects variance components:")
+    print("  Random effects variance components:")
     for k, v in result.re_var.items():
         print(f"    {k}: {v:.4f}")
 print()

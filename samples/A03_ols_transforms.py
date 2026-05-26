@@ -23,8 +23,8 @@ if _root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 from src.utils.sample_data import load_housing_data
 
 # ---------------------------------------------------------------------------
@@ -54,8 +54,8 @@ print("  --- Specification ---")
 print(f"  dep_var:    {spec.dep_var}")
 print(f"  predictors: {spec.all_predictors}")
 print(f"  transforms: {spec.transforms}")
-print(f"  -> sqft is replaced by sqft_log in the design matrix")
-print(f"  -> age  is replaced by age_sq   in the design matrix")
+print("  -> sqft is replaced by sqft_log in the design matrix")
+print("  -> age  is replaced by age_sq   in the design matrix")
 print()
 
 # ---------------------------------------------------------------------------
@@ -90,17 +90,18 @@ for c in result.coefficients:
         # Log-level: 100 * (exp(coef) - 1) ≈ coef*100 for small coef
         pct = (np.exp(c.coef) - 1) * 100
         print(f"  log_sqft (beta = {c.coef:.4f}):")
-        print(f"    -> A 1% increase in sqft is associated with a {c.coef/100:.4f} unit change in price.")
-        print(f"    -> More precisely, a 1-unit increase in log_sqft multiplies price by exp({c.coef:.4f}) = {np.exp(c.coef):.4f}.")
+        print(f"    -> A 1% increase in sqft changes price by {c.coef/100:.4f} units.")
+        print("    -> A 1-unit increase in log_sqft multiplies price")
+        print(f"       by exp({c.coef:.4f}) = {np.exp(c.coef):.4f}.")
         print(f"    -> p-value = {c.pvalue:.4f} {c.significance}")
         break
 
 for c in result.coefficients:
     if "age_sq" in c.name:
         print(f"\n  age_sq (beta = {c.coef:.4f}):")
-        print(f"    -> The linear age term captures the slope at age = 0.")
-        print(f"    -> The squared term (age_sq) captures curvature.")
-        print(f"    -> The marginal effect of age changes with age: d(price)/d(age) = beta_age + 2*beta_agesq*age")
+        print("    -> The linear age term captures the slope at age = 0.")
+        print("    -> The squared term (age_sq) captures curvature.")
+        print("    -> Marginal effect of age: d(price)/d(age) = beta_age + 2*beta_agesq*age")
         print(f"    -> p-value = {c.pvalue:.4f} {c.significance}")
         break
 

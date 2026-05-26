@@ -20,9 +20,9 @@ if _root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
+from src.modeling.diagnostics import influence_stats, residual_tests, vif
 from src.modeling.fitter import ModelFitter
-from src.modeling.diagnostics import vif, residual_tests, influence_stats
+from src.modeling.specification import ModelSpec
 from src.utils.sample_data import load_housing_data
 
 # ---------------------------------------------------------------------------
@@ -69,16 +69,16 @@ print("=" * 60)
 residuals = result._raw_model.resid
 test_results = residual_tests(residuals)
 
-print(f"  Shapiro-Wilk normality test:")
+print("  Shapiro-Wilk normality test:")
 print(f"    Statistic: {test_results['shapiro_stat']:.4f}")
 print(f"    p-value:   {test_results['shapiro_pvalue']:.4f}")
 print(f"    Normal?    {test_results['shapiro_normal']}")
-print(f"    (H0: residuals are normally distributed)")
+print("    (H0: residuals are normally distributed)")
 print()
-print(f"  Durbin-Watson autocorrelation test:")
+print("  Durbin-Watson autocorrelation test:")
 print(f"    DW statistic: {test_results['dw_stat']:.4f}")
 print(f"    Interpretation: {test_results['dw_autocorrelation']}")
-print(f"    (DW = 2 means no autocorrelation; < 1 or > 3 is concerning)")
+print("    (DW = 2 means no autocorrelation; < 1 or > 3 is concerning)")
 print()
 
 # ---------------------------------------------------------------------------
@@ -95,7 +95,7 @@ print()
 # Top 5 by Cook's distance
 top_cooks = inf_df.sort_values("cooks_d", ascending=False).head(5)
 print("  Top 5 influential observations (by Cook's distance):")
-print(f"  {'Obs':>5}  {'Cook\'s D':>12}  {'Leverage':>10}")
+print("  {:>5}  {:>12}  {:>10}".format("Obs", "Cook's D", "Leverage"))
 print("  " + "-" * 35)
 for _, row in top_cooks.iterrows():
     print(f"  {int(row['observation']):>5}  {row['cooks_d']:>12.6f}  {row['leverage']:>10.6f}")

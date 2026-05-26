@@ -42,6 +42,9 @@ jobs:
       - name: Lint with ruff
         run: uv run ruff check .
 
+      - name: Lint samples with ruff
+        run: uv run ruff check samples/
+
       - name: Type check with mypy
         run: uv run mypy app/ --ignore-missing-imports
 

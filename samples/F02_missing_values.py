@@ -13,8 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.stdout.reconfigure(encoding='utf-8')
 
 import numpy as np
-from src.utils.sample_data import load_housing_data
+
 from src.preprocessing.missing import MissingValueHandler
+from src.utils.sample_data import load_housing_data
 
 print("=" * 60)
 print("  F02: Missing Value Handling")
@@ -71,7 +72,7 @@ print(f"Drop strategy   -> {n_rows_dropped} rows")
 # ---------------------------------------------------------------------------
 print(f"\n  {'Strategy':<20s} {'Rows':>8s} {'Age NaN':>10s}")
 print(f"  {'Original':<20s} {data.shape[0]:>8d} {int(data['age'].isna().sum()):>10d}")
-print(f"  {'Mean imputation':<20s} {data_mean.shape[0]:>8d} {int(data_mean['age'].isna().sum()):>10d}")
+print(f"  {'Mean':<18s} {data_mean.shape[0]:>8d} {int(data_mean['age'].isna().sum()):>9d}")
 print(f"  {'Drop':<20s} {data_dropped.shape[0]:>8d} {'N/A':>10s}")
 
 # ---------------------------------------------------------------------------

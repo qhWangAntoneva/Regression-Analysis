@@ -20,8 +20,8 @@ if _project_root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 
 # ── Generate synthetic accident data ─────────────────────────────────────
 rng = np.random.default_rng(20241103)
@@ -72,7 +72,7 @@ print("  Model Summary")
 print("=" * 60)
 print(f"\n  Model type:      {result.model_type}")
 print(f"  Observations:     {result.n_obs}")
-print(f"  Exposure var:     log_miles (offset)")
+print("  Exposure var:     log_miles (offset)")
 print(f"  Log-Likelihood:   {result.log_likelihood:.4f}")
 print(f"  AIC:              {result.aic:.4f}")
 print(f"  BIC:              {result.bic:.4f}")

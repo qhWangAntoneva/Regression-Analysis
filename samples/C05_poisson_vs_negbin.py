@@ -19,8 +19,8 @@ if _project_root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 from src.results.table import compare_models
 
 # ── Generate overdispersed data ──────────────────────────────────────────
@@ -33,7 +33,7 @@ cat = rng.choice(["A", "B", "C"], N, p=[0.4, 0.35, 0.25])
 
 # True DGP: Negative Binomial (overdispersed)
 true_alpha = 1.2
-log_mu = 0.8 + 0.5 * x1 - 0.3 * x2 + np.where(cat == "B", 0.4, 0.0) + np.where(cat == "C", -0.2, 0.0)
+log_mu = 0.8 + 0.5*x1 - 0.3*x2 + np.where(cat == "B", 0.4, 0.0) + np.where(cat == "C", -0.2, 0.0)
 nu = rng.gamma(1 / true_alpha, true_alpha, N)
 y = rng.poisson(np.exp(log_mu) * nu)
 

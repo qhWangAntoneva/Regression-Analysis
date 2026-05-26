@@ -21,8 +21,8 @@ if _root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 from src.visualization.logit_plots import odds_ratio_plot, roc_curve_plot
 
 # ---------------------------------------------------------------------------
@@ -114,7 +114,9 @@ for c in result.coefficients:
     if c.name.lower() == "intercept":
         continue
     or_val = np.exp(c.coef)
-    print(f"  {c.name:<20} OR = {or_val:.4f}  (95% CI: [{np.exp(c.ci_lower):.4f}, {np.exp(c.ci_upper):.4f}])")
+    ci_low = np.exp(c.ci_lower)
+    ci_high = np.exp(c.ci_upper)
+    print(f"  {c.name:<15} OR={or_val:.4f}  95% CI: [{ci_low:.4f}, {ci_high:.4f}]")
     print(f"  {' ':<20} p = {c.pvalue:.4f} {c.significance}")
 
 print()

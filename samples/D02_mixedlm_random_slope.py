@@ -19,8 +19,8 @@ sys.stdout.reconfigure(encoding='utf-8')
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 
 print("=" * 60)
 print("  D02: MixedLM — Random Intercept + Random Slope")

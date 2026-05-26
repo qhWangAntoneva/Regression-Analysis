@@ -27,10 +27,10 @@ if _root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
-from src.visualization.residual import diagnostic_dashboard
+from src.modeling.specification import ModelSpec
 from src.utils.sample_data import load_housing_data
+from src.visualization.residual import diagnostic_dashboard
 
 # ---------------------------------------------------------------------------
 # 1. Load data and fit OLS

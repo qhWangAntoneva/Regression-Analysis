@@ -23,8 +23,8 @@ if _root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 from src.utils.sample_data import load_housing_data
 
 # ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ if sqft_c:
 if bed_c:
     print(f"  - Each extra bedroom adds ${bed_c.coef:.2f} to price (p={bed_c.pvalue:.4f}).")
 if age_c:
-    print(f"  - Each year of age reduces price by ${abs(age_c.coef):.2f} on average (p={age_c.pvalue:.4f}).")
+    print(f"  - Each year of age reduces price by ${abs(age_c.coef):.2f} (p={age_c.pvalue:.4f}).")
 if r2 is not None:
     print(f"  - The model explains {r2:.2%} of price variance (R-squared).")
 print()

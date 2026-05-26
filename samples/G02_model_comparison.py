@@ -14,10 +14,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.stdout.reconfigure(encoding='utf-8')
 
-from src.utils.sample_data import load_wages_data
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 from src.results.table import compare_models
+from src.utils.sample_data import load_wages_data
 
 print("=" * 60)
 print("  G02: Nested Model Comparison — Wages")

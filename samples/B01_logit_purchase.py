@@ -21,8 +21,8 @@ if _root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 
 # ---------------------------------------------------------------------------
 # 1. Generate synthetic binary data
@@ -99,9 +99,9 @@ for c in result.coefficients:
     print(f"  {c.name}:")
     print(f"    Log-OR = {c.coef:.4f}, OR = {or_val:.4f}")
     if c.name == "income":
-        print(f"    -> Each additional unit of income multiplies the odds of purchase by {or_val:.4f}.")
+        print(f"    -> Each additional income unit multiplies purchase odds by {or_val:.4f}.")
     elif c.name == "age":
-        print(f"    -> Each additional year of age multiplies the odds of purchase by {or_val:.4f}.")
+        print(f"    -> Each additional year of age multiplies purchase odds by {or_val:.4f}.")
     print(f"    -> 95% CI for OR: [{np.exp(c.ci_lower):.4f}, {np.exp(c.ci_upper):.4f}]")
     print(f"    -> p-value: {c.pvalue:.4f} {c.significance}")
     print()

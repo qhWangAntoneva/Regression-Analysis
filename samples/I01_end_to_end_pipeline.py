@@ -19,12 +19,12 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 import numpy as np
 
-from src.utils.sample_data import load_housing_data
+from src.modeling.diagnostics import influence_stats, residual_tests, vif
+from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 from src.preprocessing.missing import MissingValueHandler
 from src.preprocessing.outliers import OutlierDetector
-from src.modeling.specification import ModelSpec
-from src.modeling.fitter import ModelFitter
-from src.modeling.diagnostics import vif, residual_tests, influence_stats
+from src.utils.sample_data import load_housing_data
 from src.visualization.coefficient import coefficient_plot_single
 
 print("=" * 60)
@@ -53,7 +53,7 @@ for col_name, col_info in analysis["columns"].items():
 
 # Impute mean for age
 data_clean = handler.handle(raw_data, strategy="mean", columns=["age"])
-print(f"  After mean imputation: {data_clean.shape[0]} rows, {int(data_clean['age'].isna().sum())} NaN in age")
+print(f"  After imputation: {data_clean.shape[0]} rows, {int(data_clean['age'].isna().sum())} NaNs")
 
 # ---------------------------------------------------------------------------
 # Step 3: Outlier detection
@@ -113,12 +113,12 @@ if result._raw_model is not None:
     residuals = result._raw_model.resid
     diag = residual_tests(residuals)
 
-    print(f"    Shapiro-Wilk normality test:")
+    print("    Shapiro-Wilk normality test:")
     print(f"      Statistic: {diag['shapiro_stat']:.4f}")
     print(f"      p-value:   {diag['shapiro_pvalue']:.6f}")
     print(f"      Normal?    {diag['shapiro_normal']}")
 
-    print(f"    Durbin-Watson autocorrelation test:")
+    print("    Durbin-Watson autocorrelation test:")
     print(f"      Statistic:  {diag['dw_stat']:.4f}")
     print(f"      Diagnosis:  {diag['dw_autocorrelation']}")
 
@@ -128,10 +128,11 @@ try:
     if result._raw_model is not None:
         inf_df = influence_stats(result._raw_model)
         top5 = inf_df.sort_values("cooks_d", ascending=False).head(5)
-        print(f"  {'Obs':>6s} {'Cook\'s D':>12s} {'Leverage':>12s}")
+        print("  {:>6s} {:>12s} {:>12s}".format("Obs", "Cook's D", "Leverage"))
         print(f"  {'-'*30}")
         for _, row in top5.iterrows():
-            print(f"  {int(row['observation']):>6d} {row['cooks_d']:>12.6f} {row['leverage']:>12.6f}")
+            obs = int(row['observation'])
+            print(f"  {obs:>6d} {row['cooks_d']:>11.6f} {row['leverage']:>11.6f}")
 except Exception as e:
     print(f"  Influence computation skipped: {e}")
 
@@ -159,7 +160,7 @@ print("\n" + "=" * 60)
 print("  [Step 7] Pipeline Summary")
 print("=" * 60)
 print(f"  Data loaded:       {raw_data.shape[0]} rows")
-print(f"  Missing handled:   mean imputation for 'age'")
+print("  Missing handled:   mean imputation for 'age'")
 print(f"  Model type:        {result.model_type}")
 print(f"  Transforms:        {result.transforms_applied}")
 print(f"  R-squared:         {result.r_squared:.4f}")

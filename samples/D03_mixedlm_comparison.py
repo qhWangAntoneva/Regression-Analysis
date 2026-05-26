@@ -14,8 +14,8 @@ sys.stdout.reconfigure(encoding='utf-8')
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 from src.results.table import compare_models
 
 print("=" * 60)
@@ -92,11 +92,13 @@ print(comparison_df.to_string(index=False))
 
 print(f"\n  {'':30s} {'Null':>12s} {'Full':>12s}")
 print(f"  {'N (Observations)':30s} {result_null.n_obs:>12d} {result_full.n_obs:>12d}")
-print(f"  {'Log-Likelihood':30s} {result_null.log_likelihood:>12.4f} {result_full.log_likelihood:>12.4f}")
+ll_null = result_null.log_likelihood
+ll_full = result_full.log_likelihood
+print(f"  {'Log-Likelihood':20s} {ll_null:>10.4f} {ll_full:>10.4f}")
 print(f"  {'R-squared':30s} {result_null.r_squared:>12.4f} {result_full.r_squared:>12.4f}")
 
 # Note: REML AIC/BIC are NaN in statsmodels; compare log-likelihood instead.
-if result_null.aic is not None and not (isinstance(result_null.aic, float) and str(result_null.aic) == 'nan'):
+if result_null.aic is not None and str(result_null.aic) != 'nan':
     print(f"  {'AIC':30s} {result_null.aic:>12.2f} {result_full.aic:>12.2f}")
     print(f"  {'BIC':30s} {result_null.bic:>12.2f} {result_full.bic:>12.2f}")
 else:

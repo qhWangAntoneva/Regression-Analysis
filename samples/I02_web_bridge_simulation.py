@@ -25,8 +25,8 @@ if _project_root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 
 # ── Simulate the JSON spec a frontend would POST ─────────────────────────
 # This is exactly what `web/py/bridge.py::run_regression()` receives as

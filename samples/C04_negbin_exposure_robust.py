@@ -21,8 +21,8 @@ if _project_root not in sys.path:
 import numpy as np
 import pandas as pd
 
-from src.modeling.specification import ModelSpec
 from src.modeling.fitter import ModelFitter
+from src.modeling.specification import ModelSpec
 
 # ── Generate synthetic data (errors / defects per logged hour) ───────────
 rng = np.random.default_rng(20241104)
@@ -70,7 +70,7 @@ print("  Model Summary")
 print("=" * 60)
 print(f"\n  Model type:        {result.model_type}")
 print(f"  Observations:       {result.n_obs}")
-print(f"  Exposure var:       log_hours (offset)")
+print("  Exposure var:       log_hours (offset)")
 print(f"  Std. Error type:    {getattr(result, 'se_type', 'HC1')}")
 print(f"  Log-Likelihood:     {result.log_likelihood:.4f}")
 print(f"  AIC:                {result.aic:.4f}")
