@@ -476,11 +476,25 @@ def run_regression(data_json: str, spec_json: str) -> str:
                 })
             fitted = sm.Probit(y, X).fit(disp=False)
 
-        elif model_type == "poisson":
-            fitted = sm.GLM(y, X, family=sm.families.Poisson()).fit()
-
-        elif model_type == "negbin":
-            fitted = sm.GLM(y, X, family=sm.families.NegativeBinomial()).fit()
+        elif model_type in ("poisson", "negbin"):
+            # Validate count data requirements
+            if (y < 0).any():
+                return json.dumps({
+                    "success": False,
+                    "error": f"{model_type.capitalize()} requires non-negative "
+                             f"dependent variable. Found negative values in '{dep_var}'."
+                })
+            if not np.allclose(y, np.round(y), atol=1e-8):
+                return json.dumps({
+                    "success": False,
+                    "error": f"{model_type.capitalize()} requires integer-valued "
+                             f"dependent variable (count data)."
+                })
+            if model_type == "poisson":
+                family = sm.families.Poisson()
+            else:
+                family = sm.families.NegativeBinomial()
+            fitted = sm.GLM(y, X, family=family).fit()
 
         elif model_type == "mixedlm":
             # Need groups from spec
@@ -1576,13 +1590,15 @@ def generate_diagnostic_charts(result_json: str) -> str:
     else:
         charts["scale_location"] = None
 
-    if len(residuals) >= 3 and result.get("model_type") != "logit":
+    model_type = result.get("model_type", "")
+    is_mle = model_type in ("logit", "probit", "poisson", "negbin")
+    if len(residuals) >= 3 and not is_mle:
         charts["cooks_distance"] = _make_cooks_chart(residuals, fitted_values, n_params)
-    elif result.get("model_type") == "logit":
-        # Cook's distance formula (OLS-based) is not applicable to logit model deviance residuals
+    elif is_mle:
+        # Cook's distance formula (OLS-based) is not applicable to MLE model deviance residuals
         charts["cooks_distance"] = _make_unavailable_chart(
             "Cook's Distance",
-            "Cook's distance is not applicable to logit models. "
+            "Cook's distance is not applicable to MLE models. "
             "Consider using Pregibon's delta-beta influence statistic instead."
         )
     else:
@@ -2158,8 +2174,8 @@ def generate_roc_chart(result_json: str) -> str:
     except json.JSONDecodeError as e:
         return json.dumps({"success": False, "error": f"JSON parse error: {e}"})
 
-    if result.get("model_type") != "logit":
-        return json.dumps({"success": False, "error": "ROC is only available for logit models."})
+    if result.get("model_type") not in ("logit", "probit"):
+        return json.dumps({"success": False, "error": "ROC is only available for binary choice models (logit/probit)."})
 
     y_pred_prob = np.array(result.get("fitted_values", []))
     y_actual = np.array(result.get("y_actual", []))
@@ -2390,24 +2406,37 @@ def export_csv(result_json: str) -> str:
     if not coefficients:
         return json.dumps({"success": False, "error": "No coefficients to export."})
 
-    is_logit = result.get("model_type", "") == "logit"
-    stat_col = "z-value" if is_logit else "t-value"
-    or_col = ",Odds Ratio" if is_logit else ""
+    model_type = result.get("model_type", "")
+    is_logit = model_type == "logit"
+    is_probit = model_type == "probit"
+    is_count = model_type in ("poisson", "negbin")
+    is_mle = is_logit or is_probit or is_count
+    stat_col = "z-value" if is_mle else "t-value"
+    extra_col = ""
+    extra_field = ""
+    if is_logit:
+        extra_col = ",Odds Ratio"
+        extra_field = "odds_ratio"
+    elif is_count:
+        extra_col = ",IRR"
+        extra_field = "irr"
 
-    header = f"Variable,Coefficient,Std.Err.,{stat_col},p-value,CI(95%) Low,CI(95%) High{or_col},Significance"
+    header = f"Variable,Coefficient,Std.Err.,{stat_col},p-value,CI(95%) Low,CI(95%) High{extra_col},Significance"
     lines = [header]
     for c in coefficients:
         stat_val = c.get("z_stat", c.get("t_stat", 0))
-        or_val = f',{c.get("odds_ratio", "")}' if is_logit else ""
+        extra_val = f',{c.get(extra_field, "")}' if extra_field else ""
         lines.append(
             f'"{c["name"]}",{c["coef"]},{c["se"]},{stat_val},'
-            f'{c["pvalue"]},{c["ci_lower"]},{c["ci_upper"]}{or_val},{c["significance"]}'
+            f'{c["pvalue"]},{c["ci_lower"]},{c["ci_upper"]}{extra_val},{c["significance"]}'
         )
 
     csv_text = "\n".join(lines)
-    if is_logit:
+    if is_mle:
+        subtype = model_type.upper()
         model_info = (
-            f"\n\n# Model Summary (Logit)\n"
+            f"\n\n# Model Summary ({subtype})\n"
+            f'# Model Type,{subtype}\n'
             f'# Pseudo R-squared,{result.get("pseudo_r_squared", "N/A")}\n'
             f'# LR chi2,{result.get("llr", "N/A")}\n'
             f'# LR p-value,{result.get("llr_pvalue", "N/A")}\n'
@@ -2420,6 +2449,7 @@ def export_csv(result_json: str) -> str:
     else:
         model_info = (
             f"\n\n# Model Summary\n"
+            f'# Model Type,{model_type.upper()}\n'
             f'# R-squared,{result.get("r_squared", "N/A")}\n'
             f'# Adj R-squared,{result.get("adj_r_squared", "N/A")}\n'
             f'# RMSE,{result.get("rmse", "N/A")}\n'
@@ -2451,6 +2481,9 @@ def export_excel(result_json: str) -> str:
         ws.title = "Regression Results"
 
         is_logit = result.get("model_type", "") == "logit"
+        is_probit = result.get("model_type", "") == "probit"
+        is_count = result.get("model_type", "") in ("poisson", "negbin")
+        is_mle = is_logit or is_probit or is_count
 
         # Title
         title_text = "Logit Regression Results" if is_logit else "OLS Regression Results"

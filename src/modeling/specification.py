@@ -73,17 +73,15 @@ class ModelSpec:
         if len(combined) != len(set(combined)):
             raise ValueError("Duplicate variable names detected in predictors.")
 
-        # Validate MixedLM: group_var is required
-        if self.model_type == "mixedlm" and not self.group_var:
-            raise ValueError("mixedlm model requires group_var (grouping column name).")
+        # Validate MixedLM: group_var is required at runtime, but not enforced at
+        # construction time (engines validate and set group_var dynamically).
+        if self.model_type == "mixedlm" and self.group_var is not None:
+            if not isinstance(self.group_var, str) or not self.group_var.strip():
+                raise ValueError("mixedlm group_var must be a non-empty string.")
 
-        # Validate Panel: entity_var and time_var are required
+        # Validate Panel: fields are validated at engine-call time.
         if self.model_type == "panel":
-            if not self.entity_var:
-                raise ValueError("panel model requires entity_var (entity identifier).")
-            if not self.time_var:
-                raise ValueError("panel model requires time_var (time identifier).")
-            if self.panel_model not in ("fixed", "random", None):
+            if self.panel_model is not None and self.panel_model not in ("fixed", "random"):
                 raise ValueError(
                     f"panel_model must be 'fixed' or 'random', got '{self.panel_model}'."
                 )

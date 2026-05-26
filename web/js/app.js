@@ -500,14 +500,14 @@ function initModelForm() {
 
 function onModelTypeChange() {
     const modelType = document.getElementById('opt-model-type').value;
-    const isLogit = modelType === 'logit';
+    const isMLE = ['logit', 'probit', 'poisson', 'negbin'].includes(modelType);
+    const isPanelML = ['mixedlm', 'panel'].includes(modelType);
     const covSelect = document.getElementById('opt-cov');
-    // Logit uses MLE, no HC covariance types
+    // MLE models use MLE, no HC covariance types. Also hide for MixedLM / Panel.
     if (covSelect) {
-        covSelect.disabled = isLogit;
-        if (isLogit) covSelect.value = 'nonrobust';
+        covSelect.disabled = isMLE || isPanelML;
+        if (isMLE || isPanelML) covSelect.value = 'nonrobust';
     }
-    // Interaction terms are still valid for logit
 }
 
 function checkRunButton() {
@@ -794,17 +794,21 @@ async function runRegression() {
             generateCoefficientChart(resultJson),
         ];
 
-        // Diagnostics (OLS only — VIF/residual tests don't apply to logit)
-        if (result.model_type !== 'logit') {
+        // Diagnostics (OLS/Panel/MixedLM only — VIF/residual tests don't apply to MLE)
+        const isMLE = ['logit', 'probit', 'poisson', 'negbin'].includes(result.model_type);
+        if (!isMLE) {
             parallelTasks.push(computeAndRenderDiagnostics(dataJson, resultJson));
         }
 
-        // Scatter plots: available for both OLS and logit
+        // Scatter plots: available for all model types
         parallelTasks.push(generateAllScatterCharts(dataJson, result));
 
-        // Logit-specific tasks
-        if (result.model_type === 'logit') {
+        // Logit/Probit-specific tasks (ROC is available for both binary choice models)
+        if (result.model_type === 'logit' || result.model_type === 'probit') {
             parallelTasks.push(generateROCChart(resultJson));
+        }
+        // OR chart only for logit
+        if (result.model_type === 'logit') {
             parallelTasks.push(generateORChart(resultJson));
         }
 
@@ -848,10 +852,16 @@ function renderResults(result) {
 
 function renderStatsGrid(result) {
     const grid = document.getElementById('model-stats-grid');
-    const isLogit = result.model_type === 'logit';
+    const mt = result.model_type;
+    const isLogit = mt === 'logit';
+    const isMLE = ['logit', 'probit', 'poisson', 'negbin'].includes(mt);
+    const isCount = ['poisson', 'negbin'].includes(mt);
+    const isPanel = mt === 'panel';
+    const isMixedLM = mt === 'mixedlm';
+    const isOLS = mt === 'OLS' || !isMLE && !isPanel && !isMixedLM;
     const stats = [];
 
-    if (isLogit) {
+    if (isMLE) {
         stats.push(
             { label: 'Pseudo R-squared', value: fmtNum(result.pseudo_r_squared, '.6f') },
             { label: 'Log-Likelihood', value: fmtNum(result.log_likelihood, '.2f') },
@@ -862,7 +872,52 @@ function renderStatsGrid(result) {
                 value: `${fmtNum(result.llr, '.4f')} (p=${fmtPvalue(result.llr_pvalue)})`,
             });
         }
+        if (isCount && result.dispersion != null) {
+            stats.push({ label: 'Dispersion', value: fmtNum(result.dispersion, '.4f') });
+        }
+        if (isLogit) {
+            stats.push({ label: 'Method', value: 'Logit (MLE)' });
+        } else if (mt === 'probit') {
+            stats.push({ label: 'Method', value: 'Probit (MLE)' });
+        } else if (mt === 'poisson') {
+            stats.push({ label: 'Method', value: 'Poisson (MLE)' });
+        } else if (mt === 'negbin') {
+            stats.push({ label: 'Method', value: 'NegativeBinomial (MLE)' });
+        }
+    } else if (isPanel) {
+        if (result.within_r_squared != null) {
+            stats.push({ label: 'Within R²', value: fmtNum(result.within_r_squared, '.6f') });
+        }
+        if (result.between_r_squared != null) {
+            stats.push({ label: 'Between R²', value: fmtNum(result.between_r_squared, '.6f') });
+        }
+        if (result.overall_r_squared != null) {
+            stats.push({ label: 'Overall R²', value: fmtNum(result.overall_r_squared, '.6f') });
+        }
+        if (result.f_statistic) {
+            stats.push({
+                label: 'F-statistic',
+                value: `${fmtNum(result.f_statistic[0], '.4f')} (p=${fmtPvalue(result.f_statistic[1])})`,
+            });
+        }
+        stats.push(
+            { label: 'Entities', value: result.entity_count || 'N/A' },
+            { label: 'Periods', value: result.time_count || 'N/A' },
+        );
+    } else if (isMixedLM) {
+        stats.push(
+            { label: 'R-squared', value: fmtNum(result.r_squared, '.6f') },
+            { label: 'Adj R-squared', value: fmtNum(result.adj_r_squared, '.6f') },
+            { label: 'RMSE', value: fmtNum(result.rmse, '.4f') },
+            { label: 'Groups', value: result.group_count || 'N/A' },
+        );
+        if (result.re_var) {
+            Object.keys(result.re_var).forEach(k => {
+                stats.push({ label: `RE: ${k}`, value: fmtNum(result.re_var[k], '.4f') });
+            });
+        }
     } else {
+        // OLS (default)
         stats.push(
             { label: 'R-squared', value: fmtNum(result.r_squared, '.6f') },
             { label: 'Adj R-squared', value: fmtNum(result.adj_r_squared, '.6f') },
@@ -881,7 +936,7 @@ function renderStatsGrid(result) {
         { label: 'BIC', value: fmtNum(result.bic, '.2f') },
         { label: 'N', value: result.n_obs },
     );
-    if (!isLogit) {
+    if (isOLS || isPanel || isMixedLM) {
         stats.push({ label: 'Log-Likelihood', value: fmtNum(result.log_likelihood, '.2f') });
     }
 
@@ -895,15 +950,19 @@ function renderStatsGrid(result) {
 
 function renderCoefficientTable(coefs, variableLabels) {
     variableLabels = variableLabels || {};
-    const isLogit = STATE.result && STATE.result.model_type === 'logit';
-    const statLabel = isLogit ? 'z-value' : 't-value';
-    const statField = isLogit ? 'z_stat' : 't_stat';
+    const mt = STATE.result ? STATE.result.model_type : '';
+    const isLogit = mt === 'logit';
+    const isMLE = ['logit', 'probit', 'poisson', 'negbin'].includes(mt);
+    const isCount = ['poisson', 'negbin'].includes(mt);
+    const statLabel = isMLE ? 'z-value' : 't-value';
+    const statField = isMLE ? 'z_stat' : 't_stat';
 
     // Update table header
     const thead = document.querySelector('#coef-table thead tr');
     let headerHTML = '<th>Variable</th><th>Coefficient</th><th>Std. Error</th>';
     headerHTML += `<th>${statLabel}</th>`;
     if (isLogit) headerHTML += '<th>Odds Ratio</th>';
+    if (isCount) headerHTML += '<th>IRR</th>';
     headerHTML += '<th>p-value</th><th>95% CI Low</th><th>95% CI High</th><th>Sig.</th>';
     thead.innerHTML = headerHTML;
 
@@ -918,7 +977,12 @@ function renderCoefficientTable(coefs, variableLabels) {
             <td class="numeric">${fmtNum(c.se, '.6f')}</td>
             <td class="numeric">${fmtNum(statVal, '.4f')}</td>`;
         if (isLogit) {
+            // Only logit gets odds_ratio in the result dict
             rowHTML += `<td class="numeric">${fmtNum(c.odds_ratio, '.4f')}</td>`;
+        }
+        if (isCount) {
+            // Count models get IRR
+            rowHTML += `<td class="numeric">${fmtNum(c.irr, '.4f')}</td>`;
         }
         rowHTML += `<td class="numeric ${pClass}">${fmtPvalue(c.pvalue)}</td>
             <td class="numeric">${fmtNum(c.ci_lower, '.6f')}</td>
@@ -951,20 +1015,44 @@ function renderAnovaTable(anova) {
 
 function renderSummaryText(result) {
     const el = document.getElementById('summary-text');
-    const isLogit = result.model_type === 'logit';
+    const mt = result.model_type;
+    const isMLE = ['logit', 'probit', 'poisson', 'negbin'].includes(mt);
+    const isLogit = mt === 'logit';
+    const isCount = ['poisson', 'negbin'].includes(mt);
+    const isPanel = mt === 'panel';
+    const isMixedLM = mt === 'mixedlm';
     let text = '';
-    text += `${isLogit ? 'Logit' : 'OLS'} Regression: ${result.specification || 'Unspecified'}\n\n`;
+    const methodLabel = mt === 'logit' ? 'Logit' : mt === 'probit' ? 'Probit' :
+        mt === 'poisson' ? 'Poisson' : mt === 'negbin' ? 'NegativeBinomial' :
+        mt === 'mixedlm' ? 'MixedLM' : mt === 'panel' ? 'Panel' : 'OLS';
+    text += `${methodLabel} Regression: ${result.specification || 'Unspecified'}\n\n`;
 
-    if (isLogit) {
-        // Logit-specific stats
+    if (isMLE) {
         text += `Pseudo R-squared = ${result.pseudo_r_squared != null ? result.pseudo_r_squared.toFixed(4) : 'N/A'}.\n`;
         if (result.llr != null) {
             const llrP = result.llr_pvalue != null ? result.llr_pvalue : 1;
             const sigLabel = llrP < 0.001 ? '<0.001' : llrP < 0.05 ? '<0.05' : llrP < 0.1 ? '<0.10' : '>=0.10';
             text += `Overall model: LR chi2 = ${result.llr.toFixed(4)}, p ${sigLabel}.\n`;
         }
+        if (isCount && result.dispersion != null) {
+            text += `Dispersion = ${result.dispersion.toFixed(4)}.\n`;
+        }
+    } else if (isPanel) {
+        if (result.within_r_squared != null) text += `Within R-squared = ${result.within_r_squared.toFixed(4)}.\n`;
+        if (result.between_r_squared != null) text += `Between R-squared = ${result.between_r_squared.toFixed(4)}.\n`;
+        if (result.overall_r_squared != null) text += `Overall R-squared = ${result.overall_r_squared.toFixed(4)}.\n`;
+        if (result.f_statistic) {
+            const fv = result.f_statistic[0], fp = result.f_statistic[1];
+            const sigLabel = fp < 0.001 ? '<0.001' : fp < 0.05 ? '<0.05' : fp < 0.1 ? '<0.10' : '>=0.10';
+            text += `Overall model: F = ${fv.toFixed(4)}, p ${sigLabel}.\n`;
+        }
+        text += `Entities = ${result.entity_count || 'N/A'}, Periods = ${result.time_count || 'N/A'}.\n`;
+    } else if (isMixedLM) {
+        text += `R-squared = ${result.r_squared != null ? result.r_squared.toFixed(4) : 'N/A'}`;
+        if (result.adj_r_squared != null) text += `, Adj R-squared = ${result.adj_r_squared.toFixed(4)}`;
+        text += `.\nRMSE = ${result.rmse != null ? result.rmse.toFixed(4) : 'N/A'}.\n`;
+        text += `Groups = ${result.group_count || 'N/A'}.\n`;
     } else {
-        // OLS-specific stats
         if (result.f_statistic) {
             const df1 = result.n_params - 1;
             const df2 = result.df_resid;
@@ -981,15 +1069,18 @@ function renderSummaryText(result) {
     text += `AIC = ${result.aic != null ? result.aic.toFixed(2) : 'N/A'}, BIC = ${result.bic != null ? result.bic.toFixed(2) : 'N/A'}.\n`;
     text += `N = ${result.n_obs}.\n\n`;
 
-    text += `${isLogit ? 'Logit ' : ''}Coefficients:\n`;
+    text += `${methodLabel} Coefficients:\n`;
     (result.coefficients || []).forEach(c => {
-        const statVal = isLogit ? (c.z_stat != null ? c.z_stat : c.t_stat) : c.t_stat;
+        const statVal = isMLE ? (c.z_stat != null ? c.z_stat : c.t_stat) : c.t_stat;
         const coefStr = c.coef != null ? c.coef.toFixed(6).padStart(12) : '         N/A';
         const seStr = c.se != null ? c.se.toFixed(6) : 'N/A';
         const statStr = statVal != null ? statVal.toFixed(4) : 'N/A';
-        let coefLine = `  ${c.name.padEnd(20)} ${coefStr} (SE: ${seStr}, ${isLogit ? 'z' : 't'}=${statStr}, p=${fmtPvalue(c.pvalue)}) ${c.significance}`;
+        let coefLine = `  ${c.name.padEnd(20)} ${coefStr} (SE: ${seStr}, ${isMLE ? 'z' : 't'}=${statStr}, p=${fmtPvalue(c.pvalue)}) ${c.significance}`;
         if (isLogit && c.odds_ratio != null) {
             coefLine += ` OR=${c.odds_ratio.toFixed(4)}`;
+        }
+        if (isCount && c.irr != null) {
+            coefLine += ` IRR=${c.irr.toFixed(4)}`;
         }
         text += coefLine + '\n';
     });
@@ -1735,26 +1826,30 @@ async function exportFormat(format) {
 }
 
 function generateCSVFromResult(result) {
-    const isLogit = result.model_type === 'logit';
-    const statLabel = isLogit ? 'z-value' : 't-value';
-    const statField = isLogit ? 'z_stat' : 't_stat';
-    const orHeader = isLogit ? ',Odds Ratio' : '';
+    const mt = result.model_type || '';
+    const isMLE = ['logit', 'probit', 'poisson', 'negbin'].includes(mt);
+    const isLogit = mt === 'logit';
+    const isCount = ['poisson', 'negbin'].includes(mt);
+    const statLabel = isMLE ? 'z-value' : 't-value';
+    const statField = isMLE ? 'z_stat' : 't_stat';
+    const extraHeader = isLogit ? ',Odds Ratio' : (isCount ? ',IRR' : '');
+    const extraField = isLogit ? 'odds_ratio' : (isCount ? 'irr' : '');
 
-    let lines = [`Variable,Coefficient,Std.Err.,${statLabel}${orHeader},p-value,CI(95%) Low,CI(95%) High,Significance`];
+    let lines = [`Variable,Coefficient,Std.Err.,${statLabel}${extraHeader},p-value,CI(95%) Low,CI(95%) High,Significance`];
     (result.coefficients || []).forEach(c => {
         const statVal = c[statField] != null ? c[statField] : (c.t_stat || 0);
-        const orVal = isLogit ? `,${c.odds_ratio || ''}` : '';
-        lines.push(`"${c.name}",${c.coef},${c.se},${statVal}${orVal},${c.pvalue},${c.ci_lower},${c.ci_upper},${c.significance}`);
+        const extraVal = extraField ? `,${c[extraField] || ''}` : '';
+        lines.push(`"${c.name}",${c.coef},${c.se},${statVal}${extraVal},${c.pvalue},${c.ci_lower},${c.ci_upper},${c.significance}`);
     });
     lines.push('');
     lines.push('# Model Summary');
-    if (isLogit) {
-        lines.push(`# Model Type,Logit`);
+    lines.push(`# Model Type,${mt.toUpperCase()}`);
+    if (isMLE) {
         lines.push(`# Pseudo R-squared,${result.pseudo_r_squared}`);
         lines.push(`# LR chi2,${result.llr}`);
         lines.push(`# LR p-value,${result.llr_pvalue}`);
+        if (isCount && result.dispersion != null) lines.push(`# Dispersion,${result.dispersion}`);
     } else {
-        lines.push(`# Model Type,OLS`);
         lines.push(`# R-squared,${result.r_squared}`);
         lines.push(`# Adj R-squared,${result.adj_r_squared}`);
         lines.push(`# RMSE,${result.rmse}`);

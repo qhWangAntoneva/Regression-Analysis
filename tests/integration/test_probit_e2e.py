@@ -332,11 +332,6 @@ class TestDataFrame:
         assert "z值" in df.columns
         assert "t值" not in df.columns
 
-    @pytest.mark.xfail(
-        reason="Pending shared-file fix: table.py to_dataframe() currently "
-               "adds OR(exp(B)) for ALL is_binary_choice models; needs to "
-               "restrict to logit only. See /tmp/probit_shared_changes.txt item 2."
-    )
     def test_dataframe_no_odds_ratio_column(self) -> None:
         """Probit DataFrame should NOT include an OR column."""
         data = make_binary_data(seed=42)
