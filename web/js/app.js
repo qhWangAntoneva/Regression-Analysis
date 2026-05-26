@@ -37,6 +37,8 @@ const STATE = {
     scatterCharts: {},         // {varName: chartSpec} cached scatter charts
     filterEnabled: false,      // Whether a data filter is active
     filterConditions: null,    // {col, type, min, max, values} filter spec
+    pyodideDegraded: false,    // True when Pyodide failed to load (degraded mode)
+    _pendingFile: null,        // File uploaded before Pyodide was ready
 };
 
 // =========================================================================
@@ -56,31 +58,93 @@ document.addEventListener('DOMContentLoaded', () => {
 // Pyodide Loading
 // =========================================================================
 
-// Ordered CDN URLs for Pyodide v0.27.5 fallback
-const PYODIDE_CDN_URLS = [
-    'https://cdn.jsdelivr.net/pyodide/v0.27.5/full/',
-    'https://unpkg.com/pyodide@0.27.5/full/',
-    'https://registry.npmmirror.com/pyodide/0.27.5/files/full/',
+// Ordered CDN configs for Pyodide v0.27.5 fallback
+// Each has url, name, region, and per-attempt timeout
+const PYODIDE_CDN_CONFIGS = [
+    { url: 'https://cdn.jsdelivr.net/pyodide/v0.27.5/full/', name: 'jsDelivr', region: 'global', timeoutMs: 15000 },
+    { url: 'https://unpkg.com/pyodide@0.27.5/full/',          name: 'unpkg',    region: 'global', timeoutMs: 20000 },
+    { url: 'https://pyodide-cdn2.organicstartup.com/v0.27.5/full/', name: 'Gcore', region: 'global', timeoutMs: 25000 },
+    { url: 'https://registry.npmmirror.com/pyodide/0.27.5/files/full/', name: 'npmmirror', region: 'china', timeoutMs: 20000 },
 ];
 
-const PYODIDE_PACKAGES = ['numpy', 'pandas', 'statsmodels', 'scipy', 'openpyxl'];
+// Version fallback chain (try newer first, fall back to older)
+const PYODIDE_VERSIONS = ['0.27.5', '0.27.4', '0.27.3'];
+
+const PYODIDE_PACKAGES = ['numpy', 'pandas', 'statsmodels', 'scipy'];
+// openpyxl is lazy-loaded only when Excel export is requested (see exportFormat)
 
 /**
  * Dynamically load a script and return a Promise that resolves on load.
  */
-function loadScript(url) {
+function loadScript(url, timeoutMs) {
     return new Promise(function (resolve, reject) {
         var script = document.createElement('script');
         script.src = url;
-        script.onload = resolve;
-        script.onerror = function () {
-            reject(new Error('Failed to load script: ' + url));
-        };
+        var timer = setTimeout(function () {
+            script.onload = null;
+            script.onerror = null;
+            script.remove();
+            reject(new Error('Timeout (' + timeoutMs + 'ms): ' + url));
+        }, timeoutMs || 15000);
+        script.onload = function () { clearTimeout(timer); resolve(); };
+        script.onerror = function () { clearTimeout(timer); reject(new Error('Failed to load script: ' + url)); };
         document.head.appendChild(script);
     });
 }
 
+async function checkCDNReachable(cdnUrl, timeoutMs) {
+    var testUrl = cdnUrl + 'pyodide.asm.js';
+    try {
+        var ctrl = new AbortController();
+        var t = setTimeout(function () { ctrl.abort(); }, timeoutMs || 5000);
+        var resp = await fetch(testUrl, { method: 'HEAD', signal: ctrl.signal });
+        clearTimeout(t);
+        return resp.ok;
+    } catch (_) { return false; }
+}
+
+function extractCDNName(url) {
+    if (url.includes('cdn.jsdelivr.net')) return 'jsDelivr';
+    if (url.includes('unpkg.com')) return 'unpkg';
+    if (url.includes('pyodide-cdn2.organicstartup.com')) return 'Gcore';
+    if (url.includes('npmmirror.com')) return 'npmmirror';
+    return url;
+}
+
+function buildCDNConfigs(version) {
+    return [
+        { url: 'https://cdn.jsdelivr.net/pyodide/v' + version + '/full/', name: 'jsDelivr v' + version, region: 'global', timeoutMs: 15000 },
+        { url: 'https://unpkg.com/pyodide@' + version + '/full/',          name: 'unpkg v' + version,    region: 'global', timeoutMs: 20000 },
+        { url: 'https://pyodide-cdn2.organicstartup.com/v' + version + '/full/', name: 'Gcore v' + version, region: 'global', timeoutMs: 25000 },
+        { url: 'https://registry.npmmirror.com/pyodide/' + version + '/files/full/', name: 'npmmirror v' + version, region: 'china', timeoutMs: 20000 },
+    ];
+}
+
+/** Lazy-load Pyodide packages not needed at startup */
+var _lazyLoadedPackages = {};
+async function ensurePackage(pkg) {
+    if (_lazyLoadedPackages[pkg]) return;
+    if (!STATE.pyodideReady || !STATE.pyodide) {
+        throw new Error('Pyodide not ready. Cannot load package: ' + pkg);
+    }
+    await STATE.pyodide.loadPackage(pkg);
+    _lazyLoadedPackages[pkg] = true;
+}
+
+var _loadStartTime = null;
+var _pyodideRetryCount = 0;
+
 async function initPyodide() {
+    _pyodideRetryCount = 0;
+    return attemptPyodideLoad(false);
+}
+
+function retryPyodide() {
+    _pyodideRetryCount++;
+    return attemptPyodideLoad(true);
+}
+
+async function attemptPyodideLoad(isRetry) {
     var progressContainer = document.getElementById('pyodide-progress-container');
     var statusEl = document.getElementById('pyodide-status');
 
@@ -88,100 +152,294 @@ async function initPyodide() {
         var fill = document.getElementById('pyodide-progress-fill');
         var text = document.getElementById('pyodide-progress-text');
         if (fill) fill.style.width = percent + '%';
-        if (text) text.textContent = statusText;
-    }
-
-    var lastError = null;
-
-    for (var cdnIdx = 0; cdnIdx < PYODIDE_CDN_URLS.length; cdnIdx++) {
-        var cdnUrl = PYODIDE_CDN_URLS[cdnIdx];
-
-        for (var attempt = 0; attempt < 3; attempt++) {
-            var label = 'CDN ' + (cdnIdx + 1) + '/' + PYODIDE_CDN_URLS.length + ' attempt ' + (attempt + 1) + '/3';
-
-            try {
-                // --- Step 1: Show progress ---
-                updatePyodideProgress(5, 'Downloading Pyodide core (' + label + ')...');
-
-                // --- Step 2: Clean up previous loadPyodide ---
-                delete window.loadPyodide;
-
-                // --- Step 3: Load pyodide.js script dynamically ---
-                await loadScript(cdnUrl + 'pyodide.js');
-
-                // --- Step 4: Ensure loadPyodide is defined ---
-                if (typeof window.loadPyodide !== 'function') {
-                    await new Promise(function (r) { return setTimeout(r, 50); });
-                }
-                if (typeof window.loadPyodide !== 'function') {
-                    throw new Error('loadPyodide not defined from ' + cdnUrl);
-                }
-
-                updatePyodideProgress(10, 'Initializing Pyodide runtime...');
-
-                // --- Step 5: Initialize Pyodide from same CDN ---
-                var pyodide = await window.loadPyodide({
-                    indexURL: cdnUrl,
-                });
-
-                updatePyodideProgress(40, 'Pyodide core loaded. Installing packages...');
-
-                // --- Step 6: Install packages ---
-                await pyodide.loadPackage(PYODIDE_PACKAGES);
-
-                updatePyodideProgress(70, 'Packages installed. Importing modules...');
-
-                // --- Step 7: Load bridge module ---
-                var bridgeResp = await fetch('py/bridge.py');
-                if (!bridgeResp.ok) throw new Error('Failed to fetch bridge.py');
-                var bridgeCode = await bridgeResp.text();
-                pyodide.runPython(bridgeCode);
-
-                updatePyodideProgress(95, 'Bridge loaded. Finalizing...');
-
-                // --- Step 8: Store state and mark ready ---
-                STATE.pyodide = pyodide;
-                STATE.pyodideReady = true;
-
-                updatePyodideProgress(100, 'Ready');
-                progressContainer.classList.add('ready');
-                statusEl.classList.remove('hidden');
-
-                console.log('[Pyodide] Ready from', cdnUrl);
-                return;  // SUCCESS
-
-            } catch (err) {
-                lastError = err;
-                console.error('[Pyodide] ' + label + ' failed:', err.message);
-
-                // Clean up failed script elements
-                var failedScripts = document.querySelectorAll('script[src*="pyodide"]');
-                for (var i = 0; i < failedScripts.length; i++) {
-                    failedScripts[i].remove();
-                }
-
-                if (attempt < 2) {
-                    // Exponential backoff: 1s, 3s
-                    var delay = (attempt + 1) * (attempt + 1) * 1000;
-                    updatePyodideProgress(3, 'Retrying in ' + (delay / 1000) + 's (' + label + ')...');
-                    await new Promise(function (r) { return setTimeout(r, delay); });
-                }
+        if (text) {
+            var elapsed = '';
+            if (_loadStartTime) {
+                var secs = Math.round((Date.now() - _loadStartTime) / 1000);
+                elapsed = ' [' + secs + 's]';
             }
+            text.textContent = statusText + elapsed;
         }
     }
 
-    // All CDNs exhausted
-    console.error('[Pyodide] All CDN attempts exhausted:', lastError);
+    function progressHint(text) {
+        var hint = document.getElementById('pyodide-progress-hint');
+        if (hint) hint.textContent = text;
+    }
+
+    var lastError = null;
+    _loadStartTime = Date.now();
+    var versions = PYODIDE_VERSIONS;
+    var maxAttempts = isRetry ? 2 : 3;
+
+    progressHint(isRetry
+        ? 'Retry ' + _pyodideRetryCount + '... trying ' + versions.length + ' versions x ' + PYODIDE_CDN_CONFIGS.length + ' CDNs'
+        : 'First load may take 30-60s. Subsequent visits use browser cache (~5-10s).'
+    );
+
+    for (var verIdx = 0; verIdx < versions.length; verIdx++) {
+        var version = versions[verIdx];
+        var cdnConfigs = buildCDNConfigs(version);
+
+        // On retry 2+, reverse CDN order to avoid first-CDN bias
+        if (isRetry && _pyodideRetryCount > 1) {
+            cdnConfigs = [].concat(cdnConfigs).reverse();
+        }
+
+        for (var cdnIdx = 0; cdnIdx < cdnConfigs.length; cdnIdx++) {
+            var cdnConfig = cdnConfigs[cdnIdx];
+
+            for (var attempt = 0; attempt < maxAttempts; attempt++) {
+                var label = cdnConfig.name + ' attempt ' + (attempt + 1) + '/' + maxAttempts;
+
+                try {
+                    // Pre-check: skip unreachable CDNs quickly
+                    updatePyodideProgress(3, 'Checking ' + cdnConfig.name + ' (' + label + ')...');
+                    var reachable = await checkCDNReachable(cdnConfig.url, 5000);
+                    if (!reachable) {
+                        console.warn('[Pyodide] ' + cdnConfig.name + ' unreachable, skipping');
+                        continue;
+                    }
+
+                    updatePyodideProgress(8, 'Downloading Pyodide core (' + label + ')...');
+                    delete window.loadPyodide;
+                    await loadScript(cdnConfig.url + 'pyodide.js', cdnConfig.timeoutMs);
+
+                    if (typeof window.loadPyodide !== 'function') {
+                        await new Promise(function (r) { return setTimeout(r, 50); });
+                    }
+                    if (typeof window.loadPyodide !== 'function') {
+                        throw new Error('loadPyodide not defined');
+                    }
+
+                    updatePyodideProgress(15, 'Initializing Pyodide runtime (' + cdnConfig.name + ')...');
+                    var pyodide = await window.loadPyodide({ indexURL: cdnConfig.url });
+
+                    // Progressive package loading with granular progress
+                    var pkgProgress = 40;
+                    var packageGroups = [
+                        { pkgs: ['numpy'], label: 'numpy' },
+                        { pkgs: ['scipy'], label: 'scipy (largest)' },
+                        { pkgs: ['pandas'], label: 'pandas' },
+                        { pkgs: ['statsmodels'], label: 'statsmodels' },
+                    ];
+                    var pkgStep = 25 / packageGroups.length;
+
+                    for (var pg = 0; pg < packageGroups.length; pg++) {
+                        var group = packageGroups[pg];
+                        updatePyodideProgress(Math.round(pkgProgress), 'Installing ' + group.label + '...');
+                        await pyodide.loadPackage(group.pkgs);
+                        pkgProgress += pkgStep;
+                    }
+
+                    updatePyodideProgress(70, 'Packages installed. Importing modules...');
+
+                    var bridgeResp = await fetch('py/bridge.py');
+                    if (!bridgeResp.ok) throw new Error('Failed to fetch bridge.py');
+                    var bridgeCode = await bridgeResp.text();
+                    pyodide.runPython(bridgeCode);
+
+                    updatePyodideProgress(90, 'Bridge loaded. Finalizing...');
+
+                    STATE.pyodide = pyodide;
+                    STATE.pyodideReady = true;
+
+                    updatePyodideProgress(100, 'Ready');
+                    progressContainer.classList.add('ready');
+                    statusEl.textContent = 'Pyodide: Ready';
+                    statusEl.className = 'status-badge ready';
+                    statusEl.classList.remove('hidden');
+
+                    console.log('[Pyodide] Ready from', cdnConfig.url);
+
+                    // Hide degraded banner if present
+                    var banner = document.getElementById('degraded-banner');
+                    if (banner) banner.classList.add('hidden');
+
+                    // Process any pending file uploaded while Pyodide was loading
+                    if (STATE._pendingFile) {
+                        var pendingFile = STATE._pendingFile;
+                        STATE._pendingFile = null;
+                        handleFile(pendingFile);
+                    }
+
+                    return;
+
+                } catch (err) {
+                    lastError = err;
+                    console.error('[Pyodide] ' + label + ' failed:', err.message);
+                    var failedScripts = document.querySelectorAll('script[src*="pyodide"]');
+                    for (var i = 0; i < failedScripts.length; i++) {
+                        failedScripts[i].remove();
+                    }
+                    if (attempt < maxAttempts - 1) {
+                        var delay = 1000 * (attempt + 1);
+                        updatePyodideProgress(2, 'Retrying in ' + (delay / 1000) + 's (' + label + ')...');
+                        await new Promise(function (r) { return setTimeout(r, delay); });
+                    }
+                }
+            }
+        }
+
+        console.warn('[Pyodide] Version ' + version + ' exhausted, trying next');
+    }
+
+    // All versions and CDNs exhausted
+    console.error('[Pyodide] All attempts exhausted:', lastError);
     updatePyodideProgress(0, 'Error loading Pyodide');
     statusEl.textContent = 'Pyodide: Error';
     statusEl.className = 'status-badge error';
     statusEl.classList.remove('hidden');
     progressContainer.classList.add('hidden');
-    showError('data-error',
-        'Failed to load Python runtime (Pyodide). ' +
-        'Please check your internet connection and reload the page. ' +
-        'If the problem persists, try using a different network or browser.'
-    );
+
+    // Enter degraded mode (function defined in UX helpers section below)
+    if (typeof enterDegradedMode === 'function') {
+        enterDegradedMode(lastError);
+    }
+}
+
+// =========================================================================
+// Pyodide Error Handling & Degraded Mode
+// =========================================================================
+
+function enterDegradedMode(lastError) {
+    STATE.pyodideDegraded = true;
+
+    // Show degradation banner
+    showDegradationBanner(lastError);
+
+    // Auto-switch to Model tab where Gallery lives
+    document.getElementById('tab-btn-data').classList.remove('active');
+    document.getElementById('tab-data').classList.remove('active');
+    document.getElementById('tab-btn-model').classList.add('active');
+    document.getElementById('tab-model').classList.add('active');
+
+    // Disable upload area
+    var uploadArea = document.getElementById('upload-area');
+    if (uploadArea) {
+        uploadArea.classList.add('upload-area-disabled');
+        uploadArea.onclick = function () {
+            var banner = document.getElementById('degraded-banner');
+            if (banner) banner.classList.remove('hidden');
+        };
+    }
+
+    // Disable export tab
+    disableTabs('export');
+
+    // Scroll to gallery
+    setTimeout(function () {
+        var galleryEl = document.getElementById('gallery-grid');
+        if (galleryEl) galleryEl.scrollIntoView({ behavior: 'smooth' });
+    }, 300);
+}
+
+function showDegradationBanner(lastError) {
+    var banner = document.getElementById('degraded-banner');
+    var msgEl = document.getElementById('degraded-banner-message');
+    var diagEl = document.getElementById('degraded-banner-diagnostics');
+    var retryBtn = document.getElementById('btn-retry-pyodide');
+    var dismissBtn = document.getElementById('btn-dismiss-degraded');
+    if (!banner) return;
+
+    msgEl.innerHTML =
+        'The in-browser Python engine (Pyodide) could not load from any of ' +
+        (PYODIDE_CDN_CONFIGS ? PYODIDE_CDN_CONFIGS.length : 4) +
+        ' content delivery networks across ' +
+        PYODIDE_VERSIONS.length + ' versions. ' +
+        'File upload, custom regression, and Excel export are unavailable. ' +
+        '<strong>Gallery scenarios below still work</strong>.';
+
+    // Run CDN health check in background
+    checkCDNReachability(function (results) {
+        var details = 'Diagnostics:\n';
+        details += '  Total attempts: ' + (PYODIDE_CDN_CONFIGS ? PYODIDE_CDN_CONFIGS.length : 4) + ' CDNs x ' + PYODIDE_VERSIONS.length + ' versions\n';
+        if (lastError) {
+            details += '  Last error: ' + (lastError.message || String(lastError)) + '\n';
+        }
+        details += '\n  CDN Health:\n';
+        results.forEach(function (r) {
+            var icon = r.reachable ? '[OK]' : '[FAIL]';
+            details += '    ' + icon + ' ' + r.label + '\n';
+        });
+        diagEl.textContent = details;
+        diagEl.classList.remove('hidden');
+    });
+
+    banner.classList.remove('hidden');
+
+    // Wire retry button
+    if (retryBtn) {
+        retryBtn.onclick = function () {
+            retryBtn.disabled = true;
+            retryBtn.textContent = 'Loading...';
+            banner.classList.add('hidden');
+            document.getElementById('pyodide-progress-container').classList.remove('hidden');
+            var statusEl = document.getElementById('pyodide-status');
+            if (statusEl) statusEl.classList.add('hidden');
+            var uploadArea = document.getElementById('upload-area');
+            if (uploadArea) {
+                uploadArea.classList.remove('upload-area-disabled');
+                uploadArea.onclick = function () { document.getElementById('file-input').click(); };
+            }
+            if (typeof retryPyodide === 'function') {
+                retryPyodide();
+            } else {
+                location.reload();
+            }
+        };
+    }
+
+    // Wire dismiss button
+    if (dismissBtn) {
+        dismissBtn.onclick = function () {
+            banner.classList.add('hidden');
+        };
+    }
+}
+
+function checkCDNReachability(callback) {
+    var urls = typeof PYODIDE_CDN_CONFIGS !== 'undefined'
+        ? PYODIDE_CDN_CONFIGS.map(function (c) { return { url: c.url, name: c.name }; })
+        : [];
+    // Fallback if old constant exists
+    if (urls.length === 0 && typeof PYODIDE_CDN_URLS !== 'undefined') {
+        urls = PYODIDE_CDN_URLS.map(function (u) { return { url: u, name: extractCDNName ? extractCDNName(u) : u }; });
+    }
+    if (urls.length === 0) {
+        if (callback) callback([]);
+        return;
+    }
+
+    var results = [];
+    var pending = urls.length;
+
+    urls.forEach(function (cdn) {
+        var controller = new AbortController();
+        var timeout = setTimeout(function () { controller.abort(); }, 5000);
+
+        fetch(cdn.url + 'pyodide.js', { method: 'HEAD', signal: controller.signal })
+            .then(function (resp) {
+                clearTimeout(timeout);
+                results.push({
+                    label: cdn.name,
+                    reachable: true,
+                    detail: 'HTTP ' + resp.status,
+                });
+            })
+            .catch(function (err) {
+                clearTimeout(timeout);
+                results.push({
+                    label: cdn.name,
+                    reachable: false,
+                    detail: err.name === 'AbortError' ? 'Timeout' : err.message,
+                });
+            })
+            .finally(function () {
+                pending--;
+                if (pending === 0 && callback) callback(results);
+            });
+    });
 }
 
 // =========================================================================
@@ -291,7 +549,11 @@ function initUpload() {
 
 async function handleFile(file) {
     if (!STATE.pyodideReady) {
-        showError('data-error', 'Pyodide is still loading. Please wait and try again.');
+        // Store file for deferred processing when Pyodide finishes loading
+        STATE._pendingFile = file;
+        showFileInfo(file.name, file.size);
+        showProgress('upload-progress', false);
+        console.log('[Upload] Deferred: Pyodide not ready, file will process when loaded');
         return;
     }
 
@@ -1941,6 +2203,19 @@ async function exportFormat(format) {
             }
         } else if (format === 'excel') {
             if (pyodide && STATE.pyodideReady && !STATE.galleryLoaded) {
+                // Lazy-load openpyxl if not already loaded
+                try {
+                    await ensurePackage('openpyxl');
+                } catch (pkgErr) {
+                    console.warn('[Export] openpyxl load failed:', pkgErr.message);
+                    showError('export-error', 'Excel export requires additional download. Falling back to CSV.');
+                    let csv = generateCSVFromResult(STATE.result);
+                    if (STATE.galleryLoaded) {
+                        csv = '# Note: This result is from a pre-computed Gallery sample. Some statistics may be approximate.\n' + csv;
+                    }
+                    downloadBlob(csv, 'regression_results.csv', 'text/csv');
+                    return;
+                }
                 const excelResult = JSON.parse(pyodide.runPython(`export_excel(${JSON.stringify(resultStr)})`));
                 if (excelResult.success) {
                     const byteChars = atob(excelResult.excel_b64);

@@ -880,3 +880,96 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* --- Degraded Mode Banner ------------------------------------------------- */
+.degraded-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: var(--radius);
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+.degraded-banner.hidden {
+    display: none;
+}
+.degraded-banner-body {
+    flex: 1;
+    font-size: 0.9rem;
+    color: #664d03;
+}
+.degraded-banner-body strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-size: 1rem;
+}
+.degraded-banner-body p {
+    margin-bottom: 0.35rem;
+    line-height: 1.5;
+}
+.degraded-banner-diagnostics {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    max-height: 120px;
+    overflow-y: auto;
+}
+.degraded-banner-diagnostics.hidden {
+    display: none;
+}
+.degraded-banner-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* --- Retry Button States -------------------------------------------------- */
+#btn-retry-pyodide:disabled {
+    cursor: progress;
+    opacity: 0.7;
+}
+
+/* --- CDN Health Status ---------------------------------------------------- */
+.cdn-health-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    padding: 0.2rem 0;
+}
+.cdn-health-item .status-ok {
+    color: #155724;
+}
+.cdn-health-item .status-fail {
+    color: #721c24;
+}
+
+/* --- Upload area disabled state for degraded mode ------------------------- */
+.upload-area-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.upload-area-disabled .upload-link {
+    pointer-events: none;
+}
+
+/* --- Gallery scroll hint -------------------------------------------------- */
+.gallery-scroll-hint {
+    text-align: center;
+    padding: 0.75rem;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: color var(--transition);
+}
+.gallery-scroll-hint:hover {
+    color: var(--color-primary);
+}

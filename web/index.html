@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Regression Analysis — Web</title>
     <link rel="stylesheet" href="css/styles.css">
+    <!-- Preconnect to CDNs -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="dns-prefetch" href="https://unpkg.com">
+    <link rel="preconnect" href="https://registry.npmmirror.com">
+    <link rel="dns-prefetch" href="https://registry.npmmirror.com">
+    <link rel="preconnect" href="https://cdn.plot.ly">
+    <link rel="dns-prefetch" href="https://cdn.plot.ly">
     <!-- Plotly.js for chart rendering -->
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 </head>
@@ -19,7 +28,7 @@
         </div>
         <div class="header-right">
             <!-- Pyodide loading progress bar -->
-            <div id="pyodide-progress-container" class="pyodide-progress-container">
+            <div id="pyodide-progress-container" class="pyodide-progress-container" role="status" aria-live="polite">
                 <div class="pyodide-progress-track">
                     <div id="pyodide-progress-fill" class="pyodide-progress-fill" style="width:0%"></div>
                 </div>
@@ -74,7 +83,27 @@
                     <button id="btn-remove-file" class="btn btn-sm btn-outline">Remove</button>
                 </div>
 
-                <div id="data-error" class="error-box hidden"></div>
+                <div id="data-error" class="error-box hidden" role="alert" aria-live="assertive"></div>
+
+                <!-- Degraded mode banner (shown when Pyodide fails to load) -->
+                <div id="degraded-banner" class="degraded-banner hidden" role="alert" aria-live="polite">
+                    <div class="degraded-banner-body">
+                        <strong>Python runtime unavailable</strong>
+                        <p id="degraded-banner-message">
+                            The in-browser Python engine (Pyodide) could not load. File upload,
+                            custom regression, and Excel export are unavailable.
+                        </p>
+                        <p>
+                            <strong>Gallery scenarios below still work</strong> &mdash; they are
+                            pre-computed and do not require Pyodide. Click any card to explore.
+                        </p>
+                        <div id="degraded-banner-diagnostics" class="degraded-banner-diagnostics hidden"></div>
+                    </div>
+                    <div class="degraded-banner-actions">
+                        <button id="btn-retry-pyodide" class="btn btn-primary btn-sm" aria-label="Retry loading Python runtime">Retry Loading</button>
+                        <button id="btn-dismiss-degraded" class="btn btn-outline btn-sm">Dismiss</button>
+                    </div>
+                </div>
 
                 <!-- Data Preview -->
                 <div id="data-preview-container" class="hidden">
@@ -505,5 +534,12 @@
     <script src="js/gallery_data.js"></script>
     <!-- Application logic -->
     <script src="js/app.js"></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(function(err) {
+            console.warn('[SW] Registration failed:', err);
+        });
+    }
+    </script>
 </body>
 </html>
