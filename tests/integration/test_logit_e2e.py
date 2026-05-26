@@ -916,3 +916,405 @@ class TestBridgeLogitIntegration:
         # No NaN, Infinity, or other non-JSON-compliant values
         assert "NaN" not in re_serialized
         assert "Infinity" not in re_serialized
+
+
+# =========================================================================
+# Web-bridge categorical interaction tests
+# =========================================================================
+
+
+class TestBridgeCategoricalInteraction:
+    """Web bridge handles categorical interactions (cat x num, cat x cat)."""
+
+    @staticmethod
+    def _make_cat_data(n: int = 200, seed: int = 42) -> pd.DataFrame:
+        """Create test data with categorical and numeric columns."""
+        rng = np.random.default_rng(seed)
+        x1 = rng.normal(0, 1, n)
+        x2 = rng.normal(0, 1, n)
+        cat = rng.choice(["A", "B", "C"], n).astype(str)
+        cat2 = rng.choice(["X", "Y"], n).astype(str)
+        eta = 0.5 + 1.0 * x1 - 0.8 * x2
+        prob = 1.0 / (1.0 + np.exp(-eta))
+        y = (rng.random(n) < prob).astype(int)
+        return pd.DataFrame(
+            {"y": y, "x1": x1, "x2": x2, "cat": cat, "cat2": cat2}
+        )
+
+    @staticmethod
+    def _to_bridge_data(df: pd.DataFrame) -> dict:
+        """Convert a DataFrame to the bridge data_dict format."""
+        col_types = {
+            "y": "numeric",
+            "x1": "numeric",
+            "x2": "numeric",
+            "cat": "categorical",
+            "cat2": "categorical",
+        }
+        return {
+            "data": [list(df.columns)]
+            + [[str(v) for v in row] for _, row in df.iterrows()],
+            "columns": [
+                {"name": c, "col_type": col_types.get(c, "numeric")}
+                for c in df.columns
+            ],
+        }
+
+    def test_cat_x_num_interaction_coefficient_count(self) -> None:
+        """Cat x num interaction creates one coefficient per dummy level."""
+        import bridge
+
+        df = self._make_cat_data(seed=42)
+        data_dict = self._to_bridge_data(df)
+        spec_dict = {
+            "dep_var": "y",
+            "indep_vars": ["x1", "cat"],
+            "model_type": "logit",
+            "interactions": [["x1", "cat"]],
+        }
+        result = json.loads(
+            bridge.run_regression(json.dumps(data_dict), json.dumps(spec_dict))
+        )
+        assert result["success"], f"Bridge failed: {result.get('error')}"
+
+        coef_names = [c["name"] for c in result["coefficients"]]
+        # Intercept + x1 + cat_B + cat_C + x1:cat_B + x1:cat_C = 6
+        # (cat has 3 levels: A, B, C; A is baseline)
+        assert len(result["coefficients"]) == 6
+        assert "x1:cat_B" in coef_names
+        assert "x1:cat_C" in coef_names
+        assert "x1" in coef_names
+        assert "cat_B" in coef_names
+        assert "cat_C" in coef_names
+
+    def test_cat_x_cat_interaction_coefficient_count(self) -> None:
+        """Cat x cat interaction creates pairwise products of dummy levels."""
+        import bridge
+
+        df = self._make_cat_data(seed=42)
+        data_dict = self._to_bridge_data(df)
+        spec_dict = {
+            "dep_var": "y",
+            "indep_vars": ["x1", "cat", "cat2"],
+            "model_type": "logit",
+            "interactions": [["cat", "cat2"]],
+        }
+        result = json.loads(
+            bridge.run_regression(json.dumps(data_dict), json.dumps(spec_dict))
+        )
+        assert result["success"], f"Bridge failed: {result.get('error')}"
+
+        coef_names = [c["name"] for c in result["coefficients"]]
+        # cat: 3 levels (A/B/C) -> B, C dummies
+        # cat2: 2 levels (X/Y) -> Y dummy
+        # interactions: B:Y, C:Y (2 pairwise)
+        # Total: Intercept + x1 + cat_B + cat_C + cat2_Y + cat_B:cat2_Y + cat_C:cat2_Y = 7
+        assert len(result["coefficients"]) == 7
+        assert "cat_B:cat2_Y" in coef_names
+        assert "cat_C:cat2_Y" in coef_names
+        # Baseline levels (A and X) should NOT appear in interaction names
+        assert not any("A" in n or ":cat2_X" in n for n in coef_names)
+
+    def test_cat_x_num_interaction_labels(self) -> None:
+        """Cat x num interaction terms have human-readable labels."""
+        import bridge
+
+        df = self._make_cat_data(seed=42)
+        data_dict = self._to_bridge_data(df)
+        spec_dict = {
+            "dep_var": "y",
+            "indep_vars": ["x1", "cat"],
+            "model_type": "logit",
+            "interactions": [["x1", "cat"]],
+        }
+        result = json.loads(
+            bridge.run_regression(json.dumps(data_dict), json.dumps(spec_dict))
+        )
+        assert result["success"]
+
+        labels = result["variable_labels"]
+        assert labels.get("x1:cat_B") == "x1 x cat: B"
+        assert labels.get("x1:cat_C") == "x1 x cat: C"
+        assert labels.get("cat_B") == "cat: B"
+
+    def test_cat_x_cat_interaction_labels(self) -> None:
+        """Cat x cat interaction terms have human-readable labels."""
+        import bridge
+
+        df = self._make_cat_data(seed=42)
+        data_dict = self._to_bridge_data(df)
+        spec_dict = {
+            "dep_var": "y",
+            "indep_vars": ["x1", "cat", "cat2"],
+            "model_type": "logit",
+            "interactions": [["cat", "cat2"]],
+        }
+        result = json.loads(
+            bridge.run_regression(json.dumps(data_dict), json.dumps(spec_dict))
+        )
+        assert result["success"]
+
+        labels = result["variable_labels"]
+        assert labels.get("cat_B:cat2_Y") == "cat: B x cat2: Y"
+        assert labels.get("cat_C:cat2_Y") == "cat: C x cat2: Y"
+
+    def test_interaction_coefficients_all_finite(self) -> None:
+        """All interaction coefficients have finite values."""
+        import bridge
+
+        df = self._make_cat_data(seed=42)
+        data_dict = self._to_bridge_data(df)
+        for spec_dict in [
+            {
+                "dep_var": "y", "indep_vars": ["x1", "cat"],
+                "model_type": "logit", "interactions": [["x1", "cat"]],
+            },
+            {
+                "dep_var": "y", "indep_vars": ["x1", "cat", "cat2"],
+                "model_type": "logit", "interactions": [["cat", "cat2"]],
+            },
+        ]:
+            result = json.loads(
+                bridge.run_regression(
+                    json.dumps(data_dict), json.dumps(spec_dict)
+                )
+            )
+            assert result["success"]
+            for c in result["coefficients"]:
+                assert np.isfinite(c["coef"]), (
+                    f"Non-finite coef for {c['name']} in {spec_dict['interactions']}"
+                )
+                assert c["se"] > 0, (
+                    f"Non-positive SE for {c['name']} in {spec_dict['interactions']}"
+                )
+
+    def test_bridge_interaction_json_roundtrip(self) -> None:
+        """Bridge interaction results survive JSON serialization."""
+        import bridge
+
+        df = self._make_cat_data(seed=42)
+        data_dict = self._to_bridge_data(df)
+        spec_dict = {
+            "dep_var": "y",
+            "indep_vars": ["x1", "cat"],
+            "model_type": "logit",
+            "interactions": [["x1", "cat"]],
+        }
+        result_json = bridge.run_regression(
+            json.dumps(data_dict), json.dumps(spec_dict)
+        )
+        parsed = json.loads(result_json)
+        re_serialized = json.dumps(parsed)
+        assert "NaN" not in re_serialized
+        assert "Infinity" not in re_serialized
+
+    def test_num_x_num_interaction_still_works(self) -> None:
+        """Numeric-only interactions continue to work after refactor."""
+        import bridge
+
+        df = self._make_cat_data(seed=42)
+        data_dict = self._to_bridge_data(df)
+        spec_dict = {
+            "dep_var": "y",
+            "indep_vars": ["x1", "x2"],
+            "model_type": "logit",
+            "interactions": [["x1", "x2"]],
+        }
+        result = json.loads(
+            bridge.run_regression(json.dumps(data_dict), json.dumps(spec_dict))
+        )
+        assert result["success"], f"Bridge failed: {result.get('error')}"
+
+        coef_names = [c["name"] for c in result["coefficients"]]
+        # Intercept + x1 + x2 + x1:x2 = 4
+        assert len(result["coefficients"]) == 4
+        assert "x1:x2" in coef_names
+
+    def test_ols_with_cat_interaction(self) -> None:
+        """OLS model also handles categorical interactions correctly."""
+        import bridge
+
+        df = self._make_cat_data(seed=42)
+        # Use a continuous DV for OLS
+        df["y_cont"] = (
+            df["x1"] * 1.0
+            + np.random.default_rng(99).normal(0, 0.5, len(df))
+        )
+        data_dict = self._to_bridge_data(df)
+        spec_dict = {
+            "dep_var": "y_cont",
+            "indep_vars": ["x1", "cat"],
+            "model_type": "ols",
+            "interactions": [["x1", "cat"]],
+        }
+        result = json.loads(
+            bridge.run_regression(json.dumps(data_dict), json.dumps(spec_dict))
+        )
+        assert result["success"], f"Bridge failed: {result.get('error')}"
+
+        coef_names = [c["name"] for c in result["coefficients"]]
+        assert "x1:cat_B" in coef_names
+        assert "x1:cat_C" in coef_names
+        assert len(result["coefficients"]) == 6
+        # OLS-specific fields should be present
+        assert result["r_squared"] is not None
+        assert result["rmse"] is not None
+
+
+class TestBridgeVsPatsyInteraction:
+    """Coefficient values from the bridge match patsy-produced values."""
+
+    def _build_patsy_comparison(
+        self, df: pd.DataFrame, spec: ModelSpec
+    ) -> dict:
+        """Run a model via the Streamlit (patsy) path and return params."""
+        from src.modeling.specification import build_design_matrix
+        import statsmodels.api as sm
+
+        X, y = build_design_matrix(spec, df)
+        model_type = spec.model_type.lower()
+        if model_type == "logit":
+            fitted = sm.Logit(y, X).fit(disp=False)
+        else:
+            fitted = sm.OLS(y, X).fit()
+        return dict(zip(X.columns, fitted.params))
+
+    def test_cat_x_num_coefficients_match(self) -> None:
+        """Bridge cat x num coefficients match patsy coefficients."""
+        import bridge
+
+        df = TestBridgeCategoricalInteraction._make_cat_data(seed=42)
+        data_dict = TestBridgeCategoricalInteraction._to_bridge_data(df)
+
+        spec_sl = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "cat"],
+            interaction_terms=[("x1", "cat")],
+            model_type="logit",
+        )
+        patsy_params = self._build_patsy_comparison(df.copy(), spec_sl)
+
+        spec_dict = {
+            "dep_var": "y",
+            "indep_vars": ["x1", "cat"],
+            "model_type": "logit",
+            "interactions": [["x1", "cat"]],
+        }
+        result = json.loads(
+            bridge.run_regression(json.dumps(data_dict), json.dumps(spec_dict))
+        )
+        assert result["success"]
+
+        bridge_params = {c["name"]: c["coef"] for c in result["coefficients"]}
+
+        # Map patsy names to bridge names for comparison
+        # Patsy: cat[T.B] -> Bridge: cat_B
+        # Patsy: x1:cat[T.B] -> Bridge: x1:cat_B
+        name_map = {
+            "Intercept": "Intercept",
+            "x1": "x1",
+        }
+        for col_name in patsy_params:
+            if col_name in name_map:
+                continue
+            bridge_name = col_name.replace("[T.", "_").replace("]", "")
+            name_map[col_name] = bridge_name
+
+        for patsy_name, expected_val in patsy_params.items():
+            bridge_name = name_map[patsy_name]
+            assert bridge_name in bridge_params, (
+                f"Bridge missing coefficient: {bridge_name} (patsy: {patsy_name})"
+            )
+            actual_val = bridge_params[bridge_name]
+            assert np.isclose(actual_val, expected_val, atol=1e-4), (
+                f"Value mismatch for {bridge_name}: "
+                f"bridge={actual_val:.6f}, patsy={expected_val:.6f}"
+            )
+
+    def test_cat_x_cat_coefficients_match(self) -> None:
+        """Bridge cat x cat coefficients match patsy coefficients."""
+        import bridge
+
+        df = TestBridgeCategoricalInteraction._make_cat_data(seed=42)
+        data_dict = TestBridgeCategoricalInteraction._to_bridge_data(df)
+
+        spec_sl = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "cat", "cat2"],
+            interaction_terms=[("cat", "cat2")],
+            model_type="logit",
+        )
+        patsy_params = self._build_patsy_comparison(df.copy(), spec_sl)
+
+        spec_dict = {
+            "dep_var": "y",
+            "indep_vars": ["x1", "cat", "cat2"],
+            "model_type": "logit",
+            "interactions": [["cat", "cat2"]],
+        }
+        result = json.loads(
+            bridge.run_regression(json.dumps(data_dict), json.dumps(spec_dict))
+        )
+        assert result["success"]
+
+        bridge_params = {c["name"]: c["coef"] for c in result["coefficients"]}
+
+        # Map patsy names to bridge names
+        name_map = {
+            "Intercept": "Intercept",
+            "x1": "x1",
+        }
+        for col_name in patsy_params:
+            if col_name in name_map:
+                continue
+            bridge_name = col_name.replace("[T.", "_").replace("]", "")
+            name_map[col_name] = bridge_name
+
+        for patsy_name, expected_val in patsy_params.items():
+            bridge_name = name_map[patsy_name]
+            assert bridge_name in bridge_params, (
+                f"Bridge missing coefficient: {bridge_name} (patsy: {patsy_name})"
+            )
+            actual_val = bridge_params[bridge_name]
+            assert np.isclose(actual_val, expected_val, atol=1e-4), (
+                f"Value mismatch for {bridge_name}: "
+                f"bridge={actual_val:.6f}, patsy={expected_val:.6f}"
+            )
+
+    def test_num_x_num_coefficients_match(self) -> None:
+        """Bridge num x num coefficients match patsy coefficients."""
+        import bridge
+
+        df = TestBridgeCategoricalInteraction._make_cat_data(seed=42)
+        data_dict = TestBridgeCategoricalInteraction._to_bridge_data(df)
+
+        spec_sl = ModelSpec(
+            dep_var="y",
+            indep_vars=["x1", "x2"],
+            interaction_terms=[("x1", "x2")],
+            model_type="logit",
+        )
+        patsy_params = self._build_patsy_comparison(df.copy(), spec_sl)
+
+        spec_dict = {
+            "dep_var": "y",
+            "indep_vars": ["x1", "x2"],
+            "model_type": "logit",
+            "interactions": [["x1", "x2"]],
+        }
+        result = json.loads(
+            bridge.run_regression(json.dumps(data_dict), json.dumps(spec_dict))
+        )
+        assert result["success"]
+
+        bridge_params = {c["name"]: c["coef"] for c in result["coefficients"]}
+
+        for patsy_name, expected_val in patsy_params.items():
+            assert patsy_name in bridge_params, (
+                f"Bridge missing coefficient: {patsy_name}"
+            )
+            actual_val = bridge_params[patsy_name]
+            assert np.isclose(actual_val, expected_val, atol=1e-4), (
+                f"Value mismatch for {patsy_name}: "
+                f"bridge={actual_val:.6f}, patsy={expected_val:.6f}"
+            )

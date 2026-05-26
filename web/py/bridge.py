@@ -428,7 +428,7 @@ def run_regression(data_json: str, spec_json: str) -> str:
             except ValueError:
                 pass
 
-    # --- Add interaction terms ---
+    # --- Validate interaction terms ---
     interactions_list = spec_dict.get("interactions", [])
     if interactions_list:
         for pair in interactions_list:
@@ -440,14 +440,12 @@ def run_regression(data_json: str, spec_json: str) -> str:
                 return json.dumps({"success": False, "error": f"Interaction variable '{v1}' not in data after transforms."})
             if actual_v2 not in df_clean.columns:
                 return json.dumps({"success": False, "error": f"Interaction variable '{v2}' not in data after transforms."})
-            int_col = f"{v1}_x_{v2}"
-            df_clean[int_col] = df_clean[actual_v1].astype(float) * df_clean[actual_v2].astype(float)
-            indep_vars.append(int_col)
 
-    # Build design matrix
+    # Build design matrix (interactions handled inside, matching patsy structure)
     try:
         X, y, coef_names, transform_map = _build_design_matrix(
-            df_clean, dep_var, indep_vars, has_intercept
+            df_clean, dep_var, indep_vars, has_intercept,
+            interactions=interactions_list,
         )
     except Exception as e:
         return json.dumps({"success": False, "error": f"Design matrix error: {e}"})
@@ -593,11 +591,24 @@ def _build_design_matrix(
     dep_var: str,
     indep_vars: List[str],
     has_intercept: bool,
+    interactions: Optional[List[Tuple[str, str]]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, List[str], Dict[str, List[str]]]:
     """Build design matrix X and response vector y.
 
-    Handles categorical variables by creating dummy variables.
-    Returns (X, y, coef_names, transform_map).
+    Handles categorical variables by creating dummy variables via
+    ``pd.get_dummies(drop_first=True)`` and optionally creates
+    interaction columns for categorical-numeric and categorical-categorical
+    pairs, matching the structure that patsy would produce.
+
+    Args:
+        df: Cleaned DataFrame with all needed columns.
+        dep_var: Name of dependent variable column.
+        indep_vars: List of independent variable column names.
+        has_intercept: Whether to include an intercept column.
+        interactions: Optional list of ``(var1, var2)`` interaction pairs.
+
+    Returns:
+        (X, y, coef_names, transform_map)
     """
     dep_series = df[dep_var]
     if not pd.api.types.is_numeric_dtype(dep_series):
@@ -609,25 +620,74 @@ def _build_design_matrix(
             dep_series = pd.to_numeric(dep_series, errors="coerce")
     y = dep_series.astype(float).values
 
-    parts = []
-    coef_names = []
-    transform_map: Dict[str, List[str]] = {}
+    interactions = interactions or []
+
+    # ------------------------------------------------------------------
+    # Step 1: Build main-effect columns for each independent variable
+    # ------------------------------------------------------------------
+    var_columns: Dict[str, Tuple[List[str], np.ndarray]] = {}
 
     for var in indep_vars:
         series = df[var]
         if pd.api.types.is_numeric_dtype(series):
             vals = series.astype(float).values.reshape(-1, 1)
-            parts.append(vals)
-            coef_names.append(var)
-            transform_map[var] = [var]
+            names = [var]
         else:
             # Categorical: one-hot encode, drop first to avoid dummy trap
             dummies = pd.get_dummies(series, prefix=var, drop_first=True, dtype=float)
-            parts.append(dummies.values)
-            dummy_names = list(dummies.columns)
-            coef_names.extend(dummy_names)
-            transform_map[var] = dummy_names
+            names = list(dummies.columns)
+            vals = dummies.values
+        var_columns[var] = (names, vals)
 
+    # ------------------------------------------------------------------
+    # Step 2: Build interaction columns from the main-effect dummies
+    # ------------------------------------------------------------------
+    interaction_columns: Dict[Tuple[str, str], Tuple[List[str], np.ndarray]] = {}
+    for v1, v2 in interactions:
+        if v1 not in var_columns or v2 not in var_columns:
+            raise ValueError(
+                f"Interaction variable '{v1}' or '{v2}' not found in indep_vars."
+            )
+        names1, vals1 = var_columns[v1]
+        names2, vals2 = var_columns[v2]
+
+        int_names: List[str] = []
+        int_vals_list: List[np.ndarray] = []
+        for i, n1 in enumerate(names1):
+            col1 = vals1[:, i]
+            for j, n2 in enumerate(names2):
+                col2 = vals2[:, j]
+                int_name = f"{n1}:{n2}"
+                int_val = col1 * col2
+                int_names.append(int_name)
+                int_vals_list.append(int_val)
+
+        if int_vals_list:
+            interaction_columns[(v1, v2)] = (
+                int_names,
+                np.column_stack(int_vals_list),
+            )
+
+    # ------------------------------------------------------------------
+    # Step 3: Assemble the full design matrix
+    # ------------------------------------------------------------------
+    parts: List[np.ndarray] = []
+    coef_names: List[str] = []
+    transform_map: Dict[str, List[str]] = {}
+
+    for var in indep_vars:
+        names, vals = var_columns[var]
+        parts.append(vals)
+        coef_names.extend(names)
+        transform_map[var] = names
+
+    for (v1, v2), (names, vals) in interaction_columns.items():
+        parts.append(vals)
+        coef_names.extend(names)
+        int_key = f"{v1}:{v2}"
+        transform_map[int_key] = names
+
+    # Prepend intercept column (after main effects + interactions)
     if has_intercept:
         intercept_col = np.ones((len(y), 1))
         parts.insert(0, intercept_col)
@@ -646,28 +706,46 @@ def _build_variable_labels_for_web(
 ) -> Dict[str, str]:
     """Build human-readable labels for coefficient names.
 
-    For categorical dummy columns (e.g. ``education_本科``) the label is
-    ``education: 本科``.  Numeric columns and ``Intercept`` keep their
-    original names.
+    For categorical dummy columns (e.g. ``education_B``) the label is
+    ``education: B``.  Numeric columns and ``Intercept`` keep their
+    original names.  Interaction terms (containing ``:``) are split into
+    parts, each decoded individually, then joined with `` x ``.
 
     Args:
         coef_names: List of coefficient names from the design matrix.
-        transform_map: Mapping from original variable name to the list of
-            column names it produced in the design matrix.
+        transform_map: Mapping from original variable name (or interaction
+            key like ``"var1:var2"``) to the list of column names it
+            produced in the design matrix.
 
     Returns:
         Dictionary mapping each coefficient name to its display label.
     """
-    # Build reverse lookup: column_name -> original variable name
+    # Build reverse lookup: column_name -> original variable / interaction key
     col_to_var: Dict[str, str] = {}
     for var_name, col_names in transform_map.items():
         for cname in col_names:
             col_to_var[cname] = var_name
 
+    def _decode_single_part(part: str) -> str:
+        """Decode one part of a coefficient name (main effect or interaction fragment)."""
+        if part == "Intercept":
+            return "Intercept"
+        if part in col_to_var and col_to_var[part] != part:
+            var_name = col_to_var[part]
+            # The dummy column name is ``var_name + "_" + level``
+            level = part[len(var_name) + 1:]  # +1 for the "_" separator
+            return f"{var_name}: {level}"
+        return part
+
     labels: Dict[str, str] = {}
     for name in coef_names:
         if name == "Intercept":
             labels[name] = "Intercept"
+        elif ":" in name:
+            # Interaction term: split on ":", decode each fragment, rejoin
+            fragments = name.split(":")
+            decoded = [_decode_single_part(p) for p in fragments]
+            labels[name] = " x ".join(decoded)
         elif name in col_to_var and col_to_var[name] != name:
             # Categorical dummy: extract level after the variable prefix
             var_name = col_to_var[name]
