@@ -1,6 +1,6 @@
 # Regression Analysis — 交接文档
 
-> 最后更新: 2026-05-27 (Session 11 — 30 个 Usage Case Samples + subagent 工程流水线)
+> 最后更新: 2026-05-27 (Session 12 — Web Pyodide CDN 回退 + CI lint 妥善修复 + Node.js 24 迁移)
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 部署: https://qhwangantoneva.github.io/regression-analysis/
 
@@ -15,7 +15,7 @@
 | Phase 5.0-5.4 (Logit/UX/对齐/v1.1) | 完成 | 599 |
 | Phase 6.0 (v1.2 — 5 种新模型) | 完成 | 849 |
 | Phase 6.1 (Hausman/exposure/robust SE/noqa) | 完成 | 852 |
-| **当前** | **v1.2 + 30 usage samples** | **854 tests** |
+| **当前** | **v1.2 + 30 usage samples + CDN 回退 + lint 全绿** | **854 tests** |
 
 ### v1.2 新增统计模型
 
@@ -176,6 +176,14 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KE
 - [x] **Production bug 修复**: `ModelFitter.fit()` 未传递 `group_var`/`entity_var`/`time_var`/`panel_model` 至 `fit_spec`，已加 `getattr` 传递
 - [x] **回归验证**: 851 passed, 3 skipped, 0 failed
 
+### Session 12 — Web Pyodide CDN 回退 + CI lint 妥善修复 + Node.js 24 迁移 (已完成 — 2026-05-27)
+
+- [x] **Pyodide CDN 回退机制** (CRITICAL): 移除静态 `<script>` tag，改为动态加载 + 3 CDN 回退链 (jsDelivr → unpkg → npmmirror) + 每个 CDN 3 次重试（1s→3s 指数退避）
+- [x] **samples/ ruff lint 妥善解决** (MAJOR): 移除 `exclude = ["samples/"]`，添加 `per-file-ignores` (E402/F401) → `ruff --fix` 自动修复 61 个 → 手动修复 19 个 (E501 + invalid-syntax)
+- [x] **CI 防护**: 在 `ci.yml` 添加 `ruff check samples/` 步骤，确保未来新样本文件必须通过 lint
+- [x] **Node.js 20 → 24 迁移**: `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` 添加到 `ci.yml` + `deploy.yml`（June 2, 2026 死线前预防）
+- [x] **回归验证**: ruff check . 0 errors + ruff check samples/ 0 errors + mypy 0 errors + pytest 851 passed, 3 skipped, 0 failed
+
 ### v1.3+ 候选 (来自 TODO.md)
 
 - [ ] 岭回归 / Lasso / 弹性网 (sklearn adapter)
@@ -193,7 +201,8 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KE
 
 ```bash
 uv run python -m pytest tests/ -v              # 854 tests
-uv run ruff check                               # lint
+uv run ruff check .                              # lint (excl. samples/)
+uv run ruff check samples/                       # lint samples
 uv run mypy app/ --ignore-missing-imports       # type check
 uv run streamlit run app/app.py                 # 启动 Streamlit
 bash web/deploy.sh                               # 部署 Web 版
