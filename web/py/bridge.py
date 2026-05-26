@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Pyodide bridge module for Regression Analysis web app.
 
 This module runs inside the Pyodide (WebAssembly) Python runtime.
@@ -18,7 +17,7 @@ import io
 import json
 import sys
 import warnings
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -31,9 +30,9 @@ warnings.filterwarnings("ignore")
 # ===========================================================================
 
 
-def _detect_categorical_columns(df: pd.DataFrame) -> Dict[str, str]:
+def _detect_categorical_columns(df: pd.DataFrame) -> dict[str, str]:
     """Classify each column as 'numeric', 'categorical', or 'id'."""
-    types: Dict[str, str] = {}
+    types: dict[str, str] = {}
     nrows = len(df)
 
     for col in df.columns:
@@ -396,7 +395,7 @@ def run_regression(data_json: str, spec_json: str) -> str:
 
     # --- Apply variable transformations ---
     transforms = spec_dict.get("transforms", {})
-    var_name_map: Dict[str, str] = {}  # original -> transformed column name
+    var_name_map: dict[str, str] = {}  # original -> transformed column name
     if transforms:
         for var, ttype in transforms.items():
             if var not in df_clean.columns:
@@ -589,10 +588,10 @@ def run_regression(data_json: str, spec_json: str) -> str:
 def _build_design_matrix(
     df: pd.DataFrame,
     dep_var: str,
-    indep_vars: List[str],
+    indep_vars: list[str],
     has_intercept: bool,
-    interactions: Optional[List[Tuple[str, str]]] = None,
-) -> Tuple[np.ndarray, np.ndarray, List[str], Dict[str, List[str]]]:
+    interactions: list[tuple[str, str]] | None = None,
+) -> tuple[np.ndarray, np.ndarray, list[str], dict[str, list[str]]]:
     """Build design matrix X and response vector y.
 
     Handles categorical variables by creating dummy variables via
@@ -625,7 +624,7 @@ def _build_design_matrix(
     # ------------------------------------------------------------------
     # Step 1: Build main-effect columns for each independent variable
     # ------------------------------------------------------------------
-    var_columns: Dict[str, Tuple[List[str], np.ndarray]] = {}
+    var_columns: dict[str, tuple[list[str], np.ndarray]] = {}
 
     for var in indep_vars:
         series = df[var]
@@ -642,7 +641,7 @@ def _build_design_matrix(
     # ------------------------------------------------------------------
     # Step 2: Build interaction columns from the main-effect dummies
     # ------------------------------------------------------------------
-    interaction_columns: Dict[Tuple[str, str], Tuple[List[str], np.ndarray]] = {}
+    interaction_columns: dict[tuple[str, str], tuple[list[str], np.ndarray]] = {}
     for v1, v2 in interactions:
         if v1 not in var_columns or v2 not in var_columns:
             raise ValueError(
@@ -651,8 +650,8 @@ def _build_design_matrix(
         names1, vals1 = var_columns[v1]
         names2, vals2 = var_columns[v2]
 
-        int_names: List[str] = []
-        int_vals_list: List[np.ndarray] = []
+        int_names: list[str] = []
+        int_vals_list: list[np.ndarray] = []
         for i, n1 in enumerate(names1):
             col1 = vals1[:, i]
             for j, n2 in enumerate(names2):
@@ -671,9 +670,9 @@ def _build_design_matrix(
     # ------------------------------------------------------------------
     # Step 3: Assemble the full design matrix
     # ------------------------------------------------------------------
-    parts: List[np.ndarray] = []
-    coef_names: List[str] = []
-    transform_map: Dict[str, List[str]] = {}
+    parts: list[np.ndarray] = []
+    coef_names: list[str] = []
+    transform_map: dict[str, list[str]] = {}
 
     for var in indep_vars:
         names, vals = var_columns[var]
@@ -701,9 +700,9 @@ def _build_design_matrix(
 
 
 def _build_variable_labels_for_web(
-    coef_names: List[str],
-    transform_map: Dict[str, List[str]],
-) -> Dict[str, str]:
+    coef_names: list[str],
+    transform_map: dict[str, list[str]],
+) -> dict[str, str]:
     """Build human-readable labels for coefficient names.
 
     For categorical dummy columns (e.g. ``education_B``) the label is
@@ -721,7 +720,7 @@ def _build_variable_labels_for_web(
         Dictionary mapping each coefficient name to its display label.
     """
     # Build reverse lookup: column_name -> original variable / interaction key
-    col_to_var: Dict[str, str] = {}
+    col_to_var: dict[str, str] = {}
     for var_name, col_names in transform_map.items():
         for cname in col_names:
             col_to_var[cname] = var_name
@@ -737,7 +736,7 @@ def _build_variable_labels_for_web(
             return f"{var_name}: {level}"
         return part
 
-    labels: Dict[str, str] = {}
+    labels: dict[str, str] = {}
     for name in coef_names:
         if name == "Intercept":
             labels[name] = "Intercept"
@@ -761,12 +760,12 @@ def _extract_model_result(
     fitted,
     df: pd.DataFrame,
     dep_var: str,
-    indep_vars: List[str],
-    coef_names: List[str],
+    indep_vars: list[str],
+    coef_names: list[str],
     has_intercept: bool,
     alpha: float,
     cov_type: str,
-    transform_map: Dict[str, List[str]],
+    transform_map: dict[str, list[str]],
 ) -> str:
     """Extract ModelResult from fitted statsmodels OLS and return JSON."""
     variable_labels = _build_variable_labels_for_web(coef_names, transform_map)
@@ -852,11 +851,11 @@ def _extract_model_result(
 def _extract_logit_result(
     fitted,
     dep_var: str,
-    indep_vars: List[str],
-    coef_names: List[str],
+    indep_vars: list[str],
+    coef_names: list[str],
     has_intercept: bool,
     alpha: float,
-    transform_map: Dict[str, List[str]],
+    transform_map: dict[str, list[str]],
     df_clean: pd.DataFrame,
 ) -> str:
     """Extract logit regression results into JSON."""
@@ -950,11 +949,11 @@ def _extract_logit_result(
 def _extract_probit_result(
     fitted,
     dep_var: str,
-    indep_vars: List[str],
-    coef_names: List[str],
+    indep_vars: list[str],
+    coef_names: list[str],
     has_intercept: bool,
     alpha: float,
-    transform_map: Dict[str, List[str]],
+    transform_map: dict[str, list[str]],
     df_clean: pd.DataFrame,
 ) -> str:
     """Extract probit regression results into JSON (no odds ratios)."""
@@ -1037,11 +1036,11 @@ def _extract_probit_result(
 def _extract_count_result(
     fitted,
     dep_var: str,
-    indep_vars: List[str],
-    coef_names: List[str],
+    indep_vars: list[str],
+    coef_names: list[str],
     has_intercept: bool,
     alpha: float,
-    transform_map: Dict[str, List[str]],
+    transform_map: dict[str, list[str]],
     df_clean: pd.DataFrame,
 ) -> str:
     """Extract Poisson/NegBin regression results into JSON (with IRR)."""
@@ -1162,11 +1161,11 @@ def _extract_count_result(
 def _extract_mixedlm_result(
     fitted,
     dep_var: str,
-    indep_vars: List[str],
-    coef_names: List[str],
+    indep_vars: list[str],
+    coef_names: list[str],
     has_intercept: bool,
     alpha: float,
-    transform_map: Dict[str, List[str]],
+    transform_map: dict[str, list[str]],
     df_clean: pd.DataFrame,
     spec_dict: dict,
 ) -> str:
@@ -1274,11 +1273,11 @@ def _extract_mixedlm_result(
 def _extract_panel_result(
     fitted,
     dep_var: str,
-    indep_vars: List[str],
-    coef_names: List[str],
+    indep_vars: list[str],
+    coef_names: list[str],
     has_intercept: bool,
     alpha: float,
-    transform_map: Dict[str, List[str]],
+    transform_map: dict[str, list[str]],
     df_clean: pd.DataFrame,
     spec_dict: dict,
 ) -> str:
@@ -1465,7 +1464,7 @@ def compute_diagnostics(data_json: str, result_json: str) -> str:
     })
 
 
-def _compute_vif(data_json: str, result: dict) -> Optional[List[dict]]:
+def _compute_vif(data_json: str, result: dict) -> list[dict] | None:
     """Compute VIF for predictor variables."""
     try:
         from statsmodels.stats.outliers_influence import variance_inflation_factor
@@ -1568,7 +1567,7 @@ def _compute_residual_tests(residuals: np.ndarray) -> dict:
     return result
 
 
-def _compute_anova(rmse: float, r_squared: Optional[float],
+def _compute_anova(rmse: float, r_squared: float | None,
                    n_obs: int, n_params: int, result: dict) -> dict:
     """Compute ANOVA table from model results."""
     df_resid = result.get("df_resid", max(n_obs - n_params, 1))
@@ -1972,7 +1971,7 @@ def compare_models(model_results_json: str) -> str:
         return json.dumps({"success": False, "error": "Need at least 2 models to compare."})
 
     # Collect all unique coefficient names (excluding Intercept) across models
-    all_coefs: List[str] = []
+    all_coefs: list[str] = []
     for m in models:
         coefs = m.get("result", {}).get("coefficients", [])
         for c in coefs:
@@ -2121,7 +2120,7 @@ def generate_scatter_chart(data_json: str, x_var: str, y_var: str) -> str:
         return json.dumps({"success": False, "error": f"DataFrame construction error: {e}"})
 
     if x_var not in df.columns or y_var not in df.columns:
-        return json.dumps({"success": False, "error": f"Variable not found in data."})
+        return json.dumps({"success": False, "error": "Variable not found in data."})
 
     # Drop rows with missing values in relevant columns
     df_scatter = df[[x_var, y_var]].dropna()
@@ -2552,7 +2551,7 @@ def export_excel(result_json: str) -> str:
     try:
         import openpyxl
         from openpyxl import Workbook
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
         wb = Workbook()
         ws = wb.active
