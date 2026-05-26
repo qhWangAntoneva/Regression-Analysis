@@ -77,8 +77,7 @@ async function initPyodide() {
         updatePyodideProgress(40, 'Pyodide core loaded. Installing packages...');
 
         // Stage 2: Installing packages (40-70%)
-        await pyodide.loadPackage(['numpy', 'pandas', 'statsmodels', 'scipy']);
-        // openpyxl not available in Pyodide — Excel export falls back to CSV
+        await pyodide.loadPackage(['numpy', 'pandas', 'statsmodels', 'scipy', 'openpyxl']);
 
         updatePyodideProgress(70, 'Packages installed. Importing modules...');
 
@@ -409,8 +408,9 @@ function populateVariableSelectors() {
     const dvSelect = document.getElementById('dep-var-select');
     dvSelect.innerHTML = '<option value="">-- Select dependent variable --</option>';
     columns.forEach(c => {
-        // Suggest numeric columns for DV
-        if (c.col_type === 'numeric') {
+        // Suggest numeric columns for DV, plus categorical columns with exactly 2 unique values
+        // (string-encoded binary variables like "Yes"/"No", "Male"/"Female")
+        if (c.col_type === 'numeric' || (c.col_type === 'categorical' && c.n_unique === 2)) {
             dvSelect.innerHTML += `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`;
         }
     });
@@ -654,15 +654,17 @@ async function runRegression() {
             generateCoefficientChart(resultJson),
         ];
 
-        // OLS-specific tasks
+        // Diagnostics (OLS only — VIF/residual tests don't apply to logit)
         if (result.model_type !== 'logit') {
             parallelTasks.push(computeAndRenderDiagnostics(dataJson, resultJson));
-            parallelTasks.push(generateAllScatterCharts(dataJson, result));
         }
+
+        // Scatter plots: available for both OLS and logit
+        parallelTasks.push(generateAllScatterCharts(dataJson, result));
 
         // Logit-specific tasks
         if (result.model_type === 'logit') {
-            parallelTasks.push(generateROCChart(dataJson, result.dep_var));
+            parallelTasks.push(generateROCChart(resultJson));
             parallelTasks.push(generateORChart(resultJson));
         }
 
@@ -1171,11 +1173,11 @@ function renderScatterCharts() {
 // Logit-specific Charts: ROC and OR Forest Plot
 // =========================================================================
 
-async function generateROCChart(dataJson, depVar) {
+async function generateROCChart(resultJson) {
     try {
         const pyodide = STATE.pyodide;
         const chartJson = pyodide.runPython(`
-            generate_roc_chart(${JSON.stringify(dataJson)}, ${JSON.stringify(depVar)})
+            generate_roc_chart(${JSON.stringify(resultJson)})
         `);
         const chart = JSON.parse(chartJson);
         if (chart.success && chart.chart) {

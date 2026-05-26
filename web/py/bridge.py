@@ -323,12 +323,21 @@ def run_regression(data_json: str, spec_json: str) -> str:
                         df_clean = df_clean.dropna(subset=[col])
 
             # Also handle dep_var missing values
+            # For logit models, use mode fill for the DV to avoid corrupting binary values
             if df_clean[dep_var].isna().any():
-                try:
-                    fill_val = df_clean[dep_var].mean() if missing_strategy == "mean" else df_clean[dep_var].median()
-                    df_clean[dep_var] = df_clean[dep_var].fillna(fill_val)
-                except Exception:
-                    df_clean = df_clean.dropna(subset=[dep_var])
+                if model_type == "logit":
+                    # Binary DV: fill with mode (most frequent class) instead of mean/median
+                    mode_vals = df_clean[dep_var].mode()
+                    if len(mode_vals) > 0:
+                        df_clean[dep_var] = df_clean[dep_var].fillna(mode_vals[0])
+                    else:
+                        df_clean = df_clean.dropna(subset=[dep_var])
+                else:
+                    try:
+                        fill_val = df_clean[dep_var].mean() if missing_strategy == "mean" else df_clean[dep_var].median()
+                        df_clean[dep_var] = df_clean[dep_var].fillna(fill_val)
+                    except Exception:
+                        df_clean = df_clean.dropna(subset=[dep_var])
 
     if len(df_clean) < 2:
         return json.dumps({"success": False, "error": "Not enough valid observations after handling missing values."})
@@ -436,7 +445,15 @@ def _build_design_matrix(
     Handles categorical variables by creating dummy variables.
     Returns (X, y, coef_names, transform_map).
     """
-    y = df[dep_var].astype(float).values
+    dep_series = df[dep_var]
+    if not pd.api.types.is_numeric_dtype(dep_series):
+        uniq = dep_series.dropna().unique()
+        if len(uniq) == 2:
+            mapping = {uniq[0]: 0, uniq[1]: 1}
+            dep_series = dep_series.map(mapping)
+        else:
+            dep_series = pd.to_numeric(dep_series, errors="coerce")
+    y = dep_series.astype(float).values
 
     parts = []
     coef_names = []
@@ -954,8 +971,15 @@ def generate_diagnostic_charts(result_json: str) -> str:
     else:
         charts["scale_location"] = None
 
-    if len(residuals) >= 3:
+    if len(residuals) >= 3 and result.get("model_type") != "logit":
         charts["cooks_distance"] = _make_cooks_chart(residuals, fitted_values, n_params)
+    elif result.get("model_type") == "logit":
+        # Cook's distance formula (OLS-based) is not applicable to logit model deviance residuals
+        charts["cooks_distance"] = _make_unavailable_chart(
+            "Cook's Distance",
+            "Cook's distance is not applicable to logit models. "
+            "Consider using Pregibon's delta-beta influence statistic instead."
+        )
     else:
         charts["cooks_distance"] = None
 
@@ -1200,6 +1224,29 @@ def _make_cooks_chart(residuals: np.ndarray, fitted: np.ndarray,
         "template": "plotly_white",
     }
     return {"data": traces, "layout": layout}
+
+
+def _make_unavailable_chart(title: str, message: str) -> dict:
+    """Create a placeholder chart showing a message when a diagnostic is unavailable."""
+    layout = {
+        "title": {"text": title, "x": 0.5},
+        "xaxis": {"visible": False},
+        "yaxis": {"visible": False},
+        "template": "plotly_white",
+        "annotations": [
+            {
+                "xref": "paper",
+                "yref": "paper",
+                "x": 0.5,
+                "y": 0.5,
+                "text": message,
+                "showarrow": False,
+                "font": {"size": 13, "color": "#666"},
+                "xanchor": "center",
+            }
+        ],
+    }
+    return {"data": [], "layout": layout}
 
 
 # ===========================================================================
@@ -1489,86 +1536,46 @@ def generate_scatter_chart(data_json: str, x_var: str, y_var: str) -> str:
 # ===========================================================================
 
 
-def generate_roc_chart(data_json: str, dep_var: str) -> str:
-    """Generate an ROC curve from data by fitting a simple logit model.
+def generate_roc_chart(result_json: str) -> str:
+    """Generate an ROC curve from the already-fitted logit model predictions.
 
-    Uses the entire set of independent variables already defined in the data.
-    Returns a Plotly chart spec JSON.
+    Uses the fitted_values (predicted probabilities) and y_actual from the
+    regression result dict, so the ROC reflects the user's actual model.
 
     Args:
-        data_json: JSON string with 'data' (list of lists) and 'columns'.
-        dep_var: Name of the binary dependent variable.
+        result_json: JSON string of a logit model result (from _extract_logit_result).
 
     Returns:
         JSON with success and chart (plotly spec).
     """
     try:
-        data_dict = json.loads(data_json)
+        result = json.loads(result_json)
     except json.JSONDecodeError as e:
         return json.dumps({"success": False, "error": f"JSON parse error: {e}"})
 
-    # Reconstruct DataFrame
-    try:
-        if "data" in data_dict and isinstance(data_dict["data"], list):
-            rows = data_dict["data"]
-            if len(rows) < 2:
-                return json.dumps({"success": False, "error": "Data has no rows."})
-            headers = rows[0]
-            df = pd.DataFrame(rows[1:], columns=headers)
-            if _validate_columns_metadata(data_dict.get("columns"), df):
-                for col_info in data_dict["columns"]:
-                    if col_info.get("col_type") == "numeric" and isinstance(col_info.get("name"), str) and col_info["name"] in df.columns:
-                        df[col_info["name"]] = pd.to_numeric(df[col_info["name"]], errors="coerce")
-            else:
-                print("[bridge] columns metadata missing or invalid, using dtype inference fallback", file=sys.stderr)
-                df = _infer_numeric_columns(df)
-        else:
-            return json.dumps({"success": False, "error": "Invalid data format."})
-    except Exception as e:
-        return json.dumps({"success": False, "error": f"DataFrame construction error: {e}"})
+    if result.get("model_type") != "logit":
+        return json.dumps({"success": False, "error": "ROC is only available for logit models."})
 
-    if dep_var not in df.columns:
-        return json.dumps({"success": False, "error": f"Variable '{dep_var}' not in data."})
+    y_pred_prob = np.array(result.get("fitted_values", []))
+    y_actual = np.array(result.get("y_actual", []))
 
-    # Get all numeric independent variables
-    numeric_cols = []
-    for col_info in (data_dict.get("columns") or []):
-        if col_info.get("col_type") == "numeric" and col_info["name"] != dep_var:
-            numeric_cols.append(col_info["name"])
-
-    if not numeric_cols:
-        return json.dumps({"success": False, "error": "No numeric independent variables for ROC computation."})
-
-    # Prepare data for ROC
-    df_roc = df[[dep_var] + numeric_cols].dropna()
-    if len(df_roc) < 5:
+    if len(y_pred_prob) < 5 or len(y_actual) < 5:
         return json.dumps({"success": False, "error": "Not enough valid observations for ROC (<5)."})
 
-    y = pd.to_numeric(df_roc[dep_var], errors="coerce").values
-    y_unique = np.unique(y)
+    if len(y_pred_prob) != len(y_actual):
+        return json.dumps({"success": False, "error": "Mismatch between predictions and actual values."})
+
+    y_unique = np.unique(y_actual)
     if len(y_unique) != 2:
         return json.dumps({
             "success": False,
             "error": f"ROC requires binary response. Found {len(y_unique)} unique values."
         })
 
-    # Code y as 0/1
-    y_binary = (y == y_unique[1]).astype(float)
+    # Code y as 0/1 (handle non-standard binary encodings like -1/+1 or string values)
+    y_binary = (y_actual == y_unique[1]).astype(float)
 
-    # Build design matrix from numeric predictors
-    X = df_roc[numeric_cols].astype(float).values
-    X = np.column_stack([np.ones(len(y_binary)), X])  # Add intercept
-
-    # Fit logit and get predicted probabilities
-    import statsmodels.api as sm
-    try:
-        model = sm.Logit(y_binary, X)
-        fitted = model.fit(disp=False)
-        y_pred_prob = fitted.predict()
-    except Exception as e:
-        return json.dumps({"success": False, "error": f"Logit fit error for ROC: {e}"})
-
-    # Compute ROC curve
+    # Compute ROC curve from the already-fitted predicted probabilities
     thresholds = np.sort(np.unique(y_pred_prob))[::-1]
     tpr_list = []
     fpr_list = []
