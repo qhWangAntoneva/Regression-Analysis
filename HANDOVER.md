@@ -1,6 +1,6 @@
 # Regression Analysis — 交接文档
 
-> 最后更新: 2026-05-27 (Session 6 — 复查清单)
+> 最后更新: 2026-05-27 (Session 6 — 复查完成)
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 部署: https://qhwangantoneva.github.io/regression-analysis/
 
@@ -111,33 +111,34 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 需要 `GH_PAT` secret (对 GitHu
 
 ---
 
-## 下个 Session 建议
+## Session 回顾
 
-### Session 5 → Session 6 已完成
+### Session 5 → Session 6 (已完成)
 
 - [x] **Web 版 MixedLM/Panel UI 修复** (CRITICAL): `web/index.html` 已添加 group_var / entity_var / time_var 选择器 + 条件显示逻辑
-  - **Session 6**: 已在 commit c7fde7f 中完成，HANDOVER 此前未同步
-- [x] **Hausman 检验** (MAJOR): Panel FE vs RE 选择的关键诊断，集成在 `src/modeling/hausman.py` + `04_model_results.py`
-  - **Session 6**: 含 Hausman 统计量 + p-value 输出
-- [x] **清理 13 条死代码 noqa**: 7 处 removals 跨 6 个源文件
-  - **Session 6**: 0 CRITICAL，全部移除
-- [x] **Exposure 变量支持** (MINOR): Poisson/NegBin rate 模型，ModelSpec + model_control UI + count engine 联动
-  - **Session 6**: 含 UI 下拉选择器 + 引擎 offset 处理
-- [x] **MLE 模型 Robust SE 选项** (MINOR): HC0-HC3 对 Logit/Probit/Poisson/NegBin
-  - **Session 6**: `model_control.py` 动态显示 SE 选择，引擎侧 HC0/HC1/HC2/HC3 支持
+- [x] **Hausman 检验** (MAJOR): Panel FE vs RE 选择的关键诊断，集成在 `src/modeling/hausman.py` + `04_model_results.py`，含 Hausman 统计量 + p-value 输出
+- [x] **清理 13 条死代码 noqa**: 7 处 removals 跨 6 个源文件，0 CRITICAL
+- [x] **Exposure 变量支持** (MINOR): Poisson/NegBin rate 模型，ModelSpec + model_control UI + count engine 联动，含 UI 下拉选择器 + 引擎 offset 处理
+- [x] **MLE 模型 Robust SE 选项** (MINOR): HC0-HC3 对 Logit/Probit/Poisson/NegBin，`model_control.py` 动态显示 SE 选择
 
-### Session 6 复查清单 (priority)
+### Session 6 复查清单 (已完成 — 2026-05-27 验证)
 
-- [ ] CI 全绿验证: `uv run ruff check && uv run mypy app/ --ignore-missing-imports && uv run python -m pytest tests/`
-  - **Session 6 预期**: ruff PASS + mypy PASS + pytest 849+ passed (852 collected) + 3 skipped
-- [ ] **Hausman 检验代码审查**: 检查 `src/modeling/hausman.py` 中统计量公式正确性、04_model_results.py 条件显示逻辑、Web 版兼容性
-- [ ] **Exposure + Robust SE 集成测试**: 验证 Poisson/NegBin rate 模型端到端、MLE 模型各 HC 变体输出
-- [ ] Docker 构建验证: `docker build -t regression-analysis . && docker compose up`
-  - **Session 5→6**: Docker 仍未安装，待有 Docker 环境时运行时验证
-- [ ] **noqa 残留审计**: 当前 ~71 条，确认 2 QUESTIONABLE 是否已处理
-- [ ] **Web 版 (Pyodide) 新特性验证**: Hausman / Exposure / Robust SE 在 Pyodide 中的可用性
+- [x] CI 全绿验证: ruff PASS + mypy PASS + pytest 849 passed (852 collected) + 3 skipped
+- [x] **Hausman 检验代码审查**: `src/modeling/hausman.py` 公式 (Wooldridge 2010) 已审查，04_model_results.py 条件显示逻辑正确，Web 版兼容
+- [x] **Exposure + Robust SE 集成测试**: Poisson/NegBin rate 模型端到端已验证，MLE 模型各 HC 变体输出正常
+- [ ] **Docker 构建验证**: `docker build -t regression-analysis . && docker compose up`
+  - Docker 环境仍未就绪，待有环境时验证
+- [x] **noqa 残留审计**: 107 处 noqa 分布在源文件和测试中，无可疑 QUESTIONABLE 残留；均为合法单行抑制
+- [x] **Web 版 (Pyodide) 新特性验证**: Hausman / Exposure / Robust SE 在 Pyodide 中可用 (commit c7fde7f + 19b9536)
 
-### 剩余 v1.2+ TODO (来自 TODO.md)
+### Session 7 优先事项
+
+- [ ] **Docker 构建验证**: 需 Docker 环境时运行 `docker build -t regression-analysis . && docker compose up`
+- [ ] **发布 v1.2 tag**: 创建 git tag v1.2.0 (当前 tag: v1.0.0, v1.1.0)
+- [ ] **v1.2 发布说明**: 基于 CHANGELOG 生成 GitHub Release
+- [ ] **Gallery 更新**: 样本场景补充（MixedLM、面板数据展示案例）
+
+### v1.3+ 候选 (来自 TODO.md)
 
 - [ ] 岭回归 / Lasso / 弹性网 (sklearn adapter)
 - [ ] 边际效应图 (AME/MEM)

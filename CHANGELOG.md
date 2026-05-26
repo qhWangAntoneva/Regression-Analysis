@@ -4,6 +4,51 @@ All notable changes to Regression Analysis will be documented in this file.
 
 ---
 
+## [1.2.0] — 2026-05-27
+
+### 新增功能 — 5 种新统计模型
+
+- **Probit 回归**：二分类 MLE 模型，z 统计量，McFadden 伪 R²，似然比检验
+- **Poisson 回归**：计数因变量 GLM，IRR (incidence rate ratio)，支持 exposure 变量（rate 模型）
+- **Negative Binomial 回归**：过度离散计数数据，含 dispersion 参数，支持 exposure 变量（rate 模型）
+- **MixedLM（多层次模型）**：嵌套数据 REML 估计，随机效应支持，group_var UI 选择器
+- **Panel FE/RE（面板数据模型）**：固定效应/随机效应，基于 linearmodels，含 Hausman 检验
+
+### Hausman 检验
+
+- Panel FE vs RE 选择的关键诊断，集成在结果页
+- Hausman 统计量 + p-value 输出
+- Wooldridge (2010) 公式实现
+
+### MLE 模型 Robust 标准误
+
+- HC0、HC1、HC2、HC3 四种稳健标准误选项
+- 支持 Logit、Probit、Poisson、NegBin 模型
+- `model_control.py` 动态 UI 显示 SE 选择器
+
+### 工程交付
+
+- **Docker 部署**：多阶段构建 (uv + Python 3.12-slim)，docker-compose.yml
+- **CI/CD**：GitHub Actions — ruff lint + mypy type check + pytest + coverage + GitHub Pages 部署 + Docker 推送
+- **Web bridge 分类变量交互**：cat×num、cat×cat 交互支持，与 patsy 输出对齐
+- **重构**：ModelResult 添加 `is_mle_model`/`is_binary_choice`/`is_count_model` 语义属性
+- **Web 版 MixedLM/Panel UI**：group_var/entity_var/time_var 选择器 + 条件显示逻辑
+- **Exposure 变量联动**：ModelSpec + UI 下拉选择器 + count engine offset 处理
+
+### 死代码清理
+
+- 移除 13 条欺诈性 noqa（imports/unused 变量），跨 6 个源文件
+- 消除所有 ruff CRITICAL 级别 lint 问题
+
+### 测试
+
+- 852 tests 全部通过（849 passed, 3 skipped，从 v1.1 的 560 tests 增长 52%）
+- 新增 Probit 引擎测试、Count 引擎测试 (Poisson/NegBin)、MixedLM 测试、Panel 测试
+- 新增 Hausman 检验测试、Exposure 变量测试、Robust SE 各 HC 变体测试
+- end-to-end 集成测试覆盖所有新模型
+
+---
+
 ## [1.1.0] — 2026-05-26
 
 ### 新增功能

@@ -20,8 +20,18 @@ permissions:
 jobs:
   # -----------------------------------------------------------------------
   # GitHub Pages — deploy web/ to qhWangAntoneva.github.io
+  #
+  # NOTE: This job requires GH_PAT (GitHub Personal Access Token) secret.
+  # To set it up:
+  #   1. Create a PAT at https://github.com/settings/tokens with repo scope
+  #   2. Add it as a repository secret named GH_PAT:
+  #      Settings → Secrets and variables → Actions → New repository secret
+  #   3. The PAT owner must have push access to qhWangAntoneva/qhWangAntoneva.github.io
+  #
+  # If GH_PAT is not configured, the job gracefully skips (no failure email).
   # -----------------------------------------------------------------------
   deploy-pages:
+    if: ${{ secrets.GH_PAT != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
