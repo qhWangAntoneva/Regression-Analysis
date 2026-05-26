@@ -245,9 +245,10 @@ def odds_ratio_plot(result: ModelResult) -> Figure:
     if not PLOTLY_AVAILABLE:
         raise ImportError("plotly is not installed. Run: pip install plotly")
 
-    if result.model_type != "logit":
+    if not result.is_binary_choice:
         raise ValueError(
-            f"odds_ratio_plot requires model_type='logit', got '{result.model_type}'"
+            f"odds_ratio_plot requires a binary choice model (logit/probit), "
+            f"got '{result.model_type}'"
         )
 
     # Filter out Intercept and build OR entries

@@ -147,6 +147,25 @@ class ModelResult:
     be ``education: 本科``.  Non-categorical columns map to themselves."""
 
     # ------------------------------------------------------------------
+    # Semantic model-type properties (Phase A)
+    # ------------------------------------------------------------------
+
+    @property
+    def is_mle_model(self) -> bool:
+        """MLE-based models: logit, probit, poisson, negbin."""
+        return self.model_type in ("logit", "probit", "poisson", "negbin")
+
+    @property
+    def is_binary_choice(self) -> bool:
+        """Binary outcome models: logit, probit."""
+        return self.model_type in ("logit", "probit")
+
+    @property
+    def is_count_model(self) -> bool:
+        """Count outcome models: poisson, negbin."""
+        return self.model_type in ("poisson", "negbin")
+
+    # ------------------------------------------------------------------
     # Existing methods
     # ------------------------------------------------------------------
 
@@ -160,7 +179,7 @@ class ModelResult:
             The test-statistic column is labelled ``'z值'`` for logit models
             and ``'t值'`` for OLS / default models.
         """
-        stat_col = "z值" if self.model_type == "logit" else "t值"
+        stat_col = "z值" if self.is_mle_model else "t值"
 
         rows: List[Dict[str, object]] = []
         for coef_row in self.coefficients:
@@ -174,8 +193,8 @@ class ModelResult:
                 "95%CI高": round(coef_row.ci_upper, 6),
                 "显著性": coef_row.significance,
             }
-            # Logit models: add odds ratio column
-            if self.model_type == "logit":
+            # Binary choice models: add odds ratio column
+            if self.is_binary_choice:
                 row["OR(exp(B))"] = round(np.exp(coef_row.coef), 6)
             rows.append(row)
 
@@ -193,9 +212,9 @@ class ModelResult:
         Returns:
             A formatted string summarizing the model fit.
         """
-        is_logit = self.model_type == "logit"
-        stat_header = "z" if is_logit else "t"
-        stat_p_label = "p>|z|" if is_logit else "p>|t|"
+        is_mle = self.is_mle_model
+        stat_header = "z" if is_mle else "t"
+        stat_p_label = "p>|z|" if is_mle else "p>|t|"
 
         lines: List[str] = []
         lines.append(f"{'=' * 60}")
@@ -209,8 +228,8 @@ class ModelResult:
         lines.append(f"  Residual DF:           {self.df_resid}")
         lines.append("")
 
-        if is_logit:
-            # Logit-specific diagnostics
+        if is_mle:
+            # MLE-specific diagnostics (pseudo R², LLR for all MLE models)
             lines.append(
                 f"  Pseudo R-squared:      {self.pseudo_r_squared:.6f}"
                 if self.pseudo_r_squared is not None
@@ -325,8 +344,8 @@ class ModelResult:
 
             For non-OLS models returns an empty DataFrame.
         """
-        if self.model_type not in ("OLS", "ols", ""):
-            # Logit / MLE models do not have SS decomposition
+        if self.is_mle_model:
+            # MLE models do not have SS decomposition
             return pd.DataFrame()
 
         # Recover sums of squares from available statistics
@@ -410,8 +429,8 @@ class ModelResult:
         aic_str = f"{self.aic:.2f}"
         bic_str = f"{self.bic:.2f}"
 
-        if self.model_type == "logit":
-            # Logit: pseudo-R² + LR test
+        if self.is_mle_model:
+            # MLE models: pseudo-R² + LR test
             pseudo_str = (
                 f"{self.pseudo_r_squared:.4f}"
                 if self.pseudo_r_squared is not None
@@ -509,26 +528,26 @@ def compare_models(results: Sequence[ModelResult]) -> pd.DataFrame:
         rows.append(row)
 
     # Add summary statistics rows at the bottom
-    # Determine if all models are logit, all OLS, or mixed
-    has_logit = any(getattr(r, "model_type", "") == "logit" for r in results)
-    has_ols = any(getattr(r, "model_type", "ols") != "logit" for r in results)
+    # Determine if all models are MLE, all OLS, or mixed
+    has_mle = any(getattr(r, "is_mle_model", False) for r in results)
+    has_ols = any(not getattr(r, "is_mle_model", False) for r in results)
 
-    if has_logit and has_ols:
+    if has_mle and has_ols:
         # Mixed: show common stats only
         stat_labels = ["N", "R² / 伪R²", "AIC", "BIC"]
         stat_getters = [
             lambda r: str(r.n_obs),
             lambda r: (
                 f"{r.pseudo_r_squared:.4f}"
-                if getattr(r, "model_type", "") == "logit" and r.pseudo_r_squared is not None
+                if getattr(r, "is_mle_model", False) and r.pseudo_r_squared is not None
                 else f"{r.r_squared:.4f}" if r.r_squared is not None
                 else "N/A"
             ),
             lambda r: f"{r.aic:.2f}",
             lambda r: f"{r.bic:.2f}",
         ]
-    elif has_logit:
-        # All logit
+    elif has_mle:
+        # All MLE
         stat_labels = ["N", "伪 R²", "LR χ²", "LR p", "AIC", "BIC"]
         stat_getters = [
             lambda r: str(r.n_obs),

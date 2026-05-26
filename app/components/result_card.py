@@ -38,7 +38,8 @@ def render_coefficient_table(
     if st is None:
         return
 
-    is_logit = getattr(result, "model_type", "") == "logit"
+    is_mle = getattr(result, "is_mle_model", False)
+    is_binary = getattr(result, "is_binary_choice", False)
     df = result.to_dataframe().reset_index()
 
     # Use human-readable variable labels if available
@@ -50,7 +51,7 @@ def render_coefficient_table(
         sig = row.get("显著性", "") if use_stars else ""
         ci_str = f"[{row['95%CI低']:.4f}, {row['95%CI高']:.4f}]"
 
-        stat_col = "z值" if is_logit else "t值"
+        stat_col = "z值" if is_mle else "t值"
         stat_val = row.get(stat_col, row.get("t值", row.get("z值", 0)))
 
         raw_name = str(row["变量"])
@@ -65,8 +66,8 @@ def render_coefficient_table(
             "显著性": sig,
         }
 
-        # Add OR column for logit models
-        if is_logit:
+        # Add OR column for binary choice models
+        if is_binary:
             import math
             or_val = math.exp(float(row["系数"]))
             row_data["OR (几率比)"] = round(or_val, 4)
@@ -94,7 +95,7 @@ def render_coefficient_table(
 
     styled = display_df.style.apply(_highlight_rows, axis=1)
 
-    stat_col_label = "z值" if is_logit else "t值"
+    stat_col_label = "z值" if is_mle else "t值"
     col_config = {
         "变量": st.column_config.TextColumn("变量"),
         "系数(B)": st.column_config.NumberColumn("系数(B)", format="%.6f"),
@@ -104,7 +105,7 @@ def render_coefficient_table(
         "95% CI": st.column_config.TextColumn("95% CI"),
         "显著性": st.column_config.TextColumn("显著性"),
     }
-    if is_logit:
+    if is_binary:
         col_config["OR (几率比)"] = st.column_config.NumberColumn("OR (几率比)", format="%.4f")
 
     st.dataframe(
@@ -115,7 +116,7 @@ def render_coefficient_table(
     )
 
     st.caption("* p<0.1, ** p<0.05, *** p<0.01")
-    if is_logit:
+    if is_binary:
         st.caption("OR (几率比) = exp(系数)，表示自变量每增加一个单位，因变量发生概率的倍率变化。")
     # Annotation uses correct color description based on active palette
     if get_color_scheme and st.session_state.get("colorblind_mode", False):
@@ -125,8 +126,8 @@ def render_coefficient_table(
 
     # SE type annotation
     se_type = getattr(result, "se_type", "nonrobust")
-    if is_logit:
-        st.caption("Logit 模型使用最大似然估计 (MLE)，标准误为渐近标准误。")
+    if is_mle:
+        st.caption("MLE 模型使用最大似然估计，标准误为渐近标准误。")
     elif se_type and se_type != "nonrobust":
         st.caption(f"使用稳健标准误: {se_type}")
     else:
@@ -161,12 +162,12 @@ def render_model_statistics(result: ModelResult) -> None:
         return
 
     summary = result.to_summary_dict()
-    is_logit = getattr(result, "model_type", "") == "logit"
+    is_mle = getattr(result, "is_mle_model", False)
 
     # Row 1: Model fit metrics
     col1, col2, col3 = st.columns(3)
     with col1:
-        if is_logit:
+        if is_mle:
             pr2 = summary.get("pseudo_r_squared")
             pr2_str = f"{pr2:.4f}" if pr2 is not None else "N/A"
             pr2_delta = None
@@ -192,7 +193,7 @@ def render_model_statistics(result: ModelResult) -> None:
             )
 
     with col2:
-        if is_logit:
+        if is_mle:
             llr_val = summary.get("llr")
             st.metric(
                 label="似然比检验 (LR χ²)",
@@ -206,7 +207,7 @@ def render_model_statistics(result: ModelResult) -> None:
             )
 
     with col3:
-        if is_logit:
+        if is_mle:
             llr_p = summary.get("llr_pvalue")
             st.metric(
                 label="LR p值",
@@ -236,7 +237,7 @@ def render_model_statistics(result: ModelResult) -> None:
     # Row 3: Test statistics (OLS) or sample info (logit)
     col1, col2, col3 = st.columns(3)
     with col1:
-        if is_logit:
+        if is_mle:
             st.metric(label="样本量 (N)", value=f"{summary.get('n_obs', 'N/A')}")
         else:
             f_stat = summary.get("f_statistic")
@@ -246,7 +247,7 @@ def render_model_statistics(result: ModelResult) -> None:
             )
 
     with col2:
-        if is_logit:
+        if is_mle:
             pass  # Row 1 already shows LR χ² and p-value
         else:
             f_p = summary.get("f_pvalue")
@@ -258,7 +259,7 @@ def render_model_statistics(result: ModelResult) -> None:
         st.metric(label="N (样本量)", value=str(n) if n else "N/A")
 
     # Warning for low fit
-    if is_logit:
+    if is_mle:
         pr2_warn = summary.get("pseudo_r_squared")
         if pr2_warn is not None and pr2_warn < 0.1:
             st.warning(

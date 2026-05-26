@@ -377,7 +377,7 @@ def run_regression(data_json: str, spec_json: str) -> str:
             # Also handle dep_var missing values
             # For logit models, use mode fill for the DV to avoid corrupting binary values
             if df_clean[dep_var].isna().any():
-                if model_type == "logit":
+                if model_type in ("logit", "probit"):
                     # Binary DV: fill with mode (most frequent class) instead of mean/median
                     mode_vals = df_clean[dep_var].mode()
                     if len(mode_vals) > 0:
@@ -455,7 +455,7 @@ def run_regression(data_json: str, spec_json: str) -> str:
     # Fit model (OLS or Logit)
     try:
         import statsmodels.api as sm
-        if model_type == "logit":
+        if model_type in ("logit", "probit", "poisson", "negbin"):
             # Logit requires binary response (0/1)
             y_unique = np.unique(y)
             if len(y_unique) != 2:
@@ -476,7 +476,7 @@ def run_regression(data_json: str, spec_json: str) -> str:
         return json.dumps({"success": False, "error": f"Fit error: {e}"})
 
     # Extract results
-    if model_type == "logit":
+    if model_type in ("logit", "probit", "poisson", "negbin"):
         return _extract_logit_result(fitted, dep_var, indep_vars,
                                      coef_names, has_intercept, alpha,
                                      transform_map, df_clean)

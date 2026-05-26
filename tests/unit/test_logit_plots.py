@@ -464,7 +464,7 @@ class TestOddsRatioPlotErrorHandling:
             n_params=2,
             df_resid=48,
         )
-        with pytest.raises(ValueError, match="requires model_type='logit'"):
+        with pytest.raises(ValueError, match="requires a binary choice model"):
             odds_ratio_plot(result)
 
     def test_const_intercept_filtered_out(self, sample_logit_result) -> None:

@@ -14,6 +14,9 @@ import numpy as np
 import pandas as pd
 import patsy
 
+SUPPORTED_MODEL_TYPES = ("ols", "logit", "probit", "mixedlm", "panel", "poisson", "negbin")
+"""All model types supported by the regression analysis framework."""
+
 
 @dataclass
 class ModelSpec:
@@ -48,6 +51,11 @@ class ModelSpec:
             raise ValueError("dep_var must be a non-empty string.")
         if not self.indep_vars:
             raise ValueError("indep_vars must be a non-empty list.")
+        if self.model_type not in SUPPORTED_MODEL_TYPES:
+            raise ValueError(
+                f"Unsupported model_type '{self.model_type}'. "
+                f"Must be one of {SUPPORTED_MODEL_TYPES}"
+            )
         # Check for duplicates
         combined = self.all_predictors
         if len(combined) != len(set(combined)):

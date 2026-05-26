@@ -53,7 +53,8 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
             "注意：Logit 模型不支持 F 检验，将使用似然比检验 (LR) 替代。"
         ),
     )
-    is_logit = model_type_label == "Logit"
+    is_mle = model_type_label == "Logit"
+    # Future: add "Probit" to the dropdown above, then is_mle drives SE hiding.
 
     with st.expander("高级选项", expanded=False):
         col_a, col_b = st.columns(2)
@@ -74,7 +75,7 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
             )
 
         # Standard error options — hidden for logit (MLE uses different theory)
-        if not is_logit:
+        if not is_mle:
             se_type = st.radio(
                 "标准误类型",
                 options=[
@@ -113,7 +114,7 @@ def render_model_controls(key_prefix: str = "model") -> Dict[str, Any]:
         "HC3": "HC3",
     }
     return {
-        "model_type": "logit" if is_logit else "ols",
+        "model_type": "logit" if is_mle else "ols",
         "add_constant": add_constant,
         "ci_level": ci_level,
         "se_type": _se_map.get(se_type, "nonrobust"),

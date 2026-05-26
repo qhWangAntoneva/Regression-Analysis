@@ -1140,7 +1140,7 @@ class TestLatexRendererLogit:
         latex = LatexRenderer.render_single(
             logit_result, title="Table 1"
         )
-        assert "Logistic Regression Results" in latex
+        assert "Binary Choice Regression Results" in latex
         assert "OLS" not in latex
 
     def test_render_comparison_mixed_models(self, fitted_result: ModelResult) -> None:

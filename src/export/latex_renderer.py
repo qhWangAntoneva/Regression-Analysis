@@ -55,15 +55,16 @@ class LatexRenderer:
         Returns:
             LaTeX source code string.
         """
-        is_logit = model_result.model_type == "logit"
+        is_binary = model_result.is_binary_choice
+        is_mle = model_result.is_mle_model
         lines: List[str] = []
 
         has_title = bool(title)
 
         if not caption:
             caption = (
-                "Logistic Regression Results"
-                if is_logit
+                "Binary Choice Regression Results"
+                if is_binary
                 else "OLS Regression Results"
             )
 
@@ -73,8 +74,8 @@ class LatexRenderer:
             lines.append(f"\\caption{{ {caption} }}")
             lines.append(f"\\label{{tab:{label}}}")
 
-        if is_logit:
-            # Logit table: OR column, z-statistic, 7 columns
+        if is_binary:
+            # Binary choice table: OR column, z-statistic, 7 columns
             stat_letter = "z"
             col_header = "OR (exp(B))"
             lines.append("\\begin{tabular}{lrrrrrr}")
@@ -84,19 +85,20 @@ class LatexRenderer:
                 "\\multicolumn{1}{c}{95\\% CI} \\\\"
             )
         else:
-            # OLS table: Coefficient, t-statistic, 6 columns
-            stat_letter = "t"
+            # Non-binary models: Coefficient column
+            stat_letter = "z" if is_mle else "t"
             col_header = "Coefficient"
+            n_cols_nonbinary = 6
             lines.append("\\begin{tabular}{lrrrrr}")
             lines.append("\\toprule")
             lines.append(
-                "Variable & Coefficient & SE & $t$ & $p$ & "
+                f"Variable & Coefficient & SE & ${stat_letter}$ & $p$ & "
                 "\\multicolumn{1}{c}{95\\% CI} \\\\"
             )
         lines.append("\\midrule")
 
         for coef in model_result.coefficients:
-            if is_logit:
+            if is_binary:
                 # Show odds ratios instead of raw coefficients
                 or_val = math.exp(coef.coef)
                 ci_lo = math.exp(coef.ci_lower)
@@ -122,9 +124,9 @@ class LatexRenderer:
 
         lines.append("\\midrule")
 
-        if is_logit:
-            # Logit footer: pseudo-R² and LR χ²
-            n_cols = 7
+        if is_mle:
+            # MLE footer: pseudo-R² and LR χ²
+            n_cols = 7 if is_binary else 6  # binary choice has OR column
             lines.append(
                 f"\\multicolumn{{{n_cols}}}{{l}}{{\\textit{{Fit statistics}}}} \\\\"
             )
@@ -255,9 +257,9 @@ class LatexRenderer:
 
         # Detect mixed model types
         model_types = [r.model_type for r in model_results]
-        has_logit = any(t == "logit" for t in model_types)
-        has_ols = any(t != "logit" for t in model_types)
-        mixed = has_logit and has_ols
+        has_mle = any(r.is_mle_model for r in model_results)
+        has_ols = any(not r.is_mle_model for r in model_results)
+        mixed = has_mle and has_ols
 
         lines: List[str] = []
 
@@ -282,9 +284,9 @@ class LatexRenderer:
         lines.append("\\midrule")
 
         # Model type row (shown when mixed or logit models present)
-        if mixed or has_logit:
+        if mixed or has_mle:
             type_parts = ["\\textit{Model type}"] + [
-                "Logit" if r.model_type == "logit" else "OLS"
+                r.model_type.capitalize() if r.model_type != "ols" else "OLS"
                 for r in model_results
             ]
             lines.append(" & ".join(type_parts) + " \\\\")

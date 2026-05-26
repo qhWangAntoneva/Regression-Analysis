@@ -205,11 +205,11 @@ def render() -> None:
     # ------------------------------------------------------------------
     st.divider()
 
-    is_logit_result = getattr(selected_result, "model_type", "") == "logit"
+    is_mle = getattr(selected_result, "is_mle_model", False)
 
-    if is_logit_result:
+    if is_mle:
         st.subheader("方差分析(ANOVA)表")
-        st.info("Logit 模型使用最大似然估计，不使用 ANOVA 平方和分解。"
+        st.info("MLE 模型使用最大似然估计，不使用 ANOVA 平方和分解。"
                 "请参考上方似然比检验 (LR χ²) 来评估模型整体显著性。")
     else:
         st.subheader("方差分析(ANOVA)表")
@@ -480,11 +480,11 @@ def _render_dot_whisker_plot(result: Any) -> None:
         opacity=0.5,
     )
 
-    is_logit = getattr(result, "model_type", "") == "logit"
-    x_label = "系数估计值 (log-odds)" if is_logit else "系数估计值"
+    is_binary = getattr(result, "is_binary_choice", False)
+    x_label = "系数估计值 (log-odds)" if is_binary else "系数估计值"
 
     fig.update_layout(
-        title="系数点图 (Dot-Whisker Plot)" if not is_logit else "系数点图 (Logit, Dot-Whisker Plot)",
+        title="系数点图 (Dot-Whisker Plot)" if not is_binary else "系数点图 (Logit/Probit, Dot-Whisker Plot)",
         xaxis_title=x_label,
         yaxis_title="变量",
         template=cs.get("plot_template", "plotly_white"),
@@ -505,26 +505,26 @@ def _fallback_model_statistics(result: Any) -> None:
     if st is None:
         return
 
-    is_logit = getattr(result, "model_type", "") == "logit"
+    is_mle = getattr(result, "is_mle_model", False)
 
     # Row 1: Model fit metrics (differs by model type)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        if is_logit:
+        if is_mle:
             pr2 = getattr(result, "pseudo_r_squared", None)
             st.metric("伪 R² (McFadden)", f"{pr2:.4f}" if pr2 is not None else "N/A")
         else:
             r2 = getattr(result, "r_squared", None)
             st.metric("R²", f"{r2:.4f}" if r2 is not None else "N/A")
     with col2:
-        if is_logit:
+        if is_mle:
             llr_val = getattr(result, "llr", None)
             st.metric("似然比检验 (LR χ²)", f"{llr_val:.4f}" if llr_val is not None else "N/A")
         else:
             adj = getattr(result, "adj_r_squared", None)
             st.metric("Adj. R²", f"{adj:.4f}" if adj is not None else "N/A")
     with col3:
-        if is_logit:
+        if is_mle:
             llr_p = getattr(result, "llr_pvalue", None)
             st.metric("LR p值", f"{llr_p:.6f}" if llr_p is not None else "N/A")
         else:
@@ -549,7 +549,7 @@ def _fallback_model_statistics(result: Any) -> None:
         ll = getattr(result, "log_likelihood", None)
         st.metric("Log-Likelihood", f"{ll:.4f}" if ll is not None else "N/A")
     with col4:
-        if not is_logit:
+        if not is_mle:
             rmse = getattr(result, "rmse", None)
             st.metric("RMSE", f"{rmse:.4f}" if rmse else "N/A")
         else:
@@ -574,8 +574,9 @@ def _fallback_coefficient_table(result: Any) -> None:
             st.info("系数表数据不可用。")
         return
 
-    is_logit = getattr(result, "model_type", "") == "logit"
-    stat_label = "z 值" if is_logit else "t 值"
+    is_mle = getattr(result, "is_mle_model", False)
+    is_binary = getattr(result, "is_binary_choice", False)
+    stat_label = "z 值" if is_mle else "t 值"
 
     table_data = []
     for coef in coefficients:
@@ -609,8 +610,8 @@ def _fallback_coefficient_table(result: Any) -> None:
                 else "-"
             ),
         }
-        # Add OR column for logit
-        if is_logit and est is not None:
+        # Add OR column for binary choice models
+        if is_binary and est is not None:
             import math
             or_val = math.exp(est)
             row["OR (几率比)"] = f"{or_val:.4f}"

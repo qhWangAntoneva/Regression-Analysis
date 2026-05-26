@@ -259,7 +259,7 @@ def render() -> None:
         unique_vals = dep_series.nunique()
         is_binary = unique_vals == 2
 
-        if model_config["model_type"] == "logit" and not is_binary:
+        if model_config["model_type"] in ("logit", "probit") and not is_binary:
             st.warning(
                 f":material/warning: 因变量「{dep_var}」有 {unique_vals} 个不同值，"
                 f"不适用于 Logit 模型。Logit 要求二分类因变量 (0/1)。"
@@ -480,18 +480,18 @@ def _display_quick_summary(result: ModelResult) -> None:
     if st is None:
         return
 
-    is_logit = getattr(result, "model_type", "") == "logit"
+    is_mle = getattr(result, "is_mle_model", False)
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        if is_logit:
+        if is_mle:
             pr2 = f"{result.pseudo_r_squared:.4f}" if result.pseudo_r_squared is not None else "N/A"
             st.metric("伪 R² (McFadden)", pr2)
         else:
             r2 = f"{result.r_squared:.4f}" if result.r_squared is not None else "N/A"
             st.metric("R²", r2)
     with col2:
-        if is_logit:
+        if is_mle:
             llr_val = f"{result.llr:.4f}" if result.llr is not None else "N/A"
             st.metric("LR χ²", llr_val)
         else:

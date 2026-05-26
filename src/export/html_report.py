@@ -150,7 +150,7 @@ class HtmlReportGenerator:
 
 <!-- 5. Diagnostic charts -->
 <h2>诊断图</h2>
-{% if is_logit %}
+{% if is_mle %}
 <div class="info-box">
   <strong>注意：</strong>Logistic 回归模型的传统残差诊断图（残差-拟合值图、Q-Q 图）
   参考价值有限，因为残差项并非来自正态分布。建议使用以下替代诊断方法：
@@ -182,7 +182,7 @@ class HtmlReportGenerator:
   <li>因变量: <strong>{{ dep_var }}</strong></li>
   <li>观测数: <strong>{{ n_obs }}</strong></li>
   <li>显著性标记: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.1</li>
-  {% if is_logit %}
+  {% if is_mle %}
   <li>Logistic 回归系数为对数几率（log-odds），OR = exp(B) 表示优势比。</li>
   <li>McFadden 伪 R² 的值通常低于 OLS 的 R²，0.2-0.4 已是良好的拟合。</li>
   {% else %}
@@ -222,14 +222,14 @@ class HtmlReportGenerator:
             A complete HTML document string.
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        is_logit = model_result.model_type == "logit"
+        is_mle = model_result.is_mle_model
         title = "回归分析报告"
         dep_var = model_result.dep_var or "N/A"
         n_obs = str(model_result.n_obs)
 
         # Model type badge
-        badge_class = "badge-logit" if is_logit else "badge-ols"
-        model_type_label = "Logit" if is_logit else "OLS"
+        badge_class = "badge-logit" if is_mle else "badge-ols"
+        model_type_label = "Logit" if is_mle else "OLS"
 
         # Coefficient table
         coef_table: Optional[pd.DataFrame] = None
@@ -240,7 +240,7 @@ class HtmlReportGenerator:
 
         # Model fit statistics (conditional on model type)
         fit_stats: Dict[str, str] = {}
-        if is_logit:
+        if is_mle:
             # Logit-specific fit statistics
             if model_result.pseudo_r_squared is not None:
                 fit_stats["McFadden 伪 R²"] = f"{model_result.pseudo_r_squared:.4f}"
@@ -289,7 +289,7 @@ class HtmlReportGenerator:
             n_obs=n_obs,
             badge_class=badge_class,
             model_type_label=model_type_label,
-            is_logit=is_logit,
+            is_mle=is_mle,
         )
 
     # ==================================================================

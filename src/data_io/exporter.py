@@ -367,8 +367,8 @@ class DataExporter:
 
         formula = f"{dep_var} ~ {rhs}"
 
-        is_logit = model_type == "logit"
-        smf_method = "logit" if is_logit else "ols"
+        is_mle = model_type in ("logit", "probit", "poisson", "negbin")
+        smf_method = "logit" if model_type == "logit" else "ols"
 
         lines = [
             '"""',
@@ -394,7 +394,7 @@ class DataExporter:
             "",
         ]
 
-        if is_logit:
+        if is_mle:
             lines += [
                 f'# Key statistics (logit)',
                 f'print(f"Pseudo R-squared: {{result.prsquared:.4f}}")',
@@ -467,7 +467,7 @@ def _get_model_summary(result: Any) -> str:
     spec = getattr(result, "specification", "")
     model_type = getattr(result, "model_type", "OLS")
     method = getattr(result, "method", "OLS")
-    is_logit = model_type == "logit"
+    is_mle = model_type in ("logit", "probit", "poisson", "negbin")
 
     lines.append(f"  因变量 (Dependent Variable):  {dep_var}")
     lines.append(f"  模型公式:                     {spec}")
@@ -484,8 +484,8 @@ def _get_model_summary(result: Any) -> str:
     lines.append(f"  残差自由度 (Residual DF):     {df_resid}" if df_resid is not None else "")
     lines.append("")
 
-    if is_logit:
-        # Logit-specific: pseudo R² and LR test
+    if is_mle:
+        # MLE-specific: pseudo R² and LR test
         pseudo_r2 = getattr(result, "pseudo_r_squared", None)
         if pseudo_r2 is not None:
             lines.append(f"  伪 R² (Pseudo R-squared):     {pseudo_r2:.6f}")
@@ -527,7 +527,7 @@ def _get_model_summary(result: Any) -> str:
     # 系数表
     coefficients = getattr(result, "coefficients", None)
     if coefficients:
-        stat_header = "z值" if is_logit else "t值"
+        stat_header = "z值" if is_mle else "t值"
         lines.append("-" * 60)
         lines.append(f"  {'变量':<20} {'系数':>12} {'标准误':>10} {stat_header:>8} {'p值':>8}")
         lines.append("-" * 60)

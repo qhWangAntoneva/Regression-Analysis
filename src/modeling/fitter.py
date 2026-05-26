@@ -124,7 +124,7 @@ class ModelFitter:
         if cov_type and cov_type != "nonrobust":
             spec_str += f"  [SE: {cov_type}]"
 
-        if spec.model_type == "logit":
+        if spec.model_type in ("logit", "probit", "poisson", "negbin"):
             fitted, var_labels = run_logit(working_data, fit_spec)
             result = extract_logit(
                 fitted_model=fitted,
