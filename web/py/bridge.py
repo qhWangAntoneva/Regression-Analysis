@@ -119,7 +119,6 @@ def parse_file(filename: str, content_b64: str) -> str:
         elif name_lower.endswith(".xls") and not name_lower.endswith(".xlsx"):
             # Old .xls format: try xlrd first, then fallback to openpyxl
             try:
-                import xlrd  # noqa: F811
                 df = pd.read_excel(io.BytesIO(content_bytes), engine="xlrd")
             except (ImportError, Exception):
                 try:
@@ -442,7 +441,7 @@ def run_regression(data_json: str, spec_json: str) -> str:
 
     # Build design matrix (interactions handled inside, matching patsy structure)
     try:
-        X, y, coef_names, transform_map = _build_design_matrix(
+        X, y, coef_names, transform_map = _build_design_matrix(  # noqa: N806
             df_clean, dep_var, indep_vars, has_intercept,
             interactions=interactions_list,
         )
@@ -533,7 +532,7 @@ def run_regression(data_json: str, spec_json: str) -> str:
             panel_idx = pd.MultiIndex.from_arrays(
                 [entity_vals, time_vals], names=[entity_col, time_col]
             )
-            X_panel = pd.DataFrame(X, index=panel_idx)
+            X_panel = pd.DataFrame(X, index=panel_idx)  # noqa: N806
             y_panel = pd.Series(y, index=panel_idx)
             panel_model_type = spec_dict.get("panel_model", "fixed")
             if panel_model_type == "random":
@@ -695,7 +694,7 @@ def _build_design_matrix(
     if not parts:
         raise ValueError("No predictor variables to build design matrix.")
 
-    X = np.column_stack(parts)
+    X = np.column_stack(parts)  # noqa: N806
     return X, y, coef_names, transform_map
 
 
@@ -1324,15 +1323,6 @@ def _extract_panel_result(
     overall_r2 = float(fitted.rsquared_overall) if hasattr(fitted, "rsquared_overall") else None
     r_squared = within_r2 if within_r2 is not None else overall_r2
 
-    # F-statistic
-    f_stat = None
-    if hasattr(fitted, "f_statistic") and fitted.f_statistic is not None:
-        try:
-            fs = fitted.f_statistic
-            f_stat = [float(fs.stat), float(fs.pval)]
-        except Exception:
-            pass
-
     log_likelihood = None
     try:
         if hasattr(fitted, "loglik") and fitted.loglik is not None:
@@ -1502,8 +1492,8 @@ def _compute_vif(data_json: str, result: dict) -> list[dict] | None:
         return None
 
     try:
-        X = df[numeric_vars].dropna().astype(float)
-        X_c = add_constant(X)
+        X = df[numeric_vars].dropna().astype(float)  # noqa: N806
+        X_c = add_constant(X)  # noqa: N806
 
         vif_rows = []
         for i in range(X_c.shape[1]):
@@ -1647,7 +1637,6 @@ def generate_diagnostic_charts(result_json: str) -> str:
 
     residuals = np.array(result.get("residuals", []))
     fitted_values = np.array(result.get("fitted_values", []))
-    n_obs = result.get("n_obs", 0)
     n_params = result.get("n_params", 0)
 
     charts = {}
@@ -2014,8 +2003,6 @@ def compare_models(model_results_json: str) -> str:
         estimates = []
         ci_lows = []
         ci_highs = []
-        text_labels = []
-
         for ci, name in enumerate(all_coefs):
             c = coef_dict.get(name)
             if c:
@@ -2153,7 +2140,7 @@ def generate_scatter_chart(data_json: str, x_var: str, y_var: str) -> str:
     y_pred_sorted = y_pred[sort_idx]
 
     # 95% CI band: se_pred = sqrt(MSE * (1/n + (x_i - x_mean)^2 / SXX))
-    SXX = float(np.sum((x - x_mean) ** 2))
+    SXX = float(np.sum((x - x_mean) ** 2))  # noqa: N806
     if SXX > 0 and mse > 0:
         try:
             from scipy import stats as scipy_stats
@@ -2252,16 +2239,25 @@ def generate_roc_chart(result_json: str) -> str:
         return json.dumps({"success": False, "error": f"JSON parse error: {e}"})
 
     if result.get("model_type") not in ("logit", "probit"):
-        return json.dumps({"success": False, "error": "ROC is only available for binary choice models (logit/probit)."})
+        return json.dumps({
+            "success": False,
+            "error": "ROC is only available for binary choice models (logit/probit).",
+        })
 
     y_pred_prob = np.array(result.get("fitted_values", []))
     y_actual = np.array(result.get("y_actual", []))
 
     if len(y_pred_prob) < 5 or len(y_actual) < 5:
-        return json.dumps({"success": False, "error": "Not enough valid observations for ROC (<5)."})
+        return json.dumps({
+            "success": False,
+            "error": "Not enough valid observations for ROC (<5).",
+        })
 
     if len(y_pred_prob) != len(y_actual):
-        return json.dumps({"success": False, "error": "Mismatch between predictions and actual values."})
+        return json.dumps({
+            "success": False,
+            "error": "Mismatch between predictions and actual values.",
+        })
 
     y_unique = np.unique(y_actual)
     if len(y_unique) != 2:
@@ -2405,8 +2401,11 @@ def generate_or_chart(result_json: str) -> str:
         "name": "Odds Ratio",
         "showlegend": False,
         "hovertemplate": "OR: %{x:.4f}<br>%{customdata}<extra></extra>",
-        "customdata": [f"OR={v:.4f} 95%CI [{l:.4f}, {h:.4f}] {_significance_stars(c.get('pvalue', 1))}"
-                       for v, l, h, c in zip(or_vals, or_lows, or_highs, sorted_coefs)],
+        "customdata": [
+            f"OR={v:.4f} 95%CI [{lo:.4f}, {hi:.4f}]"
+            f" {_significance_stars(c.get('pvalue', 1))}"
+            for v, lo, hi, c in zip(or_vals, or_lows, or_highs, sorted_coefs)
+        ],
     })
 
     # Reference line at OR = 1
@@ -2498,7 +2497,11 @@ def export_csv(result_json: str) -> str:
         extra_col = ",IRR"
         extra_field = "irr"
 
-    header = f"Variable,Coefficient,Std.Err.,{stat_col},p-value,CI(95%) Low,CI(95%) High{extra_col},Significance"
+        extra_header = f"{extra_col},Significance"
+    header = (
+        f"Variable,Coefficient,Std.Err.,{stat_col},p-value,"
+        f"CI(95%) Low,CI(95%) High{extra_header}"
+    )
     lines = [header]
     for c in coefficients:
         stat_val = c.get("z_stat", c.get("t_stat", 0))
@@ -2549,9 +2552,9 @@ def export_excel(result_json: str) -> str:
     import base64
 
     try:
-        import openpyxl
+        import openpyxl  # noqa: F401
         from openpyxl import Workbook
-        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+        from openpyxl.styles import Alignment, Font, PatternFill
 
         wb = Workbook()
         ws = wb.active
@@ -2560,7 +2563,7 @@ def export_excel(result_json: str) -> str:
         is_logit = result.get("model_type", "") == "logit"
         is_probit = result.get("model_type", "") == "probit"
         is_count = result.get("model_type", "") in ("poisson", "negbin")
-        is_mle = is_logit or is_probit or is_count
+        is_mle = is_logit or is_probit or is_count  # noqa: F841
 
         # Title
         title_text = "Logit Regression Results" if is_logit else "OLS Regression Results"
@@ -2593,7 +2596,8 @@ def export_excel(result_json: str) -> str:
                 ("RMSE", result.get("rmse", "")),
                 ("AIC", result.get("aic", "")),
                 ("BIC", result.get("bic", "")),
-                ("F-statistic", f'{result["f_statistic"][0] if result.get("f_statistic") else "N/A"}'),
+                ("F-statistic",
+                 f'{result["f_statistic"][0] if result.get("f_statistic") else "N/A"}'),
             ]
         for i, (label, value) in enumerate(info_items, start=3):
             ws.cell(row=i, column=1, value=label).font = Font(bold=True)
@@ -2682,7 +2686,10 @@ def get_gallery_index() -> str:
             "id": "survey_happiness",
             "title": "CGSS Resident Happiness Survey",
             "persona": "Social Science Grad Student",
-            "description": "Study income, education, health, urban/rural status, and work hours on subjective well-being.",
+            "description": (
+                "Study income, education, health, urban/rural status, "
+                "and work hours on subjective well-being."
+            ),
             "tags": ["Survey Data", "Categorical", "Multicollinearity"],
             "n_obs": 400,
             "dep_var": "happiness_score",
@@ -2691,7 +2698,10 @@ def get_gallery_index() -> str:
             "id": "trust_experiment",
             "title": "Social Trust Determinants",
             "persona": "Social Science Grad Student",
-            "description": "200-sample survey on age, income, education, media exposure, and party membership effects on trust.",
+            "description": (
+                "200-sample survey on age, income, education, "
+                "media exposure, and party membership effects on trust."
+            ),
             "tags": ["Small Sample", "Borderline Significance", "Social Survey"],
             "n_obs": 200,
             "dep_var": "trust_index",
@@ -2700,7 +2710,10 @@ def get_gallery_index() -> str:
             "id": "ecommerce_sales",
             "title": "E-commerce Sales Drivers",
             "persona": "Market Researcher",
-            "description": "500 days of e-commerce data: ad spend, price, promotions, competitor price, and season effects on sales.",
+            "description": (
+                "500 days of e-commerce data: ad spend, price, promotions, "
+                "competitor price, and season effects on sales."
+            ),
             "tags": ["Business Analytics", "High R-squared", "Multicollinearity"],
             "n_obs": 500,
             "dep_var": "sales",
@@ -2709,7 +2722,10 @@ def get_gallery_index() -> str:
             "id": "customer_satisfaction",
             "title": "Restaurant Customer Satisfaction",
             "persona": "Market Researcher",
-            "description": "350 surveys analyzing wait time, service quality, price perception, loyalty, and complaints.",
+            "description": (
+                "350 surveys analyzing wait time, service quality, "
+                "price perception, loyalty, and complaints."
+            ),
             "tags": ["Customer Analysis", "Multi-category", "Service Industry"],
             "n_obs": 350,
             "dep_var": "satisfaction_score",
@@ -2718,7 +2734,10 @@ def get_gallery_index() -> str:
             "id": "policy_effect",
             "title": "Environmental Policy Evaluation",
             "persona": "Policy Analyst",
-            "description": "300 city-level data on environmental regulation intensity, GDP, industrial structure, and emission reduction.",
+            "description": (
+                "300 city-level data on environmental regulation intensity, "
+                "GDP, industrial structure, and emission reduction."
+            ),
             "tags": ["Policy Evaluation", "Interaction Terms", "Robust SE"],
             "n_obs": 300,
             "dep_var": "emission_reduction",
