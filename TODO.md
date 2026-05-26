@@ -1,6 +1,6 @@
 # Regression Analysis — TODO
 
-> 最后更新: 2026-05-27 | v1.2 已发布 | 852 tests (849 passed, 3 skipped)
+> 最后更新: 2026-05-27 | v1.2 + 30 usage samples | 854 tests (851 passed, 3 skipped)
 
 ## 已完成阶段
 
@@ -41,4 +41,5 @@
 - [x] 样本 Gallery 补充（MixedLM、面板数据展示场景）— 2 个新场景，共 7 个
 - [ ] Docker 构建验证（需 Docker 环境）
 - [ ] noqa 总量优化（当前 ~107 条，逐步减少）
-- [ ] Web 版 (Pyodide) gallery 场景对齐 Streamlit 版
+- [x] Web 版 (Pyodide) gallery 场景对齐 Streamlit 版
+- [x] 30 usage case 示例脚本 (samples/*.py) — 覆盖全部 7 模型 + 预处理 + 诊断 + 可视化 + 端到端

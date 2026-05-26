@@ -109,6 +109,10 @@ class ModelFitter:
             missing_strategy=spec.missing_strategy,
             model_type=spec.model_type,
             exposure_var=getattr(spec, "exposure_var", None),
+            group_var=getattr(spec, "group_var", None),
+            entity_var=getattr(spec, "entity_var", None),
+            time_var=getattr(spec, "time_var", None),
+            panel_model=getattr(spec, "panel_model", None),
         )
 
         # Dispatch to the appropriate engine based on model type

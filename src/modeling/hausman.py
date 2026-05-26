@@ -76,7 +76,11 @@ def hausman_test(
     try:
         inv_var_d = np.linalg.inv(var_d)
     except np.linalg.LinAlgError:
-        inv_var_d = np.linalg.pinv(var_d)
+        # Ensure PSD via eigenvalue clipping
+        eigvals, eigvecs = np.linalg.eigh(var_d)
+        eigvals = np.maximum(eigvals, 0)
+        var_d_psd = eigvecs @ np.diag(eigvals) @ eigvecs.T
+        inv_var_d = np.linalg.pinv(var_d_psd)
 
     # Chi-squared statistic
     h_stat = float(d @ inv_var_d @ d)

@@ -1,6 +1,6 @@
 # Regression Analysis — 交接文档
 
-> 最后更新: 2026-05-27 (Session 9 — deploy workflow 修复，if:secrets bug + docker 权限)
+> 最后更新: 2026-05-27 (Session 11 — 30 个 Usage Case Samples + subagent 工程流水线)
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 部署: https://qhwangantoneva.github.io/regression-analysis/
 
@@ -15,7 +15,7 @@
 | Phase 5.0-5.4 (Logit/UX/对齐/v1.1) | 完成 | 599 |
 | Phase 6.0 (v1.2 — 5 种新模型) | 完成 | 849 |
 | Phase 6.1 (Hausman/exposure/robust SE/noqa) | 完成 | 852 |
-| **当前** | **v1.2** | **852 tests** |
+| **当前** | **v1.2 + 30 usage samples** | **854 tests** |
 
 ### v1.2 新增统计模型
 
@@ -56,6 +56,7 @@ Regression Analysis/
 │   └── visualization/      # 绑图
 ├── tests/                  # pytest (852 tests)
 ├── docs/                   # 用户手册/开发者指南/已知问题
+├── samples/                # 30 usage case 示例脚本
 ├── scripts/                # benchmark / generate_gallery_json
 ├── Dockerfile              # 多阶段构建
 ├── docker-compose.yml      # Streamlit 服务
@@ -96,7 +97,7 @@ Regression Analysis/
 |------|------|
 | ruff lint | 0 errors |
 | mypy app/ | 0 errors |
-| pytest | 849 passed (852 collected), 3 skipped |
+| pytest | 851 passed (854 collected), 3 skipped |
 
 CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KEY` secret，仅限 `qhWangAntoneva.github.io` 仓库写权限)。注意: job 级 `if: secrets.*` 会导致 GitHub Actions 解析失败 ("workflow file issue")，已移除该守卫条件。
 
@@ -153,6 +154,28 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KE
 - [x] **Git remote SSH 迁移**: 从 HTTPS (需 PAT) 切换至 SSH（`id_ed25519` 密钥已注册 GitHub 账户）
 - [x] **验证通过**: CI ✅ + Deploy ✅ (deploy-pages + docker 双 job 成功)
 
+### Session 10 — Web 部署验证 + 四轮测试 (已完成 — 2026-05-27)
+
+- [x] **Tester Web 部署**: `bash web/deploy.sh` 执行成功 → commit `c7bc138` 推送到 pages repo，HTTP 200 验证通过
+- [x] **Explorer #1 加载测试** (PASS): 页面结构完整、资源引用正确、外部 CDN 可达、已知问题无影响
+- [x] **Explorer #2 功能完整性测试** (PASS): 5 个 Tab、7 模型、Gallery、导出、错误处理全部覆盖
+- [x] **Explorer #3 端到端流程测试** (PASS): 上传 → 建模 → 结果全链路、MixedLM/Panel/Hausman/Robust SE/Exposure 验证
+- [x] **Reviewer 验收** (PASS): v1.2 交付清单交叉验证全部通过，风险评估 Low
+- [x] **测试计数增长**: 854 collected (851 passed, 3 skipped) — 较 HANDOVER 记录增加 2 个 passed
+- [x] **HANDOVER 同步更新**: 测试计数刷新、Session 10 记录
+
+### Session 11 — 30 Usage Case Samples (已完成 — 2026-05-27)
+
+- [x] **规划**: Plan agent 设计 30 case 分布 (9 类别, 3 agent x 10 case)
+- [x] **执行**: 3 并行 Agent (A/B/C) 生成 30 个 `samples/*.py`，覆盖全部 7 模型 + 数据 I/O + 预处理 + 诊断 + 可视化 + 端到端 workflow + Web bridge 模拟
+- [x] **Review**: Reviewer 代理逐脚本审查，运行验证 30/30 case，26 PASS / 3 minor / 1 FAIL
+- [x] **Fix**: FIXER 代理修复全部 3 个问题
+  - A03: log_sqft → sqft_log 命名匹配
+  - C05: count engine 补上 `dispersion` 参数提取
+  - E03: Hausman DGP 重新设计 + `hausman.py` 添加 PSD 特征值裁剪
+- [x] **Production bug 修复**: `ModelFitter.fit()` 未传递 `group_var`/`entity_var`/`time_var`/`panel_model` 至 `fit_spec`，已加 `getattr` 传递
+- [x] **回归验证**: 851 passed, 3 skipped, 0 failed
+
 ### v1.3+ 候选 (来自 TODO.md)
 
 - [ ] 岭回归 / Lasso / 弹性网 (sklearn adapter)
@@ -169,7 +192,7 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 使用 SSH deploy key (`DEPLOY_KE
 ## 测试与开发
 
 ```bash
-uv run python -m pytest tests/ -v              # 852 tests
+uv run python -m pytest tests/ -v              # 854 tests
 uv run ruff check                               # lint
 uv run mypy app/ --ignore-missing-imports       # type check
 uv run streamlit run app/app.py                 # 启动 Streamlit

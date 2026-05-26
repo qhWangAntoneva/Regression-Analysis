@@ -253,6 +253,11 @@ def extract_count_model(
                 except Exception:
                     llr_pvalue = None
 
+    # Dispersion parameter (for NB models)
+    dispersion: float | None = None
+    if model_type == "negbin":
+        dispersion = float(getattr(fitted_model.family, "alpha", 0.0))
+
     # Information criteria
     aic = float(fitted_model.aic) if hasattr(fitted_model, "aic") else 0.0
     bic = 0.0
@@ -285,5 +290,6 @@ def extract_count_model(
         dep_var=dep_var,
         specification=specification,
         method=method,
+        dispersion=dispersion,
         variable_labels=variable_labels if variable_labels is not None else {},
     )
