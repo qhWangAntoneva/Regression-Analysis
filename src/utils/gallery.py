@@ -940,7 +940,6 @@ def _make_province_growth() -> GalleryItem:
                "福建", "山东", "广东", "海南"}
     inland = {"河北", "山西", "吉林", "黑龙江", "安徽", "江西",
               "河南", "湖北", "湖南", "重庆", "四川", "陕西"}
-    western = {"内蒙古", "广西", "贵州", "云南", "甘肃", "青海", "宁夏", "新疆"}
 
     rows: list[dict] = []
     for year in years:
