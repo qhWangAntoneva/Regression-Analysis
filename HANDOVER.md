@@ -1,6 +1,6 @@
 # Regression Analysis — 交接文档
 
-> 最后更新: 2026-05-26 (Session 4 — v1.2 交付)
+> 最后更新: 2026-05-26 (Session 5 — 复查清单)
 > GitHub: https://github.com/qhWangAntoneva/Regression-Analysis
 > 部署: https://qhwangantoneva.github.io/regression-analysis/
 
@@ -103,6 +103,7 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 需要 `GH_PAT` secret (对 GitHu
 1. Windows 终端 GBK 编码限制
 2. Web bridge categorical×numeric 交互走 pd.get_dummies 非 patsy（v1.2 已修复交互列生成，列名格式与 patsy 对齐）
 3. ModelSpec.interaction_terms 仅支持 2-way pairs
+4. **Web 版 (Pyodide) MixedLM/Panel 崩溃**: `web/index.html` 缺少 group_var / entity_var / time_var 输入控件，bridge.py 会返回参数缺失错误。需在 HTML 和 js/app.js 中添加条件控件。
 
 ---
 
@@ -110,11 +111,24 @@ CI 配置: `.github/workflows/ci.yml`。Deploy 需要 `GH_PAT` secret (对 GitHu
 
 ### 复查清单 (priority)
 
-- [ ] CI 全绿验证: `uv run ruff check && uv run mypy app/ --ignore-missing-imports && uv run python -m pytest tests/`
-- [ ] 5 种新模型的 Streamlit UI 端到端测试（Probit/Poisson/NegBin/MixedLM/Panel FE/Panel RE 各跑一次完整流程）
-- [ ] Web 版 (Pyodide) 新模型功能测试
+- [x] CI 全绿验证: `uv run ruff check && uv run mypy app/ --ignore-missing-imports && uv run python -m pytest tests/`
+  - **Session 5**: 三项全绿 (ruff PASS, mypy PASS, pytest 849 passed + 3 skipped)
+- [x] 5 种新模型的 Streamlit UI 端到端代码审查（Probit/Poisson/NegBin/MixedLM/Panel FE/Panel RE）
+  - **Session 5**: 0 CRITICAL，1 MAJOR（缺 Hausman 检验），3 MINOR（缺 exposure UI / robust SE / MixedLM 诊断）
+- [x] Web 版 (Pyodide) 新模型功能测试
+  - **Session 5**: Probit/Poisson/NegBin 正常；**2 CRITICAL — MixedLM 缺 group_var UI 会崩溃，Panel 缺 entity_var/time_var UI 会崩溃**
 - [ ] Docker 构建验证: `docker build -t regression-analysis . && docker compose up`
-- [ ] noqa 审计：`grep -r "# noqa:" --include="*.py" src/ app/` — 复核每个 noqa 是否合理（Session 4 已清理欺诈性 noqa，剩余 ~130 条需抽样复查）
+  - **Session 5**: Docker 未安装，静态审查 Dockerfile/docker-compose.yml/.dockerignore 均通过，待有 Docker 环境时运行时验证
+- [x] noqa 审计：`grep -r "# noqa:" --include="*.py" src/ app/` — 复核每个 noqa 是否合理 ~~（Session 4 已清理欺诈性 noqa，剩余 ~130 条需抽样复查）~~
+  - **Session 5 复查结果**: 实际 71 条（非 ~130），13 REMOVABLE（死代码可清理），2 QUESTIONABLE，56 JUSTIFIED，0 CRITICAL
+
+### Session 5 新增待办 (复查发现)
+
+- [ ] **Web 版 MixedLM/Panel UI 修复** (CRITICAL): `web/index.html` 添加 group_var / entity_var / time_var 选择器，`web/js/app.js` 的 `getSpec()` 收集参数 + `onModelTypeChange()` 动态显示/隐藏
+- [ ] **Hausman 检验** (MAJOR): Panel FE vs RE 选择的关键诊断，需在 `app/pages/04_model_results.py` 和 `src/modeling/` 中实现
+- [ ] **清理 13 条死代码 noqa**: 涉及 `src/data_io/parser.py`(1), `src/export/latex_renderer.py`(3), `src/visualization/coefficient.py`(6+), `src/visualization/residual.py`(1), `app/pages/03_model_spec.py`(1)
+- [ ] **Exposure 变量支持** (MINOR): Poisson/NegBin rate 模型需要，涉及 `model_control.py` UI + `ModelSpec` 字段
+- [ ] **MLE 模型 Robust SE 选项** (MINOR): 当前 `model_control.py:92-113` 硬编码隐藏了 MLE 模型的 SE 选项
 
 ### 剩余 v1.2+ TODO (来自 TODO.md)
 
