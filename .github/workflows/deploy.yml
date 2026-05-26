@@ -27,7 +27,6 @@ jobs:
   #     < gh-pages-deploy
   # -----------------------------------------------------------------------
   deploy-pages:
-    if: secrets.DEPLOY_KEY != ''
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -52,6 +51,7 @@ jobs:
   docker:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       packages: write
     steps:
       - name: Checkout code
