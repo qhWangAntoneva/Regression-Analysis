@@ -108,10 +108,12 @@ class ModelFitter:
             interaction_terms=fit_interactions,
             missing_strategy=spec.missing_strategy,
             model_type=spec.model_type,
+            exposure_var=getattr(spec, "exposure_var", None),
         )
 
         # Dispatch to the appropriate engine based on model type
         # Build specification string
+        fitted = None
         preds_str = " + ".join(fit_spec.all_predictors)
         if spec.transforms:
             transform_parts = [f"{t}({v})" for v, t in spec.transforms.items()]
@@ -126,7 +128,7 @@ class ModelFitter:
             spec_str += f"  [SE: {cov_type}]"
 
         if spec.model_type == "logit":
-            fitted, var_labels = run_logit(working_data, fit_spec)
+            fitted, var_labels = run_logit(working_data, fit_spec, cov_type=cov_type)
             result = extract_logit(
                 fitted_model=fitted,
                 alpha=alpha,
@@ -135,7 +137,7 @@ class ModelFitter:
                 variable_labels=var_labels,
             )
         elif spec.model_type == "probit":
-            fitted, var_labels = run_probit(working_data, fit_spec)
+            fitted, var_labels = run_probit(working_data, fit_spec, cov_type=cov_type)
             result = extract_probit(
                 fitted_model=fitted,
                 alpha=alpha,
@@ -144,7 +146,7 @@ class ModelFitter:
                 variable_labels=var_labels,
             )
         elif spec.model_type in ("poisson", "negbin"):
-            fitted, var_labels = run_count_model(working_data, fit_spec)
+            fitted, var_labels = run_count_model(working_data, fit_spec, cov_type=cov_type)
             result = extract_count_model(
                 fitted_model=fitted,
                 alpha=alpha,
@@ -179,6 +181,8 @@ class ModelFitter:
         result.transforms_applied = dict(spec.transforms)
         result.interaction_terms_applied = list(spec.interaction_terms)
         result.se_type = cov_type if cov_type else "nonrobust"
+        if fitted is not None:
+            result._raw_model = fitted  # type: ignore[attr-defined]
 
         self._results.append(result)
         return result

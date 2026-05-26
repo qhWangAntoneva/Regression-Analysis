@@ -49,6 +49,11 @@ class ModelSpec:
     panel_model: str | None = None
     """Panel estimator type: ``'fixed'`` or ``'random'``."""
 
+    # Count-model specific
+    exposure_var: str | None = None
+    """Exposure variable for rate models (Poisson/NegBin).
+    The logarithm of this column is used as an offset in the GLM."""
+
     @property
     def all_predictors(self) -> list[str]:
         """Return the combined list of all predictor variables."""

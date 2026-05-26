@@ -182,4 +182,5 @@ def run_ols(
     result.transforms_applied = dict(spec.transforms)
     result.interaction_terms_applied = list(spec.interaction_terms)
     result.se_type = cov_type if cov_type else "nonrobust"
+    result._raw_model = fitted  # type: ignore[attr-defined]
     return result

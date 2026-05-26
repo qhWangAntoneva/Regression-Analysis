@@ -488,7 +488,6 @@ def diagnostic_dashboard(
         {'residual_fitted': Figure, 'qq': Figure, 'scale_location': Figure, 'cooks_distance': Figure}
     """  # noqa: E501
     residuals = _get_residuals(result)
-    fitted_values = _get_fitted_values(result)  # noqa: F841
 
     figs: dict[str, Figure] = {}
 

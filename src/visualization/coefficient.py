@@ -85,20 +85,12 @@ def coefficient_plot(results: list[Any], model_labels: list[str] | None = None) 
 
         color = colors[i % len(colors)]
 
-        # 提取截距项
-        intercept_est = None
-        intercept_ci_low = None
-        intercept_ci_high = None
-
         # 构建变量名到系数的映射
         coef_map: dict[str, dict[str, Any]] = {}
         for c in coefs:
             name = _get_coef_name(c)
             if name == "Intercept":
-                intercept_est = _get_coef_value(c)  # noqa: F841
-                intercept_ci_low = _get_ci_low(c)  # noqa: F841
-                intercept_ci_high = _get_ci_high(c)  # noqa: F841
-                continue
+                    continue
             if name:
                 coef_map[name] = {
                     "est": _get_coef_value(c),

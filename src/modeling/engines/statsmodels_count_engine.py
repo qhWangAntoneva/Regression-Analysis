@@ -45,6 +45,7 @@ def run_count_model(
     data: pd.DataFrame,
     spec: ModelSpec,
     alpha: float = 0.05,
+    cov_type: str = "nonrobust",
 ) -> tuple[Any, dict[str, str]]:
     """Fit a Poisson or NegativeBinomial regression model using statsmodels GLM.
 
@@ -68,7 +69,25 @@ def run_count_model(
     # Validate count-data DV requirements
     _validate_count_dv(y, spec.model_type)
 
-    # Select the GLM family based on model_type
+    # Handle exposure variable (rate model offset)
+    exposure_var: str | None = getattr(spec, "exposure_var", None)
+    offset: np.ndarray | None = None
+    exposure_name: str | None = None
+    if exposure_var:
+        if exposure_var not in data.columns:
+            raise ValueError(
+                f"Exposure variable '{exposure_var}' not found in data columns."
+            )
+        exposure_vals = data.loc[X.index, exposure_var].values.astype(float)
+        if (exposure_vals <= 0).any():
+            raise ValueError(
+                f"Exposure variable '{exposure_var}' contains non-positive "
+                f"values. Exposure must be strictly positive."
+            )
+        offset = np.log(exposure_vals)
+        exposure_name = exposure_var
+
+        # Select the GLM family based on model_type
     model_type = spec.model_type.lower()
     if model_type == "poisson":
         family = sm.families.Poisson()
@@ -83,8 +102,14 @@ def run_count_model(
         )
 
     try:
-        glm_model = sm.GLM(y, X, family=family)
-        fitted = glm_model.fit()
+        glm_kwargs: dict[str, object] = {"family": family}
+        if offset is not None:
+            glm_kwargs["offset"] = offset
+        glm_model = sm.GLM(y, X, **glm_kwargs)
+        fit_kwargs: dict[str, object] = {}
+        if cov_type and cov_type != "nonrobust":
+            fit_kwargs["cov_type"] = cov_type
+        fitted = glm_model.fit(**fit_kwargs)
     except Exception as exc:
         raise ValueError(f"{display_name} model failed to fit: {exc}") from exc
 
@@ -96,6 +121,9 @@ def run_count_model(
             "This may indicate separation or poor scaling of predictors. "
             "Consider standardizing continuous variables."
         )
+
+    # Stash exposure metadata for the extractor
+    fitted._exposure_name = exposure_name  # type: ignore[attr-defined]
 
     return fitted, labels
 
@@ -237,18 +265,6 @@ def extract_count_model(
         # If deviance-based BIC is negative, compute LLF-based ourselves
         if bic < 0 and aic > 0:
             bic = float(fitted_model.bic_llf) if hasattr(fitted_model, "bic_llf") else aic + n_params * (np.log(n_obs) - 2)  # noqa: E501
-
-    # Dispersion: only meaningful for NegativeBinomial
-    # NOTE: ModelResult does not yet have a ``dispersion`` field (documented
-    # as a needed shared-file change).  The dispersion value is extracted
-    # here for forward compatibility; clients can access it directly from
-    # the fitted model via ``fitted_model.scale``.
-    dispersion: float | None = None
-    if model_type == "negbin":
-        try:
-            dispersion = float(fitted_model.scale)
-        except (AttributeError, Exception):
-            dispersion = None  # noqa: F841
 
     return ModelResult(
         model_type=model_type,

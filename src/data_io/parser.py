@@ -186,7 +186,6 @@ def infer_column_types(df: pd.DataFrame) -> dict[str, str]:
 
     for col in df.columns:
         series = df[col]
-        dtype_str = str(series.dtype)  # noqa: F841
 
         # 检查是否是 pandas nullable numeric types
         if pd.api.types.is_numeric_dtype(series):

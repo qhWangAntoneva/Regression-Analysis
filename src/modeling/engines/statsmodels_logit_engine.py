@@ -19,6 +19,7 @@ def run_logit(
     data: pd.DataFrame,
     spec: ModelSpec,
     alpha: float = 0.05,
+    cov_type: str = "nonrobust",
 ) -> tuple[Any, dict[str, str]]:
     """Fit a binary logistic regression model using statsmodels.
 
@@ -39,7 +40,10 @@ def run_logit(
 
     try:
         logit_model = sm.Logit(y, X)
-        fitted = logit_model.fit(disp=False)
+        fit_kwargs = {"disp": False}
+        if cov_type and cov_type != "nonrobust":
+            fit_kwargs["cov_type"] = cov_type
+        fitted = logit_model.fit(**fit_kwargs)
     except Exception as exc:
         raise ValueError(f"Logit model failed to fit: {exc}") from exc
 

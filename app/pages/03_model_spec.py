@@ -404,6 +404,7 @@ def _run_regression(
                 entity_var=model_config.get("entity_var"),
                 time_var=model_config.get("time_var"),
                 panel_model=model_config.get("panel_model"),
+                exposure_var=model_config.get("exposure_var"),
             )
 
             cov_type = model_config.get("se_type", "nonrobust")
@@ -473,6 +474,7 @@ def _run_all_models(
                 entity_var=model_config.get("entity_var"),
                 time_var=model_config.get("time_var"),
                 panel_model=model_config.get("panel_model"),
+                exposure_var=model_config.get("exposure_var"),
             )
             main_result = fitter.fit(
                 main_spec, df, cov_type=cov_type,

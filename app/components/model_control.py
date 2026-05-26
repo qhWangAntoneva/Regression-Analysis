@@ -64,11 +64,9 @@ def render_model_controls(key_prefix: str = "model") -> dict[str, Any]:
             "注意：MLE 模型不支持 F 检验，将使用似然比检验 (LR) 替代。"
         ),
     )
-    is_mle = model_type_label in (
-        "Logit", "Probit", "Poisson", "Negative Binomial"
-    )
     is_mixedlm = model_type_label == "MixedLM (Multilevel)"
     is_panel = model_type_label.startswith("Panel Data")
+    is_count = model_type_label in ("Poisson", "Negative Binomial")
 
     with st.expander("高级选项", expanded=False):
         col_a, col_b = st.columns(2)
@@ -88,29 +86,27 @@ def render_model_controls(key_prefix: str = "model") -> dict[str, Any]:
                 help="系数置信区间的置信水平。",
             )
 
-        # Standard error options — hidden for logit (MLE uses different theory)
-        if not is_mle:
-            se_type = st.radio(
-                "标准误类型",
-                options=[
-                    "普通标准误",
-                    "HC0 (异方差稳健)",
-                    "HC1 (默认)",
-                    "HC2",
-                    "HC3",
-                ],
-                index=0,
-                horizontal=True,
-                key=f"{key_prefix}_se",
-                help=(
-                    "稳健标准误在异方差情况下提供更可靠的推断。\n"
-                    "- HC0: 普通稳健标准误\n"
-                    "- HC1: HC0 带小样本校正（Stata 默认）\n"
-                    "- HC2/HC3: 更激进的校正"
-                ),
-            )
-        else:
-            se_type = "普通标准误"
+        # Standard error options — now available for all model types
+        se_type = st.radio(
+            "标准误类型",
+            options=[
+                "普通标准误",
+                "HC0 (异方差稳健)",
+                "HC1 (默认)",
+                "HC2",
+                "HC3",
+            ],
+            index=0,
+            horizontal=True,
+            key=f"{key_prefix}_se",
+            help=(
+                "稳健标准误在异方差情况下提供更可靠的推断。\n"
+                "- HC0: 普通稳健标准误\n"
+                "- HC1: HC0 带小样本校正（Stata 默认）\n"
+                "- HC2/HC3: 更激进的校正\n\n"
+                "注意：MLE 模型也支持稳健标准误（HC0-HC3）。"
+            ),
+        )
 
         missing_handling = st.selectbox(
             "缺失值处理",
@@ -119,6 +115,23 @@ def render_model_controls(key_prefix: str = "model") -> dict[str, Any]:
             key=f"{key_prefix}_missing",
             help="选择缺失值的处理方式。",
         )
+
+        # --- Exposure variable for count models ---
+        exposure_var: str | None = None
+        if is_count:
+            available_vars = st.session_state.get("available_vars", [])
+            exposure_var = st.selectbox(
+                "暴露变量 (Exposure / Offset)",
+                options=[""] + available_vars,
+                index=0,
+                key=f"{key_prefix}_exposure",
+                help=(
+                    "可选：选择暴露变量以拟合速率模型（如人口、人年）。"
+                    "其对数将作为偏移量 (offset) 加入 GLM。"
+                ),
+            )
+            if exposure_var == "":
+                exposure_var = None
 
     # --- MixedLM: group variable selector ---
     group_var: str | None = None
@@ -197,6 +210,8 @@ def render_model_controls(key_prefix: str = "model") -> dict[str, Any]:
             result["time_var"] = time_var
         if panel_model:
             result["panel_model"] = panel_model
+    if is_count and exposure_var:
+        result["exposure_var"] = exposure_var
     return result
 
 

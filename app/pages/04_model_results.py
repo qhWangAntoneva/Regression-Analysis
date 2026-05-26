@@ -91,6 +91,14 @@ try:
 except ImportError:
     pass
 
+HAUSMAN_AVAILABLE = False
+try:
+    from src.modeling.hausman import run_hausman_from_results
+
+    HAUSMAN_AVAILABLE = True
+except ImportError:
+    pass
+
 
 def render() -> None:
     """渲染回归结果页面。"""
@@ -212,6 +220,61 @@ def render() -> None:
             render_anova_table(selected_result)
         else:
             st.info("ANOVA 表组件不可用。")
+
+
+    # ------------------------------------------------------------------
+    # Hausman test (Panel FE vs RE comparison)
+    # ------------------------------------------------------------------
+    if HAUSMAN_AVAILABLE and selected_result.model_type == "panel":
+        results_list = st.session_state.get("model_results_list", [])
+        fe_result = None
+        re_result = None
+        for r in results_list:
+            pt = getattr(r, "panel_type", None)
+            if pt == "Panel FE":
+                fe_result = r
+            elif pt == "Panel RE":
+                re_result = r
+
+        if fe_result is not None and re_result is not None:
+            hausman_result = run_hausman_from_results(fe_result, re_result)
+            if hausman_result is not None:
+                st.divider()
+                st.subheader("Hausman 检验 (FE vs RE)")
+                stat = hausman_result["statistic"]
+                p_val = hausman_result["p_value"]
+                df_h = hausman_result["df"]
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("chi2 统计量", f"{stat:.4f}")
+                with col2:
+                    st.metric("自由度", df_h)
+                with col3:
+                    p_display = f"{p_val:.6f}" if p_val >= 0.0001 else "<0.0001"
+                    st.metric("p 值", p_display)
+
+                if p_val < 0.05:
+                    st.warning(
+                        f"p = {p_display} < 0.05：拒绝 H0（RE 不一致）。"
+                        f"建议使用固定效应 (FE) 模型。"
+                    )
+                else:
+                    st.info(
+                        f"p = {p_display} >= 0.05：无法拒绝 H0。"
+                        f"随机效应 (RE) 模型一致且更有效，建议使用 RE。"
+                    )
+
+                with st.expander("Hausman 检验说明", expanded=False):
+                    st.markdown(
+                        """
+                    **Hausman 检验**用于判断面板数据应使用固定效应 (FE) 还是随机效应 (RE) 模型。
+
+                    - **H0**: RE 模型一致（个体效应与解释变量无关）-> 应使用 RE（更有效）
+                    - **H1**: RE 模型不一致 -> 应使用 FE
+
+                    当 p < 0.05 时拒绝 H0，认为 FE 更可靠。
+                    """
+                    )
 
     # ------------------------------------------------------------------
     # Phase 2: 统计警示区

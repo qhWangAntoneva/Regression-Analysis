@@ -25,6 +25,7 @@ def run_probit(
     data: pd.DataFrame,
     spec: ModelSpec,
     alpha: float = 0.05,
+    cov_type: str = "nonrobust",
 ) -> tuple[Any, dict[str, str]]:
     """Fit a binary probit regression model using statsmodels.
 
@@ -45,7 +46,10 @@ def run_probit(
 
     try:
         probit_model = sm.Probit(y, X)
-        fitted = probit_model.fit(disp=False)
+        fit_kwargs = {"disp": False}
+        if cov_type and cov_type != "nonrobust":
+            fit_kwargs["cov_type"] = cov_type
+        fitted = probit_model.fit(**fit_kwargs)
     except Exception as exc:
         raise ValueError(f"Probit model failed to fit: {exc}") from exc
 
