@@ -78,7 +78,7 @@ def _model_result_to_json(mr: ModelResult) -> dict:
             "entity_count": getattr(mr, "entity_count", None),
             "time_count": getattr(mr, "time_count", None),
             "panel_type": getattr(mr, "panel_type", None),
-            "f_pooled": getattr(mr, "f_pooled", None),
+            "f_pooled": list(mr.f_pooled) if getattr(mr, "f_pooled", None) is not None else None,
         },
     }
 
@@ -106,7 +106,7 @@ def _json_to_model_result(d: dict) -> ModelResult:
     interaction_terms = [
         tuple(pair) for pair in d.get("interaction_terms_applied", [])
     ]
-    return ModelResult(
+    result = ModelResult(
         model_type=d["model_type"],
         coefficients=coefficients,
         n_obs=d["n_obs"],
