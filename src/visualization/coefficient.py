@@ -90,7 +90,7 @@ def coefficient_plot(results: list[Any], model_labels: list[str] | None = None) 
         for c in coefs:
             name = _get_coef_name(c)
             if name == "Intercept":
-                    continue
+                continue
             if name:
                 coef_map[name] = {
                     "est": _get_coef_value(c),
