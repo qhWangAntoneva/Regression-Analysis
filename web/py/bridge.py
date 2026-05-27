@@ -546,6 +546,18 @@ def run_regression(data_json: str, spec_json: str) -> str:
             # Align groups with rows that survived cleaning
             groups = df.loc[df_clean.index, group_col].values
             fitted = sm.MixedLM(y, X, groups=groups).fit(reml=True, disp=False)
+            # Ensure consistent types: wrap numpy arrays back to pandas Series/DataFrame
+            # statsmodels MixedLM may return ndarray when input is ndarray
+            if isinstance(fitted.fe_params, np.ndarray):
+                fitted.fe_params = pd.Series(fitted.fe_params, index=coef_names)
+            if isinstance(fitted.bse_fe, np.ndarray):
+                fitted.bse_fe = pd.Series(fitted.bse_fe, index=coef_names)
+            if isinstance(fitted.tvalues, np.ndarray):
+                fitted.tvalues = pd.Series(fitted.tvalues, index=coef_names)
+            if isinstance(fitted.pvalues, np.ndarray):
+                fitted.pvalues = pd.Series(fitted.pvalues, index=coef_names)
+            if isinstance(fitted.cov_re, np.ndarray):
+                fitted.cov_re = pd.DataFrame(fitted.cov_re)
 
         elif model_type == "panel":
             try:
@@ -1222,24 +1234,25 @@ def _extract_mixedlm_result(
     """Extract MixedLM regression results into JSON."""
     variable_labels = _build_variable_labels_for_web(coef_names, transform_map)
 
-    fe_names = fitted.fe_params.index
+    fe_names = coef_names  # use passed-in coef_names; fe_params may be ndarray
     params = fitted.fe_params
     bse = fitted.bse_fe
-    tvalues = fitted.tvalues.loc[fe_names] if hasattr(fitted.tvalues, "loc") else fitted.tvalues
-    pvalues = fitted.pvalues.loc[fe_names] if hasattr(fitted.pvalues, "loc") else fitted.pvalues
+    tvalues = fitted.tvalues
+    pvalues = fitted.pvalues
     conf_int = fitted.conf_int(alpha=alpha)
 
     coefficients = []
-    for name in fe_names:
-        pv = float(pvalues[name])
-        conf_row = conf_int.loc[name] if hasattr(conf_int, "loc") else conf_int
+    for i, name in enumerate(fe_names):
+        # Use iloc for pandas objects (positional), [i] for bare ndarray
+        pv = float(pvalues.iloc[i]) if hasattr(pvalues, "iloc") else float(pvalues[i])
+        conf_row = conf_int.iloc[i] if hasattr(conf_int, "iloc") else conf_int[i]
         ci_low_val = float(conf_row[0])
         ci_high_val = float(conf_row[1])
         coefficients.append({
             "name": str(name),
-            "coef": float(params[name]),
-            "se": float(bse[name]),
-            "t_stat": float(tvalues[name]),
+            "coef": float(params.iloc[i] if hasattr(params, "iloc") else params[i]),
+            "se": float(bse.iloc[i] if hasattr(bse, "iloc") else bse[i]),
+            "t_stat": float(tvalues.iloc[i] if hasattr(tvalues, "iloc") else tvalues[i]),
             "pvalue": pv if not np.isnan(pv) else None,
             "ci_lower": ci_low_val if not np.isnan(ci_low_val) else None,
             "ci_upper": ci_high_val if not np.isnan(ci_high_val) else None,
@@ -1279,8 +1292,12 @@ def _extract_mixedlm_result(
     # Random effects variance components
     re_var = {}
     if fitted.cov_re is not None and fitted.cov_re.size > 0:
-        for i, name in enumerate(fitted.cov_re.index):
-            re_var[str(name)] = float(fitted.cov_re.iloc[i, i])
+        if hasattr(fitted.cov_re, "index"):
+            for i, name in enumerate(fitted.cov_re.index):
+                re_var[str(name)] = float(fitted.cov_re.iloc[i, i])
+        else:
+            for i in range(fitted.cov_re.shape[0]):
+                re_var[f"Group {i}"] = float(fitted.cov_re[i, i])
 
     residuals = fitted.resid.tolist() if hasattr(fitted, "resid") else []
     fitted_values = fitted.fittedvalues.tolist() if hasattr(fitted, "fittedvalues") else []
